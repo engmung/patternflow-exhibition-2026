@@ -35,7 +35,7 @@ This repository is everything that ran there — the six patterns, the panel fir
 ## How it works in one minute
 
 ```mermaid
-flowchart LR
+flowchart TB
     V(["Visitor turns a knob"]) --> P
     P["Patternflow panel<br/>ESP32-S3 + 128×64 LEDs<br/>K4 picks the work · K1–K3 play it"]
     F["FlowLocal<br/>second ESP32-S3<br/>Wi-Fi hotspot + RTP-MIDI to USB-MIDI"]
