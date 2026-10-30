@@ -1,0 +1,57 @@
+{
+  "name": "Prism-Cube Singularity",
+  "namespace": "PrismCubeSingularity",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Rot Speed",
+    "Scale",
+    "Prism Split",
+    "Complexity"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/prism_cube_singularity.h",
+  "communityId": "61e6378f12674c1b",
+  "community": "https://community.patternflow.work/community/p/61e6378f12674c1b",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Rot Speed",
+      "effect": "Rotation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 2,
+      "label": "Scale",
+      "effect": "Spatial scale",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Prism Split",
+      "effect": "RGB prism split",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Complexity",
+      "effect": "Detail / complexity",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "prism_cube_singularity",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "prism_cube_singularity.pfm",
+  "size": 7088,
+  "opt": "-Os"
+}

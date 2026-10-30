@@ -1,0 +1,57 @@
+{
+  "name": "Murmuration 2x",
+  "namespace": "Murmuration2x",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Flock",
+    "Fear",
+    "Bond",
+    "Falcons"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/murmuration_2x.h",
+  "communityId": "662a2543f6c44a93",
+  "community": "https://community.patternflow.work/community/p/662a2543f6c44a93",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Flock",
+      "effect": "Flock size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Fear",
+      "effect": "Scatter / fear",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Bond",
+      "effect": "Cohesion / bond",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Falcons",
+      "effect": "Predator count",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "murmuration_2x",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "murmuration_2x.pfm",
+  "size": 11956,
+  "opt": "-Os"
+}

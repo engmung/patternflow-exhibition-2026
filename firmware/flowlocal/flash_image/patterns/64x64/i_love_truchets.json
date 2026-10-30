@@ -1,0 +1,55 @@
+{
+  "name": "I Love Truchets",
+  "namespace": "TruchetsAA",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Mutation",
+    "Speed",
+    "Grid",
+    "Angle"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_i_love_truchets.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Mutation",
+      "effect": "Mutation rate",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Grid",
+      "effect": "Grid size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Angle",
+      "effect": "Angle",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "i_love_truchets",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "i_love_truchets.pfm",
+  "size": 8140,
+  "opt": "-Os"
+}

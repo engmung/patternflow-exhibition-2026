@@ -1,0 +1,55 @@
+{
+  "name": "Breakout Arcade",
+  "namespace": "BreakoutArcade",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Paddle",
+    "Speed",
+    "Luck",
+    "Glow"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0712_2.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Paddle",
+      "effect": "Paddle control",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Luck",
+      "effect": "Luck / chance",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Glow",
+      "effect": "Glow intensity",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "breakout_arcade",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "breakout_arcade.pfm",
+  "size": 17868,
+  "opt": "-Os"
+}

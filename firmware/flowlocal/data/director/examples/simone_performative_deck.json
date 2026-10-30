@@ -1,0 +1,552 @@
+{
+  "version": 1,
+  "id": "simone-performative-deck",
+  "title": "Simone Performative Deck",
+  "bpm": 120,
+  "quantize": "off",
+  "layers": {
+    "snapshot": [
+      {
+        "kind": "snapshot",
+        "pattern": "Wireframe Cube",
+        "param": [
+          287,
+          987,
+          837,
+          69
+        ],
+        "message": "",
+        "label": "Wireframe Cube"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "Vector Field Flow",
+        "param": [
+          113,
+          298,
+          485,
+          1000
+        ],
+        "message": "",
+        "label": "Vector Field Flow"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "0515-3",
+        "param": [
+          787,
+          89,
+          155,
+          271
+        ],
+        "message": "",
+        "label": "0515-3"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "Weather",
+        "param": [
+          787,
+          89,
+          155,
+          271
+        ],
+        "message": "",
+        "label": "Weather"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "0513",
+        "param": [
+          903,
+          774,
+          802,
+          267
+        ],
+        "message": "",
+        "label": "0513"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "Retro Digital Tapestry",
+        "param": [
+          55,
+          685,
+          930,
+          716
+        ],
+        "message": "",
+        "label": "Retro Digital Tapestry"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "0601",
+        "param": [
+          876,
+          429,
+          152,
+          619
+        ],
+        "message": "",
+        "label": "0601"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "Ripple Grid",
+        "param": [
+          446,
+          425,
+          318,
+          534
+        ],
+        "message": "",
+        "label": "Ripple Grid"
+      },
+      {
+        "kind": "snapshot",
+        "pattern": "Ripple Grid",
+        "param": [
+          678,
+          205,
+          74,
+          534
+        ],
+        "message": "",
+        "label": "Ripple Grid"
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "k1": [
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 0,
+        "label": "0"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 67,
+        "label": "67"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 133,
+        "label": "133"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 200,
+        "label": "200"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 267,
+        "label": "267"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 333,
+        "label": "333"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 400,
+        "label": "400"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 467,
+        "label": "467"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 533,
+        "label": "533"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 600,
+        "label": "600"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 667,
+        "label": "667"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 733,
+        "label": "733"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 800,
+        "label": "800"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 867,
+        "label": "867"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 933,
+        "label": "933"
+      },
+      {
+        "kind": "knob",
+        "channel": 0,
+        "value": 1000,
+        "label": "1000"
+      }
+    ],
+    "k2": [
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 0,
+        "label": "0"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 67,
+        "label": "67"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 133,
+        "label": "133"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 200,
+        "label": "200"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 267,
+        "label": "267"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 333,
+        "label": "333"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 400,
+        "label": "400"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 467,
+        "label": "467"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 533,
+        "label": "533"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 600,
+        "label": "600"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 667,
+        "label": "667"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 733,
+        "label": "733"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 800,
+        "label": "800"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 867,
+        "label": "867"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 933,
+        "label": "933"
+      },
+      {
+        "kind": "knob",
+        "channel": 1,
+        "value": 1000,
+        "label": "1000"
+      }
+    ],
+    "k3": [
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 0,
+        "label": "0"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 67,
+        "label": "67"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 133,
+        "label": "133"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 200,
+        "label": "200"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 267,
+        "label": "267"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 333,
+        "label": "333"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 400,
+        "label": "400"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 467,
+        "label": "467"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 533,
+        "label": "533"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 600,
+        "label": "600"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 667,
+        "label": "667"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 733,
+        "label": "733"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 800,
+        "label": "800"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 867,
+        "label": "867"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 933,
+        "label": "933"
+      },
+      {
+        "kind": "knob",
+        "channel": 2,
+        "value": 1000,
+        "label": "1000"
+      }
+    ],
+    "k4": [
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 0,
+        "label": "0"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 67,
+        "label": "67"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 133,
+        "label": "133"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 200,
+        "label": "200"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 267,
+        "label": "267"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 333,
+        "label": "333"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 400,
+        "label": "400"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 467,
+        "label": "467"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 533,
+        "label": "533"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 600,
+        "label": "600"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 667,
+        "label": "667"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 733,
+        "label": "733"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 800,
+        "label": "800"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 867,
+        "label": "867"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 933,
+        "label": "933"
+      },
+      {
+        "kind": "knob",
+        "channel": 3,
+        "value": 1000,
+        "label": "1000"
+      }
+    ],
+    "message": [
+      {
+        "kind": "message",
+        "message": "",
+        "label": "(clear)"
+      },
+      {
+        "kind": "message",
+        "message": "Hello there!",
+        "label": "Hello there!"
+      },
+      {
+        "kind": "message",
+        "message": "Peekaboo",
+        "label": "Peekaboo"
+      },
+      {
+        "kind": "message",
+        "message": "The quick brown fox that jumped over the lazy dog",
+        "label": "The quick brown fox that jumped over the lazy dog"
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  }
+}

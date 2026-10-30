@@ -1,0 +1,55 @@
+{
+  "name": "Wave Saw",
+  "namespace": "WaveSaw",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "angle",
+    "scale",
+    "dist",
+    "dscale"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_wave_saw.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "angle",
+      "effect": "Angle",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "scale",
+      "effect": "Spatial scale",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "dist",
+      "effect": "Controls dist",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "dscale",
+      "effect": "Controls dscale",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "wave_saw",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "wave_saw.pfm",
+  "size": 7020,
+  "opt": "-Os"
+}

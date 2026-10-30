@@ -1,0 +1,55 @@
+{
+  "name": "Conway Life",
+  "namespace": "ConwayLife",
+  "author": "Aurora port",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Speed",
+    "Density",
+    "Color",
+    "Trail"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_conway_life.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 2,
+      "label": "Density",
+      "effect": "Density",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Color",
+      "effect": "Color / hue",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    },
+    {
+      "channel": 4,
+      "label": "Trail",
+      "effect": "Trail persistence",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "conway_life",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "conway_life.pfm",
+  "size": 8920,
+  "opt": "-Os"
+}

@@ -1,0 +1,55 @@
+{
+  "name": "MagVortex",
+  "namespace": "MagVortex",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "TrailDecay",
+    "Velocity",
+    "SpinPull",
+    "InflowPitch"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0719.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "TrailDecay",
+      "effect": "Trail fade rate",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Velocity",
+      "effect": "Motion velocity",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "SpinPull",
+      "effect": "Spin pull",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "InflowPitch",
+      "effect": "Inflow pitch",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "magvortex",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "magvortex.pfm",
+  "size": 8144,
+  "opt": "-Os"
+}

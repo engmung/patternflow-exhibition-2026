@@ -1,0 +1,55 @@
+{
+  "name": "Cyber City",
+  "namespace": "CyberpunkCity",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Buildings",
+    "Speed",
+    "Rain Density",
+    "Glow"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/custom4.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Buildings",
+      "effect": "Building density",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Rain Density",
+      "effect": "Rain density",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Glow",
+      "effect": "Glow intensity",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "cyber_city",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "cyber_city.pfm",
+  "size": 8812,
+  "opt": "-Os"
+}

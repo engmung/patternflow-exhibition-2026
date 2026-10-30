@@ -1,0 +1,57 @@
+{
+  "name": "Gale Ink (Symmetric Flow)",
+  "namespace": "GaleInk",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Eddies",
+    "Gale",
+    "Curl",
+    "Fade"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/gale_ink_symmetric_flow.h",
+  "communityId": "1d1059705b2c4372",
+  "community": "https://community.patternflow.work/community/p/1d1059705b2c4372",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Eddies",
+      "effect": "Eddy / swirl count",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Gale",
+      "effect": "Wind / flow strength",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Curl",
+      "effect": "Curl amount",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Fade",
+      "effect": "Fade / trail decay",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "gale_ink_symmetric_flow",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "gale_ink_symmetric_flow.pfm",
+  "size": 8932,
+  "opt": "-Os"
+}

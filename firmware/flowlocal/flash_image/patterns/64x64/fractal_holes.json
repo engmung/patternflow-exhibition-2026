@@ -1,0 +1,55 @@
+{
+  "name": "Fractal Holes",
+  "namespace": "FractalHoles",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Flow",
+    "Cutoff",
+    "HueShift",
+    "Zoom"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/custom1.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Flow",
+      "effect": "Flow amount",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Cutoff",
+      "effect": "Cutoff threshold",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "HueShift",
+      "effect": "Hue shift",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    },
+    {
+      "channel": 4,
+      "label": "Zoom",
+      "effect": "Zoom level",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "fractal_holes",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "fractal_holes.pfm",
+  "size": 7136,
+  "opt": "-Os"
+}

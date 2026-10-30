@@ -1,0 +1,57 @@
+{
+  "name": "Hex Hive Pulse",
+  "namespace": "HexagonalHivePulse",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "HexSize",
+    "PulseSpeed",
+    "RingFreq",
+    "Sharpness"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/hex_hive_pulse.h",
+  "communityId": "c7497dbcb0604784",
+  "community": "https://community.patternflow.work/community/p/c7497dbcb0604784",
+  "params": [
+    {
+      "channel": 1,
+      "label": "HexSize",
+      "effect": "Hex cell size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "PulseSpeed",
+      "effect": "Pulse speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "RingFreq",
+      "effect": "Ring frequency",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Sharpness",
+      "effect": "Edge sharpness",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "hex_hive_pulse",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "hex_hive_pulse.pfm",
+  "size": 6940,
+  "opt": "-Os"
+}

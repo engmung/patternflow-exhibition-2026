@@ -1,0 +1,55 @@
+{
+  "name": "Wireframe Cube",
+  "namespace": "WireframeCube",
+  "author": "Jason Coon / Aurora port (Noel Bundy / Petty lineage)",
+  "license": "MIT",
+  "abi": 1,
+  "knobs": [
+    "Speed",
+    "Size",
+    "Persp",
+    "Trail"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_wireframe_cube.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 2,
+      "label": "Size",
+      "effect": "Element size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Persp",
+      "effect": "Perspective",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Trail",
+      "effect": "Trail persistence",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "wireframe_cube",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "wireframe_cube.pfm",
+  "size": 9832,
+  "opt": "-Os"
+}

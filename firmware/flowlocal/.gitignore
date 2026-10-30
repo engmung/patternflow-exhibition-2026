@@ -1,0 +1,16 @@
+.pio/
+.pio-platforms/
+.pio-packages/
+.flash_image_cache/
+dist/
+upload_log.txt
+uploadfs_log.txt
+*.pem
+Thumbs.db
+Desktop.ini
+__pycache__/
+*.pyc
+
+build_log.txt
+build_both.txt
+

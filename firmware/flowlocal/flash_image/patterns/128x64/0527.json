@@ -1,0 +1,55 @@
+{
+  "name": "0527",
+  "namespace": "Pattern0527",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Cluster Weight",
+    "Rotation Rate",
+    "Max Distance",
+    "Normal Depth"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0527.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Cluster Weight",
+      "effect": "Cluster weight",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Rotation Rate",
+      "effect": "Rotation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Max Distance",
+      "effect": "Max connection distance",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Normal Depth",
+      "effect": "Normal / depth amount",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "0527",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "0527.pfm",
+  "size": 7324,
+  "opt": "-Os"
+}

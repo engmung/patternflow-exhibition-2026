@@ -1,0 +1,55 @@
+{
+  "name": "Origin",
+  "namespace": "Origin",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "absoluteReady": true,
+  "abi": 1,
+  "knobs": [
+    "hue",
+    "speed",
+    "mode",
+    "freq"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_origin.h",
+  "params": [
+    {
+      "channel": 1,
+      "label": "hue",
+      "effect": "Color hue (wraps)",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    },
+    {
+      "channel": 2,
+      "label": "speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "mode",
+      "effect": "Discrete visual mode",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "discrete modes"
+    },
+    {
+      "channel": 4,
+      "label": "freq",
+      "effect": "Spatial or temporal frequency",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "origin",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "origin.pfm",
+  "size": 8156,
+  "opt": "-Os"
+}

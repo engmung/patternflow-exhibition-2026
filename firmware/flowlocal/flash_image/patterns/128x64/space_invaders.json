@@ -1,0 +1,57 @@
+{
+  "name": "Space Invaders",
+  "namespace": "Invaders",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Reset",
+    "Reset",
+    "Unused",
+    "Move"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/space_invaders.h",
+  "communityId": "6ada5c800c734f5c",
+  "community": "https://community.patternflow.work/community/p/6ada5c800c734f5c",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Reset",
+      "effect": "Controls Reset",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Reset",
+      "effect": "Controls Reset",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Unused",
+      "effect": "Controls Unused",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Move",
+      "effect": "Move / steer",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "space_invaders",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "space_invaders.pfm",
+  "size": 12368,
+  "opt": "-Os"
+}

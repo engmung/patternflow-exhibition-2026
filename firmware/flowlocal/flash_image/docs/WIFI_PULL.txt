@@ -1,0 +1,53 @@
+Pull files from FlowLocal to a Patternflow panel (Wi-Fi)
+=======================================================
+
+Both devices must be on PatternflowLocal (pass: patternflow).
+FlowLocal is always 192.168.66.1. The panel keeps its own IP
+(often patternflow.local).
+
+A) From FlowLocal Director (easiest)
+------------------------------------
+1. Tablet/PC joins PatternflowLocal.
+2. Open http://192.168.66.1/director/
+3. Connect tab:
+     WebSocket  ws://192.168.66.1:9001
+     Panel HTTP base  http://patternflow.local
+       (or http://<panel-lan-ip> if mDNS fails)
+4. File tab:
+   - Install used patterns to panel
+       → panel POSTs /api/library/pull for matching .pfm/.json
+         from FlowLocal patterns/128x64/ (preferred) or 64x64/
+   - Send show to panel
+       → saves current .pfs to FlowLocal shows/, then panel pulls it
+
+Patterns live under patterns/128x64/ and patterns/64x64/
+(absolute-ready for Director MQTT 0..1000). Shows under shows/.
+
+B) From the panel (curl / script)
+---------------------------------
+On any machine that can reach the panel:
+
+  curl -X POST "http://patternflow.local/api/library/pull" \
+    -d "host=192.168.66.1" \
+    -d "kind=patterns" \
+    -d "names=128x64/0515_4.pfm,128x64/0515_4.json"
+
+  curl -X POST "http://patternflow.local/api/library/pull" \
+    -d "host=192.168.66.1" \
+    -d "kind=shows" \
+    -d "names=demo_ripple_grid.pfs"
+
+The panel downloads from FlowLocal, validates, and stores on FFat
+(/patterns or /shows) using the file basename. Patterns trigger a
+deferred module reload.
+
+C) Browse the library on FlowLocal
+----------------------------------
+  GET http://192.168.66.1/api/library
+  GET http://192.168.66.1/api/library/patterns
+  GET http://192.168.66.1/api/library/shows
+  GET http://192.168.66.1/api/library/launchpads
+  GET http://192.168.66.1/api/library/patterns/file?name=128x64/0531.pfm
+
+Panel firmware must include POST /api/library/pull
+(Patternflow with FlowLocal sync / performance-director tree).

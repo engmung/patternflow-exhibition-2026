@@ -1,0 +1,55 @@
+{
+  "name": "Tri March",
+  "namespace": "TriMarch",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Triangle size",
+    "Speed",
+    "March angle",
+    "Color palette"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0716.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Triangle size",
+      "effect": "Triangle size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "March angle",
+      "effect": "March angle",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Color palette",
+      "effect": "Palette selection",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "palette / tone"
+    }
+  ],
+  "slug": "tri_march",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "tri_march.pfm",
+  "size": 6136,
+  "opt": "-Os"
+}
