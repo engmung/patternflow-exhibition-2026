@@ -1,0 +1,57 @@
+{
+  "name": "Bouncy Beholder",
+  "namespace": "BouncyBeholder",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Count",
+    "LookSpeed",
+    "AnimSpeed",
+    "Bounce"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/bouncy_beholder.h",
+  "communityId": "f68385bf44a04a29",
+  "community": "https://community.patternflow.work/community/p/f68385bf44a04a29",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Count",
+      "effect": "Element count",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "LookSpeed",
+      "effect": "Look / gaze speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "AnimSpeed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 4,
+      "label": "Bounce",
+      "effect": "Bounce amount",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "bouncy_beholder",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "bouncy_beholder.pfm",
+  "size": 9532,
+  "opt": "-Os"
+}

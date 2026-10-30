@@ -1,0 +1,55 @@
+{
+  "name": "Crystal Cascade",
+  "namespace": "CrystalCascade",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "CellSize",
+    "DownSpeed",
+    "PhaseWarp",
+    "EdgeGlow"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/custom5.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "CellSize",
+      "effect": "Cell size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "DownSpeed",
+      "effect": "Fall / down speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "PhaseWarp",
+      "effect": "Phase warp",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "EdgeGlow",
+      "effect": "Edge glow",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "crystal_cascade",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "crystal_cascade.pfm",
+  "size": 7140,
+  "opt": "-Os"
+}

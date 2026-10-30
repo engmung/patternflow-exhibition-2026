@@ -1,0 +1,55 @@
+{
+  "name": "0511",
+  "namespace": "Pattern0511",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "hueBase",
+    "speed",
+    "rowHeight",
+    "segWidth"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0511.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "hueBase",
+      "effect": "Base hue (wraps 0..1)",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    },
+    {
+      "channel": 2,
+      "label": "speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "rowHeight",
+      "effect": "Row height",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "segWidth",
+      "effect": "Segment width",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "0511",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "0511.pfm",
+  "size": 7052,
+  "opt": "-Os"
+}

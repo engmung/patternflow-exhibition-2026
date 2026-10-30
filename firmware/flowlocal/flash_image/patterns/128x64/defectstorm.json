@@ -1,0 +1,57 @@
+{
+  "name": "Defect Storm",
+  "namespace": "DefectStorm",
+  "author": "unknown",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Alpha",
+    "Beta",
+    "Pace",
+    "Core"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/defectstorm.h",
+  "communityId": "c9e848766ac34682",
+  "community": "https://community.patternflow.work/community/p/c9e848766ac34682",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Alpha",
+      "effect": "Reaction / field strength",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Beta",
+      "effect": "Instability / damping",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Pace",
+      "effect": "Simulation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Core",
+      "effect": "Core intensity",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "defectstorm",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "defectstorm.pfm",
+  "size": 7556,
+  "opt": "-Os"
+}

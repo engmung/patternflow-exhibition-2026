@@ -16,8 +16,8 @@ Use these facts as given; cite the sources at the end in the English docs where 
   | 허은빈 | Heo Eun-bin | `patterns/4_heoeunbin/` | clay shapes built and painted on canvas; the character 「우산토끼」 (Umbrella Rabbit) |
   | 정은교 | Jeong Eun-gyo | `patterns/5_jeongeungyo/` | fish scales in hanji and silicone on black braille paper |
   | 유진 | Yu Jin | `patterns/6_yujin/` | afterimages of the sea in glow-in-the-dark paint |
-  English names follow the Revised Romanization of Korean — the artists' own preferred spellings are not known yet, so list it as an open question in the PR. The folder names are older romanisations (`hanyeonghoe` is 한영희 · `bakwan` is 박환) — keep the folders as they are (code reads them); use the English names above in prose and credits, always with the Korean beside them.
-- **Permission:** the organiser told the creator the work can be used freely. Credit the artists, the organiser and the exhibition; no separate consent section is needed (creator, 2026-10-30).
+  English names follow the Revised Romanization of Korean — approximate is fine (creator, 2026-10-30); no need to ask. The folder names are older romanisations (`hanyeonghoe` is 한영희 · `bakwan` is 박환) — keep the folders as they are (code reads them); use the English names above in prose and credits, always with the Korean beside them.
+- **Permission:** the organiser told the creator the work can be used freely. Credit the artists, the organiser and the exhibition; no separate consent section is needed (creator, 2026-10-30). **The six patterns: CC BY-SA 4.0 with credit to each artist** (creator agreed, 2026-10-30).
 
 ## What Patternflow did there
 
@@ -30,7 +30,7 @@ Use these facts as given; cite the sources at the end in the English docs where 
 - **Hotspot password** — replaced by `YOUR_HOTSPOT_PASSWORD` everywhere. The exhibition hotspot name `PatternflowLocal` stays (it is a default, not a secret).
 - **Prebuilt firmware images and the web flasher** (`firmware_images/*.bin`, `flasher.html`) — they had the password compiled in. Rebuild from source with your own `patternflow_secrets.h` (template: `firmware/patternflow_secrets.example.h`).
 - **Panel firmware** is here as `firmware/panel-exhibit-2026.patch` — the exhibition branch on top of the public Patternflow repo at commit `4d264d5` (`git clone https://github.com/engmung/Patternflow && git checkout 4d264d5 && git apply panel-exhibit-2026.patch`; checked to apply cleanly).
-- **FlowLocal firmware** (the second board — an ESP32-S3 show appliance: Wi-Fi AP + MQTT + Director + USB/SD library, `engmung/flowlocal_lsh`) is a private project and is **not** included. Describe what it does and how it talks to the panel and to Live from the docs here; say plainly that its source is not public yet.
+- **FlowLocal firmware** (the second board — an ESP32-S3 show appliance: Wi-Fi AP + MQTT + Director + USB/SD library) **is included** as full source at `firmware/flowlocal/` — the exhibition branch `exhibit-2026` at `c6360dc` (`flx-mon3`), a snapshot without git history. Its `flowlocal_secrets.h` is removed; copy `flowlocal_secrets.example.h` and fill in your own networks (home/venue Wi-Fi values are `YOUR_…` placeholders). The creator allowed publishing it (2026-10-30). Read its own `README.md` · `EXHIBIT.md` · `BUILD.md` for how it is built and what it does at the show.
 - **Audio samples** in `set Project/Samples/Imported/` (third-party one-shots and loops) — removed; the Live set will show them as missing. Say which tracks used them and that any sample of your own works.
 - **Firmware backups (`backups/`)** — internal git bundles, not needed with the patch.
 

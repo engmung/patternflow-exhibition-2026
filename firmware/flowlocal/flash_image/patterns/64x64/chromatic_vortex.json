@@ -1,0 +1,55 @@
+{
+  "name": "Chromatic Vortex",
+  "namespace": "ChromaticAberrationVortexPattern",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Split Dist",
+    "Swirl Speed",
+    "Wave Density",
+    "Color Shift"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0629.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Split Dist",
+      "effect": "RGB split distance",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Swirl Speed",
+      "effect": "Swirl / rotation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Wave Density",
+      "effect": "Wave density",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Color Shift",
+      "effect": "Hue bias / shift",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    }
+  ],
+  "slug": "chromatic_vortex",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "chromatic_vortex.pfm",
+  "size": 6372,
+  "opt": "-Os"
+}

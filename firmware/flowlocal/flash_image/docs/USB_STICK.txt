@@ -1,0 +1,24 @@
+Preparing the FlowLocal USB-C (or MicroSD) image
+================================================
+
+1. Format the stick as FAT32 only (not exFAT / NTFS).
+   Label: FLOWLOCAL. 32 KB allocation unit is fine.
+   Large sticks: use Rufus or guiformat (fat32format).
+
+2. Copy EVERYTHING inside flash_image/ to the ROOT of the stick
+   so you see folders named director/, patterns/, shows/, …
+   Do not nest them under another folder.
+
+3. Hardware
+   - USB-C stick: jack labelled USB (not COM).
+     Close the USB-OTG jumper; power from COM.
+   - MicroSD: CS=4 SCK=5 MOSI=6 MISO=7, build -e flowlocal-sd.
+
+4. Flash FlowLocal firmware over COM, then reboot with the
+   stick inserted. Serial should show media mounted.
+
+5. Join PatternflowLocal / patternflow and open
+   http://192.168.66.1/director/
+
+Rebuild this folder anytime:
+  python tools/make_flash_image.py

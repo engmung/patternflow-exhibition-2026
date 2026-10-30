@@ -1,0 +1,55 @@
+{
+  "name": "Vector Field Flow",
+  "namespace": "VectorFieldParticleFlowPattern",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Turbulence",
+    "Velocity",
+    "Density",
+    "Palette"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0629_2.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Turbulence",
+      "effect": "Field turbulence",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Velocity",
+      "effect": "Motion velocity",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Density",
+      "effect": "Density",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Palette",
+      "effect": "Color palette",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "palette / tone"
+    }
+  ],
+  "slug": "vector_field_flow",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "vector_field_flow.pfm",
+  "size": 6636,
+  "opt": "-Os"
+}

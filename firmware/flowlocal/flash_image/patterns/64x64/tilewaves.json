@@ -1,0 +1,55 @@
+{
+  "name": "TileWaves",
+  "namespace": "TileWaves",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Quantize",
+    "Speed",
+    "PhaseShift",
+    "Sharpness"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0710.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Quantize",
+      "effect": "Quantization",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "PhaseShift",
+      "effect": "Phase shift",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Sharpness",
+      "effect": "Edge sharpness",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "tilewaves",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "tilewaves.pfm",
+  "size": 7140,
+  "opt": "-Os"
+}

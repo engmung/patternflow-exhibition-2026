@@ -1,0 +1,55 @@
+{
+  "name": "0515-4",
+  "namespace": "Pattern05154",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Knob 1",
+    "Knob 2",
+    "Knob 3",
+    "Knob 4"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0515_4.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Knob 1",
+      "effect": "Parameter 1",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Knob 2",
+      "effect": "Parameter 2",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Knob 3",
+      "effect": "Parameter 3",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Knob 4",
+      "effect": "Parameter 4",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "0515_4",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "0515_4.pfm",
+  "size": 6316,
+  "opt": "-Os"
+}

@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#FF5C2E">
+  <title>FlowLocal Director</title>
+  <link rel="manifest" href="manifest.webmanifest?v=055">
+  <link rel="stylesheet" href="css/director.css?v=056">
+  <link rel="icon" href="icons/icon-192.png">
+  <script src="js/runtime.js?v=055"></script>
+</head>
+<body class="mqtt-offline">
+  <div class="wrap">
+    <div class="top-chrome">
+    <header class="app">
+      <span class="dot" aria-hidden="true"></span>
+      <h1>FlowLocal Director</h1>
+      <a class="home-link" id="flHomeLink" href="/" hidden title="FlowLocal dashboard">&larr; FlowLocal</a>
+      <span class="sub conn-hit" id="connHit" title="Open Connect" role="button" tabindex="0">
+        <span id="connDot"></span><span id="connLabel">offline</span>
+      </span>
+      <button type="button" class="btn perf-toggle" id="btnPerfMode">Performance</button>
+    </header>
+
+    <button type="button" class="offline-banner" id="offlineBanner" hidden>
+      Offline — tap to open Connect
+    </button>
+
+    <nav class="tabs" aria-label="Sections">
+      <button type="button" data-view="setup" class="on">Setup</button>
+      <button type="button" data-view="connect">Connect</button>
+      <button type="button" data-view="timeline">Timeline</button>
+      <button type="button" data-view="launch">Launch</button>
+      <button type="button" data-view="file">File</button>
+    </nav>
+    </div>
+
+    <!-- SETUP -->
+    <section class="view on" id="view-setup">
+      <div id="setupPc">
+      <h2>Local broker</h2>
+      <div class="warn-box">
+        Authoring stays on <b>your PC / LAN</b>. Do not point Director at the public Home Assistant broker.
+      </div>
+      <div class="card lp-meta-card">
+        <h3>Python broker (this PC)</h3>
+        <p class="note">Director ships its own local MQTT broker. Leave this running while you author:</p>
+        <pre class="conf">cd director\tools
+python -m pip install -r requirements.txt
+python run_local_broker.py</pre>
+        <p class="note">It serves <b>TCP 1883</b> for the panel and <b>WebSocket 9001</b> for this page.
+          If 1883 is already in use, stop the other MQTT service first.</p>
+        <p class="broker-state off" id="brokerState">broker: waiting…</p>
+
+        <h3>This PC’s LAN IP</h3>
+        <p class="note" id="lanHint">Shown automatically while the Python broker is running. Paste it on the panel.</p>
+        <div class="lan-ip-card">
+          <span id="copyLanBig">waiting…</span>
+          <button type="button" class="btn copy primary" data-copy="#copyLanBig">copy</button>
+        </div>
+        <p class="note">On the panel: <b>/mqtt</b> → <b>Director</b> → paste this IP →
+          <b>Connect to Director</b>. Port, prefix, and Subscriber are filled for you. No password.
+          Several panels on the same private AP can all subscribe here and follow the Launch grid.
+          Your Normal broker settings stay saved — leave Director mode to publish or subscribe
+          on the house topic again.</p>
+      </div>
+      </div>
+
+      <div id="setupFlowlocal" hidden>
+      <h2>FlowLocal</h2>
+      <div class="card">
+        <h3>Appliance broker</h3>
+        <p class="note">This copy talks to the ESP32 FlowLocal box, not a PC broker.</p>
+        <p class="note">1. Join Wi-Fi <b>PatternflowLocal</b> (password <b>patternflow</b>).</p>
+        <p class="note">2. Open Director from the box:
+          <b>http://192.168.66.1/director/</b>
+          (do not double-click this file on the PC — the browser needs http).</p>
+        <p class="note">3. Connect uses <code>ws://192.168.66.1:9001</code>, prefix
+          <code>patternflow</code>, empty user/password.</p>
+        <p class="note">On the panel: <b>/mqtt</b> → <b>Director</b> → host
+          <b>192.168.66.1</b> port <b>1883</b> → Connect to Director.</p>
+        <p class="note">Then use the <b>Launch</b> tab.</p>
+      </div>
+      </div>
+    </section>
+
+    <!-- CONNECT -->
+    <section class="view" id="view-connect">
+      <h2>Broker connection</h2>
+      <div class="card">
+        <div class="field"><label for="wsUrl">WebSocket URL</label>
+          <input id="wsUrl" value="ws://127.0.0.1:9001"></div>
+        <div class="field"><label for="mqttPrefix">Prefix</label>
+          <input id="mqttPrefix" value="patternflow" maxlength="31"></div>
+        <div class="field"><label for="mqttUser">User</label>
+          <input id="mqttUser" placeholder="empty if anonymous" maxlength="31"></div>
+        <div class="field"><label for="mqttPass">Password</label>
+          <input id="mqttPass" type="password" placeholder="empty if anonymous" maxlength="47"></div>
+        <div class="field"><label for="panelHttp">Panel HTTP base</label>
+          <input id="panelHttp" value="http://patternflow.local"
+            placeholder="http://patternflow.local or panel IP"></div>
+        <div class="actions">
+          <button type="button" class="btn primary" id="btnConnect">Connect</button>
+          <button type="button" class="btn" id="btnDisconnect">Disconnect</button>
+        </div>
+        <div class="status" id="connectStatus">disconnected</div>
+        <p class="note">Local Director broker: leave user/password empty, prefix
+          <code>patternflow</code>. Connect only opens the socket. Pattern inventory is
+          optional — use <strong>Load patterns from panel</strong> when you want it.
+          That query is a broadcast on the prefix, so every Director-mode panel will answer;
+          skip it when several devices are live and you only need to play the deck.</p>
+        <p class="note"><strong>Panel HTTP base</strong> is used for
+          <em>Install used patterns</em> / <em>Send show</em> — the panel pulls files from
+          FlowLocal over HTTP. Default <code>http://patternflow.local</code>; use the panel’s
+          LAN IP if mDNS fails on the tablet.</p>
+        <div class="actions">
+          <button type="button" class="btn" id="btnQueryPatterns">Load patterns from panel</button>
+          <span class="status" id="queryStatus"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TIMELINE -->
+    <section class="view" id="view-timeline">
+      <h2>Performance timeline</h2>
+
+      <div class="tl-meta">
+        <div class="field stack"><label for="perfTitle">Title</label>
+          <input id="perfTitle" value="Untitled"></div>
+        <div class="field stack"><label for="perfId">Id</label>
+          <input id="perfId" value=""></div>
+        <div class="field stack"><label for="perfChannel">Channel hint</label>
+          <select id="perfChannel">
+            <option value="0">local / none</option>
+            <option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option>
+            <option value="5">5 Live</option>
+          </select></div>
+        <div class="field stack"><label for="perfLength">Length (seconds)</label>
+          <input id="perfLength" type="number" min="0.1" step="0.1" value="60"></div>
+        <div class="field stack"><label>Format</label>
+          <span class="note" id="perfFormat" style="margin:0;line-height:2.2">PFST v2 · 0.1 s · ease</span></div>
+        <div class="field stack"><label for="perfUtc">utcStart</label>
+          <input id="perfUtc" placeholder="optional ISO-8601"></div>
+        <div class="field stack required-patterns">
+          <label for="reqSearch">Required patterns</label>
+          <p class="note" style="margin:0 0 6px">
+            Load from the panel or search the catalog, then <strong>remove</strong> anything you
+            will not use. That shortlist is what appears in the Pattern dropdown for cues —
+            it is what the artist <em>could</em> use. Click a name to preview it on the device (MQTT). Use × to drop it from the list.
+          </p>
+          <p class="note" id="usedNote" style="margin:0 0 6px"></p>
+          <div class="actions" style="margin:0 0 8px">
+            <button type="button" class="btn" id="btnQueryPatternsTl">Load from panel</button>
+            <button type="button" class="btn" id="btnSendUsedTl">Install used patterns to panel</button>
+          </div>
+          <div class="req-picker">
+            <div class="req-add">
+              <input id="reqSearch" type="search" placeholder="Find by name or slug…" autocomplete="off" spellcheck="false">
+              <button type="button" class="btn" id="btnReqAdd">Add</button>
+            </div>
+            <ul id="reqResults" class="req-results" hidden></ul>
+          </div>
+          <div class="req-chips" id="reqChips"></div>
+        </div>
+        <div class="field stack loop">
+          <label for="perfLoop">Loop playback</label>
+          <label class="check">
+            <input id="perfLoop" type="checkbox">
+            <span>Repeat when the playhead reaches the end</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button type="button" class="btn primary" id="btnPlay">Play</button>
+        <button type="button" class="btn" id="btnStop">Stop</button>
+        <button type="button" class="btn" id="btnSnapshot" title="Write the full active look at the playhead as one snapshot">Capture snapshot</button>
+        <span class="time" id="clock">0:00.00</span>
+        <label class="note" style="margin:0">Zoom
+          <input id="zoom" type="range" min="16" max="80" value="40" style="vertical-align:middle;width:120px">
+        </label>
+      </div>
+
+      <div class="live-strip" title="Preview on the panel (aligned). Release slider or Enter on number to write a timeline block at the playhead.">
+        <div class="cell">
+          <label>Pattern</label>
+          <select id="livePattern" title="Patterns from Required above"></select>
+        </div>
+        <div class="cell">
+          <label id="liveP1Label">hue</label>
+          <input type="range" id="liveP1" min="0" max="1000" value="500">
+          <input class="val" id="liveP1Val" type="number" min="0" max="1000" value="500">
+        </div>
+        <div class="cell">
+          <label id="liveP2Label">speed</label>
+          <input type="range" id="liveP2" min="0" max="1000" value="500">
+          <input class="val" id="liveP2Val" type="number" min="0" max="1000" value="500">
+        </div>
+        <div class="cell">
+          <label id="liveP3Label">mode</label>
+          <input type="range" id="liveP3" min="0" max="1000" value="500">
+          <input class="val" id="liveP3Val" type="number" min="0" max="1000" value="500">
+        </div>
+        <div class="cell">
+          <label id="liveP4Label">freq</label>
+          <input type="range" id="liveP4" min="0" max="1000" value="500">
+          <input class="val" id="liveP4Val" type="number" min="0" max="1000" value="500">
+        </div>
+        <div class="cell" style="grid-column:1/-1">
+          <label>Message</label>
+          <input type="text" id="liveMessage" placeholder="banner text (empty clears)">
+        </div>
+      </div>
+
+      <div id="timelineMount"></div>
+
+      <div class="card cue-editor" style="margin-top:14px">
+        <h3>Cue editor</h3>
+        <p class="note">
+          Set <strong>Length</strong> for the timeline span.
+          Click the <strong>seconds bar</strong> to move the playhead (preview only).
+          Click a <strong>lane</strong> to plant a block there; select a block and use the
+          sliders/numbers above — drag previews the full aligned look on the panel;
+          release (or change the number) writes that channel into the timeline.
+          Changing other sliders plants blocks on those channels at the playhead.
+          <strong>Capture snapshot</strong> stores the full active look at the playhead.
+          New shows are <strong>PFST v2</strong> (0.1&nbsp;s grid). Tick <strong>Ease</strong>
+          on a param cue so those channels glide to the next cue instead of holding.
+        </p>
+        <input type="hidden" id="cueIndex" value="-1">
+        <div class="grid2">
+          <div class="field"><label for="cueT">t (seconds)</label>
+            <input id="cueT" type="number" min="0" step="0.1" value="0"></div>
+          <div class="field"><label for="cueKind">Kind</label>
+            <select id="cueKind">
+              <option value="snapshot">snapshot (full)</option>
+              <option value="pattern">pattern only</option>
+              <option value="param">param (sparse)</option>
+              <option value="message">message only</option>
+            </select></div>
+        </div>
+        <div id="cueEaseRow" class="field" style="margin-top:8px">
+          <label><input type="checkbox" id="cueEase" checked>
+            Ease params to next cue (v2 linear lerp)</label>
+          <p class="note" style="margin:4px 0 0">Leave off for hard jumps (mode knobs). On for smooth sweeps.</p>
+        </div>
+        <div id="cueFieldsPattern">
+          <div class="field"><label for="cuePattern">Pattern</label>
+            <select id="cuePattern" title="Patterns from Required above"></select></div>
+        </div>
+        <div id="cueFieldsParam" style="display:none">
+          <div class="grid2">
+            <div class="field"><label for="cueP1" id="cueP1Label">hue</label><input id="cueP1" type="number" min="0" max="1000" value="500"></div>
+            <div class="field"><label for="cueP2" id="cueP2Label">speed</label><input id="cueP2" type="number" min="0" max="1000" value="500"></div>
+            <div class="field"><label for="cueP3" id="cueP3Label">mode</label><input id="cueP3" type="number" min="0" max="1000" value="500"></div>
+            <div class="field"><label for="cueP4" id="cueP4Label">freq</label><input id="cueP4" type="number" min="0" max="1000" value="500"></div>
+          </div>
+        </div>
+        <div id="cueFieldsMessage" style="display:none">
+          <div class="field"><label for="cueMessage">Message</label>
+            <input id="cueMessage" placeholder="empty clears banner"></div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn primary" id="btnCueAdd">Insert cue</button>
+          <button type="button" class="btn" id="btnCueSave">Update cue</button>
+          <button type="button" class="btn" id="btnCueDelete">Delete cue</button>
+        </div>
+        <div class="status" id="cueStatus"></div>
+        <div class="cue-list" id="cueList"></div>
+      </div>
+    </section>
+
+    <!-- LAUNCH -->
+    <section class="view" id="view-launch">
+      <h2>Launch deck</h2>
+      <div class="card">
+        <p class="note">4×4 clip grid on the local Director broker. <strong>Edit</strong> previews
+          on every subscribed panel, then <strong>Store</strong> writes the pad (that is what
+          autosaves). <strong>Play</strong> fires clips now, or quantized to BPM in 4/4.
+          Layers: <strong>Snapshots</strong>, <strong>K1–K4</strong> (param/1..4, pads already
+          hold 0…1000), and <strong>Message</strong>. Knob layers always hit that channel —
+          they do not guess hue or speed. This is not a <code>.pfs</code> show.
+        <div class="lp-top">
+          <div class="field stack"><label for="lpTitle">Deck</label>
+            <input id="lpTitle" placeholder="name this deck first"></div>
+          <div class="field stack"><label for="lpBpm">BPM</label>
+            <input id="lpBpm" type="number" min="40" max="240" value="120"></div>
+          <div class="field stack"><label for="lpQuantize">Quantize</label>
+            <select id="lpQuantize">
+              <option value="off">immediate</option>
+              <option value="beat">next beat</option>
+              <option value="bar">next bar (4/4)</option>
+            </select></div>
+          <div class="lp-beat-wrap">
+            <span class="lp-beat" id="lpBeat" title="beat pulse"></span>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn on" id="lpModeEdit">Edit</button>
+          <button type="button" class="btn" id="lpModePlay">Play</button>
+          <button type="button" class="btn" id="lpNew">New</button>
+          <button type="button" class="btn" id="lpExample">Load example</button>
+          <button type="button" class="btn" id="lpOpen">Open from FlowLocal</button>
+          <button type="button" class="btn primary" id="lpSave">Save to FlowLocal</button>
+        </div>
+      </div>
+
+      <div class="lp-layers" role="tablist" aria-label="Layers">
+        <button type="button" class="btn on" id="lpLayer-snapshot">Snapshots</button>
+        <button type="button" class="btn" id="lpLayer-k1">K1</button>
+        <button type="button" class="btn" id="lpLayer-k2">K2</button>
+        <button type="button" class="btn" id="lpLayer-k3">K3</button>
+        <button type="button" class="btn" id="lpLayer-k4">K4</button>
+        <button type="button" class="btn" id="lpLayer-message">Message</button>
+      </div>
+
+      <div class="lp-stage">
+        <div class="lp-grid" id="lpGrid"></div>
+        <div class="card" id="lpEditBox">
+          <h3>Pad editor</h3>
+          <p class="note">The panel follows these controls. Store writes the selected pad.
+            Autosave runs every 3 stores. K1–K4 start filled 0…1000; Store can retune a pad.</p>
+          <div id="lpEditSnapshot">
+            <div class="field stack"><label for="lpPattern">Pattern</label>
+              <select id="lpPattern"></select></div>
+            <div class="lp-params">
+              <div class="cell"><label id="lpP1Label">hue</label>
+                <input type="range" id="lpP1" min="0" max="1000" value="500">
+                <input class="val" id="lpP1Val" type="number" min="0" max="1000" value="500"></div>
+              <div class="cell"><label id="lpP2Label">speed</label>
+                <input type="range" id="lpP2" min="0" max="1000" value="500">
+                <input class="val" id="lpP2Val" type="number" min="0" max="1000" value="500"></div>
+              <div class="cell"><label id="lpP3Label">mode</label>
+                <input type="range" id="lpP3" min="0" max="1000" value="500">
+                <input class="val" id="lpP3Val" type="number" min="0" max="1000" value="500"></div>
+              <div class="cell"><label id="lpP4Label">freq</label>
+                <input type="range" id="lpP4" min="0" max="1000" value="500">
+                <input class="val" id="lpP4Val" type="number" min="0" max="1000" value="500"></div>
+            </div>
+            <div class="field stack" style="margin-top:8px"><label for="lpMessage">Message</label>
+              <input id="lpMessage" placeholder="banner (empty clears)"></div>
+          </div>
+          <div id="lpEditOne" hidden>
+            <div class="cell"><label id="lpOneLabel">value</label>
+              <input type="range" id="lpOne" min="0" max="1000" value="500">
+              <input class="val" id="lpOneVal" type="number" min="0" max="1000" value="500"></div>
+          </div>
+          <div id="lpEditMsg" hidden>
+            <div class="field stack"><label for="lpLayerMsg">Message</label>
+              <input id="lpLayerMsg" placeholder="banner (empty clears)"></div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" id="lpStore">Store on pad</button>
+            <button type="button" class="btn" id="lpClear">Clear pad</button>
+          </div>
+        </div>
+      </div>
+      <div class="status" id="lpStatus"></div>
+      <p class="note lp-perf-note" hidden>Performance mode is on: launch-only view, play mode forced, lighter UI for the tablet.</p>
+    </section>
+
+    <!-- FILE -->
+    <section class="view" id="view-file">
+      <h2>Performance file</h2>
+      <div class="card">
+        <p class="note">Open and save a <strong>.pfs</strong> table — the same file the panel plays
+          on <code>/show</code>. New shows are <strong>PFST v2</strong>: cue times in
+          <strong>0.1&nbsp;s</strong> steps, optional <strong>EASE</strong> so absolute params
+          (<code>0..1000</code>) lerp between cues. Older v1 files still open; use
+          <strong>Upgrade to v2</strong> / <strong>Compress staircases</strong> to modernize
+          a dense 1&nbsp;Hz bake. Knob names come from the local catalog cache
+          <code>js/patterns-catalog.json</code>.</p>
+        <p class="note">When the timeline is done, <strong>Install used patterns to panel</strong>
+          asks the panel to pull matching <code>.pfm</code> files from FlowLocal’s
+          <code>patterns/</code> library (set <strong>Panel HTTP base</strong> on Connect).
+          <strong>Send show to panel</strong> saves the current <code>.pfs</code> to FlowLocal
+          then pulls it onto the panel’s <code>/shows</code>.</p>
+        <p class="note">On FlowLocal, <strong>Save</strong> and <strong>Open</strong> use the USB stick
+          library (<code>shows/</code>). Tablet download/upload still works via the local buttons.</p>
+        <p class="note" id="usedNoteFile"></p>
+        <div class="actions">
+          <button type="button" class="btn" id="btnNew">New</button>
+          <button type="button" class="btn" id="btnOpen">Open from FlowLocal</button>
+          <button type="button" class="btn primary" id="btnSave">Save to FlowLocal</button>
+          <button type="button" class="btn" id="btnOpenLocal">Open file…</button>
+          <button type="button" class="btn" id="btnSaveLocal">Download .pfs</button>
+          <button type="button" class="btn" id="btnUpgradeV2">Upgrade to v2</button>
+          <button type="button" class="btn" id="btnCompressEase">Compress staircases → ease</button>
+          <button type="button" class="btn" id="btnSendUsed">Install used patterns to panel</button>
+          <button type="button" class="btn" id="btnSendShow">Send show to panel</button>
+        </div>
+        <div class="status" id="fileStatus"></div>
+      </div>
+    </section>
+
+    <footer class="app">
+      Patternflow Director · local MQTT ·
+      <a href="README.md">README</a>
+    </footer>
+  </div>
+
+  <script src="vendor/mqtt.min.js?v=056"></script>
+  <script type="module" src="js/main.js?v=056"></script>
+</body>
+</html>

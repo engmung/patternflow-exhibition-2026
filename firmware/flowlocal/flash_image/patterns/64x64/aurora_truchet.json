@@ -1,0 +1,55 @@
+{
+  "name": "Aurora Truchet",
+  "namespace": "AuroraTruchet",
+  "author": "Aurora port",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Speed",
+    "Flip",
+    "Color",
+    "Trail"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_aurora_truchet.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 2,
+      "label": "Flip",
+      "effect": "Flip probability",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Color",
+      "effect": "Color / hue",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    },
+    {
+      "channel": 4,
+      "label": "Trail",
+      "effect": "Trail persistence",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "aurora_truchet",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "aurora_truchet.pfm",
+  "size": 8028,
+  "opt": "-Os"
+}

@@ -1,0 +1,55 @@
+{
+  "name": "Warped Wave",
+  "namespace": "WarpedWave",
+  "author": "Seunghun LEE",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "knobs": [
+    "Hue",
+    "Speed",
+    "Warp Amp",
+    "Warp Freq"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_0718.h",
+  "absoluteReady": true,
+  "params": [
+    {
+      "channel": 1,
+      "label": "Hue",
+      "effect": "Color hue (wraps)",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    },
+    {
+      "channel": 2,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 3,
+      "label": "Warp Amp",
+      "effect": "Warp amplitude",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Warp Freq",
+      "effect": "Warp frequency",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "warped_wave",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "warped_wave.pfm",
+  "size": 7108,
+  "opt": "-Os"
+}

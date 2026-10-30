@@ -1,0 +1,57 @@
+{
+  "name": "Tetris",
+  "namespace": "Tetris",
+  "author": "@akacoda",
+  "license": "CC-BY-SA-4.0",
+  "abi": 1,
+  "absoluteReady": true,
+  "knobs": [
+    "Reset",
+    "Reset",
+    "Rotate",
+    "Move"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/sdk/_community_headers/tetris.h",
+  "communityId": "77de31bae37940c7",
+  "community": "https://community.patternflow.work/community/p/77de31bae37940c7",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Reset",
+      "effect": "Controls Reset",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 2,
+      "label": "Reset",
+      "effect": "Controls Reset",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Rotate",
+      "effect": "Controls Rotate",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Move",
+      "effect": "Move / steer",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    }
+  ],
+  "slug": "tetris",
+  "panel_w": 64,
+  "panel_h": 64,
+  "module": "tetris.pfm",
+  "size": 14324,
+  "opt": "-Os"
+}

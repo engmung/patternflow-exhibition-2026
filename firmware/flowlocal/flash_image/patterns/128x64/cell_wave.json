@@ -1,0 +1,55 @@
+{
+  "name": "Cell Wave",
+  "namespace": "CellWave",
+  "author": "Seunghun LEE / Aurora port",
+  "license": "CC-BY-SA-4.0",
+  "absoluteReady": true,
+  "abi": 1,
+  "knobs": [
+    "Speed",
+    "Size",
+    "Thresh",
+    "Color"
+  ],
+  "source": "D:/Documenti/Arduino/patternflow/presets/preset_cell_wave.h",
+  "params": [
+    {
+      "channel": 1,
+      "label": "Speed",
+      "effect": "Animation speed",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "low..high speed"
+    },
+    {
+      "channel": 2,
+      "label": "Size",
+      "effect": "Element size",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 3,
+      "label": "Thresh",
+      "effect": "Threshold",
+      "wire": "0..1000",
+      "wrap": false,
+      "mapped": "pattern-specific range"
+    },
+    {
+      "channel": 4,
+      "label": "Color",
+      "effect": "Color / hue",
+      "wire": "0..1000",
+      "wrap": true,
+      "mapped": "0..1 wrap"
+    }
+  ],
+  "slug": "cell_wave",
+  "panel_w": 128,
+  "panel_h": 64,
+  "module": "cell_wave.pfm",
+  "size": 6572,
+  "opt": "-Os"
+}

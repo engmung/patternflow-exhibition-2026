@@ -1,0 +1,24 @@
+{
+  "flowlocal_payload_version": 3,
+  "director_files": 86,
+  "show_files": 63,
+  "pattern_files": 240,
+  "pattern_geometries": [
+    "128x64",
+    "64x64"
+  ],
+  "launchpads": [
+    "flowlocal_starter.json"
+  ],
+  "release_files": [
+    "patternflow-director-p5.zip",
+    "patternflow-director-p4.zip",
+    "patternflow-demo-sequences.zip",
+    "patternflow-demo-patterns.zip"
+  ],
+  "docs": [
+    "README.txt",
+    "USB_STICK.txt",
+    "WIFI_PULL.txt"
+  ]
+}

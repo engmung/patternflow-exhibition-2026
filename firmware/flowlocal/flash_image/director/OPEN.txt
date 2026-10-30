@@ -1,0 +1,4 @@
+Do not double-click index.html on the PC.
+Join Wi-Fi PatternflowLocal, then open:
+  http://192.168.66.1/director/
+Connect is already set to ws://192.168.66.1:9001
