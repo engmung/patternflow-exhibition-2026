@@ -27,7 +27,7 @@ One folder per pattern. The number is the K4 order (pattern 1 is the one the pan
 ## When you have changed a pattern
 
 1. **You changed the JS** (you pasted in a fix made in Pattern Lab, or edited it yourself) → overwrite `<name>.js` in that folder. For HANYEONGHOE you must also update `hanyeonghoe.project.json` (it is inside the `@stack` line of the code pasted from Pattern Lab; get it out with `tools/patterns/run.sh stack decode`).
-2. **Make the .h again.** Ask Claude: "make the `<name>` .h again". HANYEONGHOE has a generator (`tools/patterns/hanyeonghoe_h/build.sh`; if the layer code has changed, it stops and tells you to fix the hand-translated parts).
+2. **Make the .h again.** Ask Claude: "make the `<name>` .h again". *(Translator's note: the creator used an AI coding assistant for this step. Without one, port the JS to the `.h` by hand, following [`PATTERN_KNOBS.en.md`](../PATTERN_KNOBS.en.md) "Translating to .h and putting it in", then run the check in step 3.)* HANYEONGHOE has a generator (`tools/patterns/hanyeonghoe_h/build.sh`; if the layer code has changed, it stops and tells you to fix the hand-translated parts).
 3. **Check** (from the folder above this one, `exhibition_2026`):
    ```bash
    python tools/patterns/host/pfhost.py current <name>        # does the .h draw the same picture as the JS? (it must say OK)

@@ -2,6 +2,8 @@
 
 > **English translation.** The Korean original is [`PATTERN_KNOBS.md`](PATTERN_KNOBS.md). It was written for the crew of the 2026 exhibition *Anbu* in Seoul and describes that installation as it was — the exhibition laptop's paths, COM ports and dates are kept as facts. In this public copy the hotspot password reads `YOUR_HOTSPOT_PASSWORD`; the prebuilt firmware images, `flasher.html`, `backups/` and the project's copies of the audio samples are not included — build from source as the [front page](README.md) shows. The original's `patternflow/` (the panel firmware clone) is what you get by applying [`firmware/panel-exhibit-2026.patch`](firmware/panel-exhibit-2026.patch) to Patternflow `4d264d5`, inside this repo; its `flowlocal/` (the FlowLocal firmware clone) is [`firmware/flowlocal/`](firmware/flowlocal/) here, so `flowlocal/EXHIBIT.md` means `firmware/flowlocal/EXHIBIT.md`. Where the original says "the root `README.md`", it means the Korean notes now in [`README.ko.md`](README.ko.md), translated in [`docs/setup-notes.en.md`](docs/setup-notes.en.md).
 
+*(Translator's note: here the Korean word 작가 ('artist') also covers whoever wrote a pattern's code: 'the artist's value' is the value in the pattern as first received.)*
+
 What came out of changing the six patterns' JS to fit absolute knobs, and what to take care of when moving that JS into a .h.
 
 ## Files
@@ -48,7 +50,7 @@ To put JS you changed in Pattern Lab into the exhibition, overwrite `<name>.js` 
 | K3 | Speed | 0.35 ~ 1.65 | 1.0× (original tempo) | slower ↔ faster |
 
 - **K1 press:** next tree. It cycles through 7 seeds (3831 → 102 → 137 → 7 → 95 → 33 → 43). On each change the new tree sways and leaves rain down for about 2.5 seconds. The first tree is the artist's seed 3831.
-- **Colour:** settled on the `@ramp` in the code we were given (orange-brown at the bottom) (2026-09-19, confirmed by the user). The two stops in the old .h (`0.281:#5d2619 0.683:#fff700`, lemon yellow) are not used.
+- **Colour:** settled on the `@ramp` in the code we were given (orange-brown at the bottom) (2026-09-19, confirmed by the creator). The two stops in the old .h (`0.281:#5d2619 0.683:#fff700`, lemon yellow) are not used.
 
 ### 2. CHOEGYEONGEUN (portrait version)
 | | Name | Range | Middle | Ends (min ↔ max) |

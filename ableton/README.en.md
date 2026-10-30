@@ -44,6 +44,8 @@ tools/
 
 ## 1. Making the .amxd (once)
 
+*(Translator's note: skip this chapter if you use the shared set. `set Project/set.als` already loads a built, frozen `PF Exhibit Scenes.amxd` from `set Project/Presets/MIDI Effects/Max MIDI Effect/`, with the js inside. You need §1 only if you change `pf_exhibit_scenes.js` or the `.maxpat`.)*
+
 This works the same way as the earlier Patternflow Bridge. The repo keeps only the text `.maxpat`; you make the `.amxd` once and then use it. The step where the order matters is step 3.
 
 1. Pick a folder for the device and copy `pf_exhibit_scenes.js` into it. Example: `Documents\Ableton\User Library\Presets\MIDI Effects\Max MIDI Effect\` (it shows up right away under User Library in Live's browser).
@@ -88,6 +90,7 @@ The port name is set by the FlowLocal firmware (`FL_EXHIBIT_USB_PRODUCT`). If it
 - Monitor: **In** (the input always passes through, even without Arm)
 - Device: **PF Exhibit Scenes**, alone. No instrument, no other MIDI effect, no clips. If you put an instrument after the device, the request goes into that instrument and never reaches FlowLocal.
 - Put **only one** of this device in the set. With two, every scene fires twice and every request goes out twice.
+*(Translator's note: in the shared set, scene track `4.도마뱀` plays the footstep notes itself (MIDI From All Ins / **Ch. 10**, Monitor **In**); leave it on that input. The rule below is for the other instrument tracks.)*
 - Set MIDI From to **No Input** on the other instrument tracks. If one of them is on All Ins with Arm on, the panel's notes go into that instrument too. For a track that turns knob presses into sound, see §4 "Press sounds".
 
 **Why no feedback loop can form.** The device sends a request only once after loading and when you press the Resync button. It never sends anything in reply to a message it received. FlowLocal throws away every message from the laptop except the request, and passes nothing on to the panel. The device never reads the reply to a request (PC, CC 118, CC 24–26) as a request. Even with Thru on, the panel's MIDI just goes back to FlowLocal and is thrown away. The only setup that forms a loop is MIDI From and MIDI To on **the same loopMIDI port** with Thru on (§5).
@@ -126,7 +129,7 @@ Every value except Resync is saved with the set and kept out of automation (Stor
 **Reading the status line**
 
 - `waiting for Live` / `no program yet` — every time the device loads, the patch resets the two lines to this text (this works even without the js). If it does not change to `ready` a few seconds after the set opens, the js was not found (§1 step 7, Max Console).
-- `ready - scenes 0-6` — ready; the set has 7 scenes (0–6). The request sent automatically after loading does not change this line.
+- `ready - scenes 0-6` — ready; the set has 7 scenes (0–6). *(Translator's note: the shared set has 8 scenes, so it reads `ready - scenes 0-7`.)* The request sent automatically after loading does not change this line.
 - `fired 12:34:56` — the bottom line changes to this every time the device fires a scene. With Autostart on, this happens 1.5 s after loading, so it is normal that `ready` shows only briefly.
 - `PC 3 ch1 -> 3: ARTIST C / Title` — the last PC and the scene it fired (number: scene name)
 - `CC118=3 ch1 -> 3: ARTIST C / Title` — a scene fired by Alt CC from FlowLocal's CC 118 mirror. The number after `ch` is the channel the device received. FlowLocal sends on channel 16, but if Live merges it onto channel 1 it shows as `ch1`. If Live does pass PC and Alt CC is on anyway, on every K4 the PC fires first and this line ends with `(already on)`. That is normal.
@@ -184,6 +187,8 @@ There is one set of mappings for the whole Live set. Even when the scene changes
 
 ### Footstep notes (HEOEUNBIN)
 
+*(Translator's note: the shared set does not use a separate footstep track: scene track `4.도마뱀` (MIDI From All Ins / Ch. 10, Monitor In, a Drum Rack with Collision on C1 and D1) plays them, and its scene-4 clip is empty. The steps below describe the separate-track version.)*
+
 When the fourth pattern (the lizard) walks, the panel sends one note **on the very frame a foot touches the ground**. Live is not counting beats here: the panel reports it together with the picture, so wherever a visitor has turned K3 (speed), the sample stays on the feet. The other five patterns do not send these notes.
 
 | | |
@@ -235,10 +240,10 @@ What the receiving computer needs:
 - git. It is a private repo, so you need to sign in. *(Translator's note: the public copy is `https://github.com/Patternflow-lab/patternflow-exhibition-2026`; no sign-in needed.)*
 
 ```bash
-git clone https://github.com/engmung/patternflow-exhibition-2026.git
+git clone https://github.com/Patternflow-lab/patternflow-exhibition-2026.git   # the original named the private repo engmung/patternflow-exhibition-2026
 ```
 
-Then open `set Project/set.als`. Without the panel and FlowLocal, Live reports that `Patternflow Exhibit` is missing from the MIDI tracks' inputs, but the set still opens and all sound work can be done. On the day you connect the hardware, do the Live settings from §2 (input: Track and Remote on; output: Track only) once on that computer. **Live settings are saved on the computer, not in the set.**
+Then open `set Project/set.als`. Without the panel and FlowLocal, Live reports that `Patternflow Exhibit` is missing from the MIDI tracks' inputs, but the set still opens and all sound work can be done. On the day you connect the hardware, do the Live settings from §2 (input: Track and Remote on; output: Track only) once on that computer. **Live settings are saved on the computer, not in the set.** *(Translator's note: and per Live version: each update starts a new `%APPDATA%\Ableton\Live 12.x.y\Preferences` folder, so check the MIDI port switches and Takeover Mode again after updating Live.)*
 
 After working:
 
@@ -295,7 +300,7 @@ To see whether FlowLocal answers a resync request without Live, keep the monitor
 python tools/send_test.py --port "Patternflow Exhibit" --allow-device resync
 ```
 
-**On Windows, a USB MIDI port can usually be opened by only one program at a time.** When you use the monitor, close Live (or turn that port off in Live's settings). When you are done, close the monitor first, then start Live.
+*(Translator's note: the show laptop had Windows MIDI Services, which let Live and the monitor share the port; this paragraph applies to Windows without it.)* **On Windows, a USB MIDI port can usually be opened by only one program at a time.** When you use the monitor, close Live (or turn that port off in Live's settings). When you are done, close the monitor first, then start Live.
 
 ## 7. Windows kiosk checklist
 
@@ -371,6 +376,8 @@ powercfg /setactive SCHEME_CURRENT
 | Pressing K1–K3 changes the VST instrument's preset | The Program Change that came along with it → use Live's built-in instruments (§4) |
 
 ## 9. Not yet checked (built without hardware or Live)
+
+*(Translator's note: this chapter was written before the hardware tests. On 2026-09-19, with Live 12 Suite, items 1–3 were confirmed: Live passes Program Change to the device (status line `PC 6 ch1 -> 6: …`), so Alt CC stays off; Resync → FlowLocal's answer → scene fired works, so the MIDI To path works. See [setup notes, 'Live check (2026-09-19)'](../docs/setup-notes.en.md#live-check-2026-09-19-live-12-suite-on-that-desktop). The other items stay as written.)*
 
 This device was built without Live or Max, using the format of the earlier Bridge patch and its docs as a reference. What was verified: `.maxpat` JSON parsing and a structure check (patch cords, inlet/outlet numbers, parameter names, presentation size), the js syntax (`node --check`, acorn ES5), and Node tests that imitate Max/Live. These tests cover the byte parser (running status, real-time bytes, sysex, FlowLocal's status reply SysEx), holding messages back until initialised, range checks, Offset (including Start PC), duplicate-fire prevention, Autostart, Alt CC ignoring the channel (both when Live merges the input onto channel 1 and when it keeps the channel), the dump counters, the resync request (once 0.5 s after loading, the `resync bang` sent by a live.text in button mode, Enable), the Thru gate, firing only once when PC and the CC 118 mirror arrive together, a Live-only restart imitated with a fake FlowLocal that answers requests, and the patch wiring (`midiin → deferlow → js`, `midiin → gate → midiout`, `js → midiout`, resetting the status lines on load, setting names, defaults and message pairs). That the tests can actually fail was checked by breaking the code on purpose. In real Live, check the following first.
 

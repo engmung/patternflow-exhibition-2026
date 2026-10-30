@@ -1,19 +1,19 @@
 # Credits
 
-Patternflow was one corner of the exhibition *Anbu*: there, visitors played six artists' works as LED patterns with sound. The works are the artists'. This repository only documents how they were played.
+Patternflow was one interactive corner of the exhibition *Anbu*: there, visitors played LED patterns drawn from six artists' works, with sound. The works are the artists'. This repository only documents how they were played.
 
 ## The artists
 
-Names are romanised approximately (Revised Romanization of Korean), always with the Korean beside them. The folder names in `patterns/` use older spellings (`bakwan` for 박환, `hanyeonghoe` for 한영희) and stay as they are, because the firmware reads them.
+Names are romanised approximately (Revised Romanization of Korean), always with the Korean beside them. The folder and code names in `patterns/` are older, looser spellings (`bakwan` for 박환, `hanyeonghoe` for 한영희), kept as they are because the firmware reads them.
 
-| Artist | Their work in the show | Pattern in this repo |
-|---|---|---|
-| **Bak Hwan** (박환) | mountains and waterfalls in earth, thread, denim scraps and bark | [`patterns/1_bakwan/`](patterns/1_bakwan/) — BAKWAN |
-| **Choe Gyeong-eun** (최경은) | ceramics that start from the six dots of braille | [`patterns/2_choegyeongeun/`](patterns/2_choegyeongeun/) — CHOEGYEONGEUN |
-| **Han Yeong-hui** (한영희) | cosmos flowers, the road to Jebudo, the South Sea | [`patterns/3_hanyeonghoe/`](patterns/3_hanyeonghoe/) — HANYEONGHOE |
-| **Heo Eun-bin** (허은빈) | clay shapes built and painted on canvas; the character 「우산토끼」 (*Umbrella Rabbit*) | [`patterns/4_heoeunbin/`](patterns/4_heoeunbin/) — HEOEUNBIN |
-| **Jeong Eun-gyo** (정은교) | fish scales in hanji and silicone on black braille paper | [`patterns/5_jeongeungyo/`](patterns/5_jeongeungyo/) — JEONGEUNGYO |
-| **Yu Jin** (유진) | afterimages of the sea in glow-in-the-dark paint | [`patterns/6_yujin/`](patterns/6_yujin/) — YUJIN |
+| Artist | Their work in the show (from the press) | Pattern in this repo | What the pattern shows |
+|---|---|---|---|
+| **Bak Hwan** (박환) | mountains and waterfalls in earth, thread, denim scraps and bark | [`patterns/1_bakwan/`](patterns/1_bakwan/) — `BAKWAN` | a tree with golden leaves in the wind |
+| **Choe Gyeong-eun** (최경은) | ceramics that start from the six dots of braille | [`patterns/2_choegyeongeun/`](patterns/2_choegyeongeun/) — `CHOEGYEONGEUN` | a wooden chest whose doors open on flowers |
+| **Han Yeong-hui** (한영희) | cosmos flowers, the road to Jebudo, the South Sea | [`patterns/3_hanyeonghoe/`](patterns/3_hanyeonghoe/) — `HANYEONGHOE` | a green mountain, clouds and flowers in the wind |
+| **Heo Eun-bin** (허은빈) | clay shapes built and painted on canvas; the character 「우산토끼」 (*Umbrella Rabbit*) | [`patterns/4_heoeunbin/`](patterns/4_heoeunbin/) — `HEOEUNBIN` | a walking lizard (the gallery wall names a lizard among her characters) |
+| **Jeong Eun-gyo** (정은교) | fish scales in hanji and silicone on black braille paper | [`patterns/5_jeongeungyo/`](patterns/5_jeongeungyo/) — `JEONGEUNGYO` | round shapes that drift together into a 3 × 3 grid |
+| **Yu Jin** (유진) | afterimages of the sea in glow-in-the-dark paint | [`patterns/6_yujin/`](patterns/6_yujin/) — `YUJIN` | fish swimming in a sea current |
 
 The descriptions of their work are from the press coverage listed under [Sources](#sources).
 
@@ -24,13 +24,13 @@ The descriptions of their work are from the press coverage listed under [Sources
 - **Dates:** 3–9 October 2026, 10:00–18:00, closed Sundays, free entry
 - **Venue:** Gallery 1, Modu Art Space (모두미술공간 전시실1), Seoul Square annex 5F, Jung-gu, Seoul — next to Seoul Station
 - **Organised by:** **Ablind** (에이블라인드), CEO **Yang Dream** (양드림)
-- **Supported by:** the **Korea Arts Management Service (KAMS)**, 2026 early-stage arts startup programme (예술경영지원센터 「2026 예술분야 초기창업 지원사업」)
+- **Supported by:** the **Korea Arts Management Service (KAMS)**, through its 2026 early-stage arts startup programme (예술경영지원센터 「2026 예술분야 초기창업 지원사업」). The support was for the exhibition.
 
-The organiser allowed the work from the exhibition to be used freely; this repository credits the artists, the organiser and the exhibition wherever the work appears.
+The organiser allowed the creator to use the work from the exhibition freely. On that basis the creator publishes the six patterns under CC BY-SA 4.0 with credit to each artist ([`LICENSE.md`](LICENSE.md)); the artists' original works are not licensed here. This repository credits the artists, the organiser and the exhibition wherever the work appears.
 
 ## Patternflow
 
-**Patternflow** by **Seunghun Lee** — [patternflow.work](https://patternflow.work) · [github.com/engmung/Patternflow](https://github.com/engmung/Patternflow) (`@engmung` in the source files). For this exhibition: the panel and its exhibition firmware, the translation of the six works into patterns, the FlowLocal exhibition build, the Ableton Live set, the Max for Live device *PF Exhibit Scenes*, the staff monitor, and the demo video and photos in [`media/`](media/).
+**Patternflow** by **Seunghun Lee** — [patternflow.work](https://patternflow.work) · [github.com/engmung/Patternflow](https://github.com/engmung/Patternflow) (`@engmung` in the source files). For this exhibition: the panel and its exhibition firmware, the pattern code (the files name `@engmung` as their author) and its C++ versions for the panel, the FlowLocal exhibition build, the Ableton Live set, the Max for Live device *PF Exhibit Scenes*, the staff monitor, and the demo video and photos in [`media/`](media/).
 
 ## Software and sounds this setup builds on
 
