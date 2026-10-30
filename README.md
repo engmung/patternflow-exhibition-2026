@@ -9,7 +9,7 @@
 
 At ***Anbu — Asking After the Unseen*** (안부 — 보이지 않는 안부를 묻다), a group show by six visually impaired artists in Seoul (3–9 October 2026), Patternflow was one interactive corner. Visitors played LED patterns made after the artists' works on a [Patternflow](https://patternflow.work) panel. **One knob picks the pattern, the other three play it, and the sound follows the knobs**: every knob move also goes to Ableton Live as MIDI, so each move is heard as well as seen.
 
-The artists: **Bak Hwan** 박환 · **Choe Gyeong-eun** 최경은 · **Han Yeong-hui** 한영희 · **Heo Eun-bin** 허은빈 · **Jeong Eun-gyo** 정은교 · **Yu Jin** 유진. Organised by **Ablind** (에이블라인드), supported by the **Korea Arts Management Service** (KAMS, 예술경영지원센터). Patternflow and this setup by **Seunghun Lee**. [Credits](#credits).
+The artists: **Bak Hwan** 박환 · **Choe Gyeong-eun** 최경은 · **Han Yeong-hui** 한영희 · **Heo Eun-bin** 허은빈 · **Jeong Eun-gyo** 정은교 · **Yu Jin** 유진. Organised by **Ablind** (에이블라인드), supported by the **Korea Arts Management Service** (KAMS, 예술경영지원센터). Patternflow, the six patterns and this setup by **Seunghun Lee**; the works they follow are the artists' own. [Credits](#credits).
 
 <table>
   <tr>
@@ -17,7 +17,7 @@ The artists: **Bak Hwan** 박환 · **Choe Gyeong-eun** 최경은 · **Han Yeong
     <td width="50%"><img src="media/anbu-demo.jpg" alt="The panel showing the lizard pattern after Heo Eun-bin's work, in orange, with a laptop running Ableton Live behind it and the bare FlowLocal board on the table"></td>
   </tr>
   <tr>
-    <td>At the show: visitors play the patterns. On the wall, works by Heo Eun-bin and Yu Jin.</td>
+    <td>At the show: the Patternflow table, with works by Heo Eun-bin (left) and Yu Jin (right) on the wall behind.</td>
     <td>The whole rig: panel, FlowLocal board (left, bare), laptop with Live.</td>
   </tr>
 </table>
@@ -118,14 +118,14 @@ Every knob, CC and range, picture and sound side by side: [full guide → MIDI m
 
 **The exhibition.** *안부 — 보이지 않는 안부를 묻다* / ***Anbu — Asking After the Unseen*** (*안부* is a greeting that asks how someone is). A group show by six visually impaired artists on nature and relationships: 40 works, 25 of which visitors could touch. 3–9 October 2026, free entry, at Gallery 1, Modu Art Space (모두미술공간 전시실1), Seoul Square annex 5F, Jung-gu, Seoul. Organised by **Ablind** (에이블라인드), CEO **Yang Dream** (양드림), with support from the 2026 early-stage arts startup programme of the **Korea Arts Management Service** (KAMS, 예술경영지원센터).
 
-**Patternflow** by **Seunghun Lee**: the panel and its firmware, the pattern code (the files name `@engmung` as their author), the FlowLocal exhibition build, the Live set and the Max for Live device. FlowLocal grew out of the FlowLocal show appliance ([SimonePDA/flowlocal](https://github.com/SimonePDA/flowlocal)).
+**Patternflow** by **Seunghun Lee**: the panel and its firmware, the pattern code (the files name `@engmung` as their author), the FlowLocal exhibition build, the Live set and the Max for Live device. The FlowLocal board runs an exhibition branch of FlowLocal ([SimonePDA/flowlocal](https://github.com/SimonePDA/flowlocal)).
 
-Names are given family name first. The English spellings are our own romanisation (Revised Romanization of Korean), not confirmed by the artists; the Korean names are the reference, and corrections are welcome. More, with sources: [`CREDITS.md`](CREDITS.md).
+The artists' names are given family name first, in our own romanisation (Revised Romanization of Korean), not confirmed by the artists; the Korean names are the reference, and corrections are welcome. More, with sources: [`CREDITS.md`](CREDITS.md).
 
 ## Licences
 
-- Code (the Max for Live device, the tools, the firmware patch, FlowLocal): **MIT**.
-- Documentation, the Live set, and the photos and video: **CC BY-SA 4.0**. The artists' works visible in the photos are not licensed.
-- The six patterns: **CC BY-SA 4.0, with credit to each artist**. Ablind, the organiser, allowed Seunghun Lee to use the exhibition's work freely, and the patterns are shared on these terms. The licence covers only the pattern code and the pictures it draws; the artists' original works remain theirs and are not licensed here. Ready-made credit lines: [`CREDITS.md`](CREDITS.md#how-to-credit-a-pattern-when-you-reuse-it).
+- Code (the Max for Live device, the tools and `.bat` helpers, the firmware patch, FlowLocal's source): **MIT**.
+- Documentation, the Live set, and the photos and video: **CC BY-SA 4.0**, credit Patternflow / Seunghun Lee. The artists' works visible in the photos are not licensed, and neither are the likenesses of the people shown.
+- The six patterns: **CC BY-SA 4.0, with credit to each artist**. They are shared with the permission of the organiser, Ablind. The licence covers only the pattern code and the pictures it draws; the artists' original works and characters remain theirs and are not licensed here (for those, ask the artists through Ablind). Ready-made credit lines: [`CREDITS.md`](CREDITS.md#how-to-credit-a-pattern-when-you-reuse-it).
 
-Artists or their representatives who want something changed can open an issue in this repository. Details for each folder: [`LICENSE.md`](LICENSE.md).
+Artists, Ablind, or anyone acting for them who wants something changed or taken down can ask through Ablind or open an issue in this repository. Details for each folder: [`LICENSE.md`](LICENSE.md).
