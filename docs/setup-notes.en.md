@@ -402,7 +402,7 @@ export PLATFORMIO_PACKAGES_DIR=C:/Users/user/flx-pio/packages
 export PLATFORMIO_BUILD_DIR=C:/Users/user/flx-pio/build
 python -m platformio pkg install -e exhibit     # first time only
 python -m platformio run -e exhibit
-python tools/check_exhibit_image.py             # must print PASS
+python tools/check_exhibit_image.py             # must print PASS  (public copy: with your own password the 'exhibit AP password' line reads FAIL — see the front page)
 python tools/check_exhibit_bridge.py            # host test, PASS (includes the monitor SysEx)
 ```
 
@@ -447,7 +447,7 @@ ESPTOOL=C:/Users/user/.platformio/penv/Scripts/esptool.exe
    - `[midi] rtp listener "FlowLocal" on 192.168.66.1:5004 (data 5005), ssrc XXXXXXXX` (the SSRC is fixed per board; it stays the same after a reboot)
    - `[midi] program mirror: CC 118 ch 16 after every Program Change` (if this line is missing or says `off`, the build has the Alt CC emergency path turned off)
    - `[midi] knob re-send: CC 24-26 ch 1 after every re-sent Program Change` (if this line is missing, it is an old image that does not append the knob values when it re-sends a PC; from `0c05e79`)
-   - `[midi] pf monitor: status request F0 7D 50 46 01 F7 answered … (v1, fw=flx-mon2, …)` and `[midi] pf monitor: commands 10 reconnect panel, 11 reboot panel …, 12 reboot FlowLocal …` (if these two lines are missing, it is an old image that cannot answer the monitor)
+   - `[midi] pf monitor: status request F0 7D 50 46 01 F7 answered … (v1, fw=flx-mon2, …)` *(Translator's note: the source in `firmware/flowlocal/` reports `flx-mon3`.)* and `[midi] pf monitor: commands 10 reconnect panel, 11 reboot panel …, 12 reboot FlowLocal …` (if these two lines are missing, it is an old image that cannot answer the monitor)
    - When the panel joins, `[midi] rtp session joined by "..."`
 2. **Laptop** — `Patternflow Exhibit` is in the list of MIDI ports (`python tools/midi_monitor.py --list`). If you see an old name, remove the device in Device Manager and plug it in again. If it shows up as "Unknown USB Device (Device Descriptor Request Failed)", unplug it and plug it back into the same port ([§2](#2-hardware-connections)). Patternflow Monitor's **최근 기록** ("Recent log") shows `FlowLocal 상태를 받기 시작했어요 (펌웨어 flx-mon1, …)` ("Started receiving FlowLocal's status (firmware flx-mon1, …)"), and **Details for operators** shows the channel (`ch`, `chm=auto`) and the panel's signal strength (`prs`).
 3. **Status page `http://192.168.66.1/`** (on the operator's phone; or `http://flowlocal.local/`):
@@ -594,7 +594,7 @@ Do this once at installation, and again every time the panel is reflashed or swa
 - [ ] Do the "first time only" steps: `python -m pip install python-rtmidi`; `tools/monitor/install_startup.bat` (it puts a **패턴플로우 모니터** ("Patternflow Monitor") shortcut in Startup and on the desktop. The monitor also opens without it, from the `.bat` at the top of the repo, but the staff card and the monitor screen point at the desktop shortcut, so do it on the exhibition laptop); in `tools/monitor/config.json`, the contacts, where the panel's power is switched on, and the button to press in Live's recovery window (the same values as the blanks in [`STAFF_CARD.en.md`](../STAFF_CARD.en.md)).
 - [ ] When the laptop restarts, the monitor window opens by itself. `패턴플로우 모니터 열기.bat` ("Open Patternflow Monitor") at the top of the repo does the same.
 - [ ] At the top, green **모두 정상이에요** ("All good"), and no red box among the seven boxes of the signal path (panel → Wi-Fi → FlowLocal → USB → laptop → Ableton Live → speakers).
-- [ ] **운영자용 자세히 보기** ("Details for operators"): FlowLocal firmware `flx-mon2` (the restart reason `rsn` and the boot count `bc` are shown), channel (`chm=auto`), panel signal strength `prs` stronger than −75 dBm. No laptop power setting that is wrong for the exhibition (if there is one, run `노트북 전시용 전원 설정.bat` ("Laptop power settings for the exhibition") at the top of the repo once). The **Live auto-restart** switch is on (if Live closes, the exhibition set is reopened 8 s later; up to 3 times in 15 minutes). Live's audio is FlexASIO ([§2 "The laptop and sound"](#2-hardware-connections)).
+- [ ] **운영자용 자세히 보기** ("Details for operators"): FlowLocal firmware `flx-mon2` *(Translator's note: `flx-mon3` for the source in this repo)* (the restart reason `rsn` and the boot count `bc` are shown), channel (`chm=auto`), panel signal strength `prs` stronger than −75 dBm. No laptop power setting that is wrong for the exhibition (if there is one, run `노트북 전시용 전원 설정.bat` ("Laptop power settings for the exhibition") at the top of the repo once). The **Live auto-restart** switch is on (if Live closes, the exhibition set is reopened 8 s later; up to 3 times in 15 minutes). Live's audio is FlexASIO ([§2 "The laptop and sound"](#2-hardware-connections)).
 - [ ] At the rehearsal, press the fix buttons one by one and check that **됐어요** ("Done") appears. Measured on 2026-09-25: **패널 연결 다시 잡기** ("Reconnect the panel") MIDI back in 1.0 s, **패널 다시 켜기** ("Restart the panel") 4.7 s, **FlowLocal 다시 켜기** ("Restart FlowLocal") about 14 s after FlowLocal comes up.
 
 Connect the operator's phone to `PatternflowLocal` and open the panel pages through the links in the **Panel** box of `http://192.168.66.1/` ([§3 "Opening the panel pages from a phone"](#3-network)). When you are done, turn off the phone's Wi-Fi.
@@ -746,6 +746,8 @@ Known and left as is (not faults, but what remains by design):
 - The core's centre name display (`src/core_ui_text.h`) also breaks names longer than 10 characters in the middle of a word in portrait. In the exhibition it shows only when a pattern is picked from the console. Left as a separate issue to fix in the main repository.
 
 ## Flashing log
+
+*(Translator's note: rows are kept in the original's order, which is not strictly by date; the last image on both boards was the 2026-09-30 one (panel `502a3c11…`, FlowLocal `4ecbcca0…`, `flx-mon3`). The `firmware_images/…` files named here are not in the public copy.)*
 
 | Date | Board | What | Result |
 |---|---|---|---|

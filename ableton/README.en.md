@@ -2,6 +2,8 @@
 
 > **English translation.** The Korean original is [`README.md`](README.md). It was written for the crew of the 2026 exhibition *Anbu* in Seoul and describes that installation as it was — the exhibition laptop's paths, COM ports and dates are kept as facts. In this public copy the hotspot password reads `YOUR_HOTSPOT_PASSWORD`; the prebuilt firmware images, `flasher.html`, `backups/` and the project's copies of the audio samples are not included — build from source as the [front page](../README.md) shows. The original's `patternflow/` (the panel firmware clone) is what you get by applying [`firmware/panel-exhibit-2026.patch`](../firmware/panel-exhibit-2026.patch) to Patternflow `4d264d5`, inside this repo; its `flowlocal/` (the FlowLocal firmware clone) is [`firmware/flowlocal/`](../firmware/flowlocal/) here, so `flowlocal/EXHIBIT.md` means `firmware/flowlocal/EXHIBIT.md`. Where the original says "the root `README.md`", it means the Korean notes now in [`README.ko.md`](../README.ko.md), translated in [`docs/setup-notes.en.md`](../docs/setup-notes.en.md).
 
+> **Using the shared set (`set Project/set.als`)?** The steps you need are on the [front page](../README.md#4-open-the-live-set). From this guide, read §2 (why the Settings switches), §5 (testing with a virtual port) and §8 (troubleshooting). §1, the layout in §3, §4 "Making the track", §4.5, §7's example paths and §9 describe how the crew built and tested an earlier version of the set; where they differ from the shared set, the shared set is right — see [Before you play the set](../README.md#before-you-play-the-set).
+
 When you change the pattern on the panel with K4, the scene in Live follows. K1–K3 move Live parameters.
 
 ```
@@ -57,7 +59,7 @@ This works the same way as the earlier Patternflow Bridge. The repo keeps only t
 7. Save (Ctrl-S). It worked if the device's bottom status line changes to `ready - scenes 0-…` and the Max menu **Window → Max Console** shows no `js: can't find file`. If not, check where the js is, delete the device from the track and drag it in again from the browser.
 8. (Recommended) When it checks out, press **Freeze Device** (snowflake icon) in the editor toolbar and save again. The js goes inside the `.amxd`, so the device moves as one file. Then do **File → Collect All and Save** in the exhibition set, and the device is copied into the project folder.
 
-After you change the js, delete the device and drag it in again (if you froze it: Unfreeze → edit → Freeze again). Automatic js reload is turned off on purpose: a reload resets the state, but live.thisdevice does not bang again, so the device would stay stuck. The `set Project/Presets/MIDI Effects/Max MIDI Effect/PF Exhibit Scenes.amxd` that the exhibition set opens is frozen, so it carries its own copy of the js inside (checked on 2026-09-25: identical to `ableton/pf-exhibit-scenes/pf_exhibit_scenes.js` except for line endings). If you change only the js in the repo, Live keeps running the old copy. So after a change, freeze that `.amxd` again and also replace the js copy next to it.
+After you change the js, delete the device and drag it in again (if you froze it: Unfreeze → edit → Freeze again). *(Translator's note: a re-inserted device starts from its defaults: put it back on the control track as its only device, turn Autostart on again, check Enable on, Thru off, Alt CC off, Start PC 1, Offset 0, and save the set.)* Automatic js reload is turned off on purpose: a reload resets the state, but live.thisdevice does not bang again, so the device would stay stuck. The `set Project/Presets/MIDI Effects/Max MIDI Effect/PF Exhibit Scenes.amxd` that the exhibition set opens is frozen, so it carries its own copy of the js inside (checked on 2026-09-25: identical to `ableton/pf-exhibit-scenes/pf_exhibit_scenes.js` except for line endings). If you change only the js in the repo, Live keeps running the old copy. So after a change, freeze that `.amxd` again and also replace the js copy next to it.
 
 ## 2. Live settings — Settings → Link, Tempo & MIDI
 
@@ -120,7 +122,7 @@ K4 cycles 1 → 2 → … → 6 → 1. The default pattern is set by the panel f
 | Start PC | **1** | Autostart fires as if this PC had come from the panel. Scene = Start PC + Offset. 1 = the pattern the panel starts with at boot, so if you power everything up together, sound and light match from the start. |
 | Offset | 0 | Scene = PC + Offset (Start PC included) |
 | Thru | **off** | When on, incoming MIDI goes straight to the device output. On the control track the output goes to FlowLocal, so there is no reason to turn it on (the panel's MIDI would just go back and be thrown away). Use it only when this device sits on a track that is set up differently. |
-| Alt CC | **off** | For emergencies. When on, the value of a CC (number in the box below, default 118) is treated as a Program Change. FlowLocal sends the same number as CC 118 (channel 16) right after every PC, so if Live does not pass PC to the device, **just turn this on**. No firmware change is needed (§9 item 1). **It ignores the channel.** Live merges a track's input onto channel 1 before passing it to the device, so filtering for channel 16 would read none of the mirror. The only CCs the exhibition panel sends are 24–26 (K1–K3), so they never clash with 118 (the midi feature's range is 24–27). |
+| Alt CC | **off** | For emergencies. When on, the value of a CC (number in the box below, default 118) is treated as a Program Change. FlowLocal sends the same number as CC 118 (channel 16) right after every PC, so if Live does not pass PC to the device, **just turn this on**. No firmware change is needed (§9 item 1). **It ignores the channel.** Live merges a track's input onto channel 1 before passing it to the device, so filtering for channel 16 would read none of the mirror. *(Translator's note: that merge is a forum report, not confirmed on hardware (§3 and §9 item 1); matching any channel works either way.)* The only CCs the exhibition panel sends are 24–26 (K1–K3), so they never clash with 118 (the midi feature's range is 24–27). |
 | Alt CC number | 118 | The CC number Alt CC reads (1–118, any channel). Must match `FL_EXHIBIT_PROGRAM_CC` in the FlowLocal build. Do not change it to 24–27 (the panel knobs would be read as programs). |
 | **Resync** (button) | — | Press it to send the resync request (`BF 77 7F`). A live.text in button mode outputs a bang when pressed, and the patch passes it to the js as `resync bang`. FlowLocal re-sends the last PC, CC 118 and the last CC 24–26 values, and the device sets that scene. If that scene is already playing, it does not fire it again (`already on`). |
 
@@ -168,7 +170,7 @@ The panel sends K1/K2/K3 as **CC 24/25/26**, 0–127 absolute. This value is **t
 - **Direction** — flip it in the Live mapping with **Min > Max**. The panel has no per-knob direction setting (left out on purpose: a direction that differed per pattern would make the CC jump on a K4 switch). The direction of the picture is set by the artist inside the pattern.
 
 1. **Ctrl-M** (MIDI Map Mode)
-2. In Live, click a parameter → turn a panel knob a little → next parameter …
+2. In Live, click a parameter → turn a panel knob a little → next parameter … *(Translator's note: turn it over a wide range, and check in the Mapping Browser that each mapping's Mode is **Absolute**: a small turn from the middle (64 → 68 → 72) can make Live guess a relative encoder. Every mapping in the shared set is Absolute.)*
    Do not turn K4 while mapping. The CC 118 (channel 16) that comes right after the PC can get mapped to the parameter you clicked. A CC mapped with Ctrl-M no longer goes to the track, so Alt CC can no longer read it either.
 3. In the mapping list on the left (Mapping Browser), narrow the range the parameter moves through with **Min / Max** (Min > Max reverses the direction).
 4. Leave with **Ctrl-M**
@@ -236,7 +238,7 @@ The set lives inside the repo (`set Project/`), and the only sounds it uses are 
 
 What the receiving computer needs:
 
-- **Live 12 Suite** and the Core Library. Collision and Wavetable are Suite devices, so in Intro/Standard those tracks open empty. Max for Live is also included in Suite (the device is frozen, so there is no need to open Max separately).
+- **Live 12 Suite** and the Core Library. Collision and Wavetable are Suite devices, so in Intro/Standard those tracks open empty. *(Translator's note: for the shared set the Suite-only parts are Max for Live (this device and Granulator III), Meld, Collision and Corpus; in Intro or Standard they, and the scene device, do not load.)* Max for Live is also included in Suite (the device is frozen, so there is no need to open Max separately).
 - git. It is a private repo, so you need to sign in. *(Translator's note: the public copy is `https://github.com/Patternflow-lab/patternflow-exhibition-2026`; no sign-in needed.)*
 
 ```bash
@@ -274,6 +276,8 @@ python tools/send_test.py --port "PF Test" altcc 2                     # CC 118 
 python tools/send_test.py --port "PF Test" pc 4 --mirror               # CC 118 after the PC, like FlowLocal. Even with Alt CC on, it fires once
 python tools/send_test.py --port "PF Test" demo --hold 8               # imitates the panel: boot 1 → K4 to 2…6 → 1, K1–K3 sweep
 ```
+
+*(Translator's note: `dump` is a message box inside the device's patch, not on its face: click the device's **Edit** button (Max opens), switch Presentation off (View → Presentation), lock the patcher (`Ctrl`/`Cmd` + `E`) and click `dump`, then read Window → Max Console. Close the editor without saving. The counters run from when the device loaded, so what matters is `programs` > 0 (Live passes Program Change) or `programs=0` while `bytes` grew (it does not); for the exact numbers below, reopen the set first.)*
 
 5. Mapping practice: Ctrl-M → click a parameter → `python tools/send_test.py --port "PF Test" cc 24 64` → leave Ctrl-M. Then watch it move with `python tools/send_test.py --port "PF Test" sweep --cc 24`. Move the parameter with the mouse and send `cc 24 64` again: with Takeover None the parameter goes straight to that value.
 6. Check that the resync request leaves the device. Make one more loopMIDI port, `PF Resync`. In Live settings, **Out: PF Resync** → Track ON (In: PF Resync all OFF). Change the control track's MIDI To to `PF Resync`, Ch. 16. Start the monitor in a terminal (several programs can open a loopMIDI port at the same time).
@@ -313,7 +317,7 @@ The goal: switch the power on, and sound comes out without anyone touching anyth
 
 **Open the set at boot**
 - [ ] `Win+R` → `shell:startup` → create a shortcut there. Do not rely on the program associated with `.als`; write out the Live executable and the set explicitly. Change the paths to the real install location.
-  `"C:\ProgramData\Ableton\Live 12 Suite\Program\Ableton Live 12 Suite.exe" "D:\Exhibit\PF Exhibit Project\PF Exhibit.als"`
+  `"C:\ProgramData\Ableton\Live 12 Suite\Program\Ableton Live 12 Suite.exe" "D:\Exhibit\PF Exhibit Project\PF Exhibit.als"` *(Translator's note: an example path; for this repo the set is `<repo>\set Project\set.als`.)*
 - [ ] If the audio device is detected late and Live starts on the wrong output, open the set from Task Scheduler with "At log on + 30-second delay" instead of the shortcut
 - [ ] Live settings → Audio: fix the output device. Check that it does not change when you plug in HDMI etc.
 - [ ] If Live's settings have an automatic update option, turn it off. Start Live once while offline and check that no authorization window appears

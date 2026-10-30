@@ -4,18 +4,18 @@ Patternflow was one interactive corner of the exhibition *Anbu*: there, visitors
 
 ## The artists
 
-Names are romanised approximately (Revised Romanization of Korean), always with the Korean beside them. The folder and code names in `patterns/` are older, looser spellings (`bakwan` for 박환, `hanyeonghoe` for 한영희), kept as they are because the firmware reads them.
+The English spellings are our own approximate romanisation (Revised Romanization of Korean), not confirmed by the artists; the Korean names are the reference. The folder and code names in `patterns/` are looser spellings still (`bakwan` for 박환, `hanyeonghoe` for 한영희 — not the artists' names), kept as they are only because the firmware reads them.
 
 | Artist | Their work in the show (from the press) | Pattern in this repo | What the pattern shows |
 |---|---|---|---|
 | **Bak Hwan** (박환) | mountains and waterfalls in earth, thread, denim scraps and bark | [`patterns/1_bakwan/`](patterns/1_bakwan/) — `BAKWAN` | a tree with golden leaves in the wind |
 | **Choe Gyeong-eun** (최경은) | ceramics that start from the six dots of braille | [`patterns/2_choegyeongeun/`](patterns/2_choegyeongeun/) — `CHOEGYEONGEUN` | a wooden chest whose doors open on flowers |
 | **Han Yeong-hui** (한영희) | cosmos flowers, the road to Jebudo, the South Sea | [`patterns/3_hanyeonghoe/`](patterns/3_hanyeonghoe/) — `HANYEONGHOE` | a green mountain, clouds and flowers in the wind |
-| **Heo Eun-bin** (허은빈) | clay shapes built and painted on canvas; the character 「우산토끼」 (*Umbrella Rabbit*) | [`patterns/4_heoeunbin/`](patterns/4_heoeunbin/) — `HEOEUNBIN` | a walking lizard (the gallery wall names a lizard among her characters) |
+| **Heo Eun-bin** (허은빈) | clay shapes built and painted on canvas; the character 「우산토끼」 (*Umbrella Rabbit*) | [`patterns/4_heoeunbin/`](patterns/4_heoeunbin/) — `HEOEUNBIN` | a walking lizard (the wall text beside her works, seen in [`media/anbu-visitors.jpg`](media/anbu-visitors.jpg), names a lizard among her characters) |
 | **Jeong Eun-gyo** (정은교) | fish scales in hanji and silicone on black braille paper | [`patterns/5_jeongeungyo/`](patterns/5_jeongeungyo/) — `JEONGEUNGYO` | round shapes that drift together into a 3 × 3 grid |
 | **Yu Jin** (유진) | afterimages of the sea in glow-in-the-dark paint | [`patterns/6_yujin/`](patterns/6_yujin/) — `YUJIN` | fish swimming in a sea current |
 
-The descriptions of their work are from the press coverage listed under [Sources](#sources).
+The descriptions of their work are from the press coverage listed under [Sources](#sources); they describe each artist's work in the show, and this repository does not name the specific piece each pattern follows. The pattern subjects match the names of the Live tracks: Ginkgo tree (은행나무), Wooden chest (괘짝), Mountain (산), Lizard (도마뱀), Geometry (기하학), Fish (물고기).
 
 ## The exhibition
 
@@ -24,9 +24,9 @@ The descriptions of their work are from the press coverage listed under [Sources
 - **Dates:** 3–9 October 2026, 10:00–18:00, closed Sundays, free entry
 - **Venue:** Gallery 1, Modu Art Space (모두미술공간 전시실1), Seoul Square annex 5F, Jung-gu, Seoul — next to Seoul Station
 - **Organised by:** **Ablind** (에이블라인드), CEO **Yang Dream** (양드림)
-- **Supported by:** the **Korea Arts Management Service (KAMS)**, through its 2026 early-stage arts startup programme (예술경영지원센터 「2026 예술분야 초기창업 지원사업」). The support was for the exhibition.
+- **Supported by:** the **Korea Arts Management Service (KAMS)** 2026 early-stage arts startup programme (예술경영지원센터 「2026 예술분야 초기창업 지원사업」)
 
-The organiser allowed the creator to use the work from the exhibition freely. On that basis the creator publishes the six patterns under CC BY-SA 4.0 with credit to each artist ([`LICENSE.md`](LICENSE.md)); the artists' original works are not licensed here. This repository credits the artists, the organiser and the exhibition wherever the work appears.
+The organiser allowed the creator, Seunghun Lee, to use the work from the exhibition freely. On that basis he publishes the six patterns under CC BY-SA 4.0 with credit to each artist ([`LICENSE.md`](LICENSE.md)); the artists' original works are not licensed here. The pattern files themselves name only the code's author, and [`patterns/preview.html`](patterns/preview.html) shows no artist names — so when you reuse a pattern, add the artist credit yourself (lines below). Artists or their representatives who want something changed can open an issue in this repository.
 
 ## Patternflow
 
@@ -40,9 +40,14 @@ The organiser allowed the creator to use the work from the exhibition freely. On
 
 ## How to credit a pattern when you reuse it
 
-The six patterns are shared under **CC BY-SA 4.0 with credit to each artist** ([`LICENSE.md`](LICENSE.md)). A credit line could read:
+The six patterns are shared under **CC BY-SA 4.0 with credit to each artist** ([`LICENSE.md`](LICENSE.md)). CC BY-SA allows copying, adapting and commercial use of the patterns, as long as you give credit and share your version under the same licence. It does not cover the artists' original works or photographs of them. Ready-made lines (the titles are the working names of the Live tracks):
 
-> *[Pattern]* — after the work of **Heo Eun-bin (허은빈)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
+- *Ginkgo tree* — pattern after the work of **Bak Hwan (박환)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
+- *Wooden chest* — pattern after the work of **Choe Gyeong-eun (최경은)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
+- *Mountain* — pattern after the work of **Han Yeong-hui (한영희)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
+- *Lizard* — pattern after the work of **Heo Eun-bin (허은빈)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
+- *Geometry* — pattern after the work of **Jeong Eun-gyo (정은교)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
+- *Fish* — pattern after the work of **Yu Jin (유진)**, shown in *Anbu — Asking After the Unseen* (Seoul, 2026, organised by Ablind). Pattern code: Patternflow / Seunghun Lee. CC BY-SA 4.0.
 
 ## Sources
 

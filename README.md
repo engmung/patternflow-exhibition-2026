@@ -1,4 +1,4 @@
-# Patternflow × Ableton Live — the *Anbu* exhibition setup (Seoul, 2026)
+# Patternflow × Ableton Live at *Anbu* — six artists' works played as light and sound (Seoul, 2026)
 
 <p align="center">
   <img src="media/demo.gif" width="300" alt="A hand turns the knobs of a Patternflow LED panel; the pattern on the LEDs changes as the knobs move">
@@ -19,9 +19,9 @@
   </tr>
 </table>
 
-At ***Anbu — Asking After the Unseen*** (안부 — 보이지 않는 안부를 묻다), a group show of six visually impaired artists in Seoul (3–9 October 2026), one interactive corner let visitors *play* the artists' paintings, illustrations and sculptures as moving LED patterns on a [Patternflow](https://patternflow.work) panel. **One knob picks the work, the other three play it, and the sound follows the knobs**: every knob move also goes out as MIDI to Ableton Live, so the picture and the sound always come from the same knob position, and each work can be followed by ear as well as by eye.
+At ***Anbu — Asking After the Unseen*** (안부 — 보이지 않는 안부를 묻다), a group show of six visually impaired artists in Seoul (3–9 October 2026), one interactive corner let visitors *play* LED patterns made after the artists' works, on a [Patternflow](https://patternflow.work) panel. **One knob picks the work, the other three play it, and the sound follows the knobs**: every knob move also goes out as MIDI to Ableton Live, so the picture and the sound always come from the same knob position, and visitors hear as well as see what each knob does.
 
-The artists: **Bak Hwan** 박환 · **Choe Gyeong-eun** 최경은 · **Han Yeong-hui** 한영희 · **Heo Eun-bin** 허은빈 · **Jeong Eun-gyo** 정은교 · **Yu Jin** 유진. The exhibition was organised by **Ablind** (에이블라인드) and supported by the **Korea Arts Management Service** (KAMS, 예술경영지원센터). The patterns are drawn from the artists' works; the works themselves are the artists' and are not in this repository. [Full credits](#credits).
+The artists: **Bak Hwan** 박환 · **Choe Gyeong-eun** 최경은 · **Han Yeong-hui** 한영희 · **Heo Eun-bin** 허은빈 · **Jeong Eun-gyo** 정은교 · **Yu Jin** 유진. The exhibition was organised by **Ablind** (에이블라인드) and supported by the **Korea Arts Management Service** (KAMS, 예술경영지원센터). The patterns were made in Patternflow's Pattern Lab after the artists' works (the pattern code names `@engmung`, Seunghun Lee, as its author); the works themselves are the artists' and are not in this repository. [Full credits](#credits).
 
 This repository is everything that ran there — the six patterns, the panel firmware, the firmware of a second board (FlowLocal), the Ableton Live set with its Max for Live device, and the staff monitor — written up so you can understand it in a minute and rebuild it in an afternoon.
 
@@ -56,10 +56,10 @@ flowchart TB
     W -. "status request SysEx<br/>every 2 s" .-> F
 ```
 
-1. **The panel** runs the six artists' patterns, compiled into its firmware. **K4** steps through them (three detents per step); **K1–K3** change what the current pattern does. The panel remembers *one position per knob* and uses it twice: to draw (every pattern reads it) and to play (it is sent as a MIDI CC). So the picture and the sound can never drift apart.
+1. **The panel** runs the six patterns, compiled into its firmware. **K4** steps through them (three detents per step); **K1–K3** change what the current pattern does. The panel remembers *one position per knob* and uses it twice: to draw (every pattern reads it) and to play (it is sent as a MIDI CC). So the picture and the sound can never drift apart.
 2. **FlowLocal**, a second ESP32-S3 board, opens the Wi-Fi hotspot the panel joins and receives the panel's network MIDI (RTP-MIDI). It passes every message on, unchanged, to the laptop over USB, where it shows up as an ordinary class-compliant MIDI device called **Patternflow Exhibit**. The laptop needs no Wi-Fi and no network-MIDI driver.
 3. **Ableton Live** gets a *Program Change* each time the pattern changes; a small Max for Live device fires the matching scene, so each work has its own sound. The knob positions arrive as *CC 24/25/26* and move filters, grain position, reverb, volume and so on through ordinary MIDI mappings (Ctrl-M / Cmd-M).
-4. Only two things ever travel back from the laptop: Live's *resync request* ("send me the current pattern again"), and the staff monitor's status questions. Nothing reaches the panel.
+4. Only two things ever travel back from the laptop: Live's *resync request* ("send me the current pattern again"), and the staff monitor's status questions. No MIDI ever reaches the panel (the monitor's *Restart the panel* button is passed on by FlowLocal as a web request).
 
 <details>
 <summary>The same signal path as the ASCII diagram in the Korean notes</summary>
@@ -145,7 +145,7 @@ Choose one Wi-Fi password (8–63 characters, **not** `patternflow` — the Flow
 
 ### 1. FlowLocal: build and flash
 
-FlowLocal's own docs: [`EXHIBIT.md`](firmware/flowlocal/EXHIBIT.md) (this build), [`README.md`](firmware/flowlocal/README.md) and [`BUILD.md`](firmware/flowlocal/BUILD.md) (the general appliance and its case).
+FlowLocal's own docs: [`EXHIBIT.md`](firmware/flowlocal/EXHIBIT.md) (this build), [`README.md`](firmware/flowlocal/README.md) and [`BUILD.md`](firmware/flowlocal/BUILD.md) (the general appliance and its case). `EXHIBIT.md` was written before the show: its "Not verified on hardware" list predates the 3–9 October run (what was confirmed is in [setup notes §8](docs/setup-notes.en.md#8-not-yet-confirmed-on-hardware)), and its "must print PASS" needs the note below.
 
 ```bash
 cd firmware/flowlocal
@@ -162,7 +162,7 @@ python tools/check_exhibit_image.py              # checks the image (see the not
 - `check_exhibit_image.py` looks for the placeholder password `YOUR_PF_WIFI_PASS` that replaced the real one in this public copy, so with your own password its *exhibit AP password* line reports `FAIL`. That line is expected; every other line must pass (or change `EXHIBIT_PASS` in your copy of the script to your password).
 - Optional host test, no board needed: `python tools/check_exhibit_bridge.py` (needs a C++ compiler; `pip install ziglang` provides one — see EXHIBIT.md "Host test").
 
-**Flash** — plug the **COM** jack (right) into your computer, find its port (`COMx` / `/dev/ttyUSB0`), and erase on the first flash:
+**Flash** — plug the **COM** jack into your computer, find its port (`COMx` on Windows; `/dev/ttyACM*` or `/dev/ttyUSB*` on Linux, where you may need to be in the `dialout` group; `/dev/cu.wchusbserial*` or `/dev/cu.usbmodem*` on macOS — `python -m esptool --port <port> chip-id` tells boards apart by MAC), and erase on the first flash:
 
 ```bash
 python -m platformio run -e exhibit -t erase_upload --upload-port COMx
@@ -212,7 +212,7 @@ Later updates can keep the settings: `write-flash 0xe000 "$BOOT_APP0" 0x10000 "$
 ### 3. Wire it up
 
 - Panel: 5 V into **J4** only. Nothing in the DevKit's USB port during the show.
-- FlowLocal: its **USB** jack (left) into the laptop. Pick one laptop USB port and mark it with tape: a different port can make Windows see a "new" device (`2- Patternflow Exhibit`), and Live then needs its MIDI settings switched on again.
+- FlowLocal: its **USB** jack into the laptop. Pick one laptop USB port and mark it with tape: a different port can make Windows see a "new" device (`2- Patternflow Exhibit`). If that happens, first try to get the original name back (Device Manager → uninstall the stale entry, replug into the marked port). If you keep the new name, switch it on in Live's Settings **and** re-pick `1-MIDI`'s MIDI From (All Channels) and MIDI To (Ch. 16) — the set stores its routing against the port — then save.
 - The laptop does **not** join the hotspot. The hotspot takes three devices at most — panel, an operator phone, one spare — so switch off phones you are not using.
 
 ### 4. Open the Live set
@@ -221,15 +221,18 @@ Later updates can keep the settings: `write-flash 0xe000 "$BOOT_APP0" 0x10000 "$
 <summary><b>New to Live? The two minutes you need first</b></summary>
 
 - **Settings**: Options → Settings (Windows) or Live → Settings (macOS), `Ctrl`/`Cmd` + `,`.
-- **Session View** (the `Tab` key switches to it) is a grid: each **column is a track**, each **row is a scene**. A *scene* launches every clip in its row at once; its ▶ buttons are in the Main track's column on the right.
+- **Session View** (the `Tab` key switches to it) is a grid: each **column is a track**, each **row is a scene**. A *scene* launches every clip in its row at once; its ▶ buttons are in the Main track's column on the right, with the ■ *Stop All Clips* button below them. The **transport** is Live's Play/Stop at the top (Space bar); launching a scene starts it.
+- In **Settings → Link, Tempo & MIDI**, each MIDI port has three switches. *Track* lets tracks receive (In) or send (Out) MIDI on that port; *Remote* lets MIDI mappings listen to it (In) or send feedback (Out); *Sync* is MIDI clock — keep it off.
+- **Arm** is the record button at the bottom of a track. With *Exclusive Arm* on (Settings → Record, Warp & Launch), selecting a MIDI track arms it.
 - Each track's **In/Out** section (View → In/Out) sets **MIDI From** (where the track's MIDI comes from, and which channel), **MIDI To** (where it sends MIDI) and **Monitor**. *Monitor In* means the track always plays its live input; *Auto* only when the track is armed.
 - Click a track's name to see its devices in the **Device View** at the bottom. The **PF Exhibit Scenes** device is on the track `1-MIDI`, with two status lines and the Autostart and Resync buttons.
 - A **Program Change** is a MIDI message that carries just a number — here, the pattern number. A **CC** (Control Change) carries a controller number and a value 0–127 — here, a knob position.
 - A **Max for Live device** is a small program running inside Live Suite. The one in this set is already built and *frozen* (its code is inside the `.amxd` file): **you do not need to open Max**.
-- **MIDI Map Mode** (`Ctrl`/`Cmd` + `M`) ties a knob's CC to a parameter; mapped parameters turn blue. **Takeover Mode** (in Settings) decides what happens when a knob's value and the parameter's value differ.
+- **MIDI Map Mode** (`Ctrl`/`Cmd` + `M`) ties a knob's CC to a parameter. In it every mappable control is highlighted; the **Mapping Browser** on the left lists what is actually mapped, with channel, CC, Min/Max and Mode. **Takeover Mode** (in Settings) decides what happens when a knob's value and the parameter's value differ.
+- Live's Control Bar has two small **MIDI indicators** at the top right; the *In* one flashes whenever MIDI arrives. If it stays dark when you turn a knob, the problem is before Live (FlowLocal, USB, the In port's *Track* switch), not in the set.
 </details>
 
-1. Install the packs **Mood Reel**, **Drone Lab** and **Granulator III** (Live's browser → Packs), then open `set Project/set.als`. If Live reports missing files, see [Samples](#samples).
+1. Make sure Live is authorised with your Ableton account (packs download through it). In the browser on the left (`Ctrl`/`Cmd` + `Alt` + `B`), open **Packs**: packs your licence includes but that are not installed show a download button. Install **Mood Reel**, **Drone Lab** and **Granulator III** (if Granulator III is not listed, download it from your account on ableton.com and double-click the `.alp`). Then open `set Project/set.als`. A missing pack shows up as a missing device or sample on tracks 1–3, which then stay silent — see [Samples](#samples).
 2. **Settings → Link, Tempo & MIDI**:
 
    | Port | Track | Sync | Remote |
@@ -239,9 +242,11 @@ Later updates can keep the settings: `write-flash 0xe000 "$BOOT_APP0" 0x10000 "$
 
    **Takeover Mode: None.** The panel's CC is always the knob's absolute position, so with *None* the same knob position always gives the same sound. (Pick-Up would ignore the knob until it crosses the parameter; Value Scaling would leave Live and the panel out of step until a knob reaches its end.) These settings belong to the computer, not the set, and each Live update starts a new settings folder — check them again after updating Live.
 3. **Audio**: Settings → Audio, choose your output device and sample rate. **Test the sound before the panel is involved**: click the ▶ of the *second* scene from the top (Live labels it 2; it is pattern 1, BAKWAN). You should hear a slow granular drone. Stop it with the ■ *Stop All Clips* button. Silence? Check the output device (Settings → Audio has a *Test Tone*) and the packs. The top scene (0) and the bottom one (7) are empty on purpose, and scene 4 only sounds while the lizard walks on the panel. On the Windows show laptop Live ran through **FlexASIO** (Driver Type ASIO, 48 kHz, 480-sample buffer) — the laptop's Realtek ASIO driver crashed Live twice, and MME/DirectX had 96 ms of latency.
-4. Click the **control track** `1-MIDI` and set its In/Out: MIDI From **Patternflow Exhibit / All Channels** (the shared set has *Ch. 1*; change it), MIDI To **Patternflow Exhibit / Ch. 16**, Monitor **In**. On it sits only the **PF Exhibit Scenes** device. Its lower status line reads `ready - scenes 0-7`; it changes to `fired hh:mm:ss` once a scene is fired — by FlowLocal's answer if the panel is already connected, by K4, or by Autostart.
-5. On the device, click **Autostart** so it lights (the shared set has it off), then save the set (`Ctrl`/`Cmd` + `S`). With Autostart on, the set plays pattern 1's scene and starts the transport 1.5 s after it opens — what an unattended laptop needs. The other saved differences are in [Before you play the set](#before-you-play-the-set).
-6. Turn K4 on the panel: the scene changes. Turn K1–K3: the sound changes with the picture.
+4. Click the **control track** `1-MIDI` (the leftmost one) and set its In/Out: MIDI From **Patternflow Exhibit / All Channels** (the shared set has *Ch. 1*; change it), MIDI To **Patternflow Exhibit / Ch. 16**, Monitor **In**. On it sits only the **PF Exhibit Scenes** device. Its lower status line reads `ready - scenes 0-7`; it changes to `fired hh:mm:ss` once a scene is fired — by FlowLocal's answer if the panel is already connected, by K4, or by Autostart.
+5. Click each of the five scene tracks `1.은행나무`, `2.괘짝`, `3.산`, `5.기하학` and `6.물고기` and set its **MIDI From to No Input**. Do **not** change `1-MIDI` (step 4) or `4.도마뱀` — it plays the footstep notes on Ch. 10. (Why: [Before you play the set](#before-you-play-the-set).)
+6. On the device, click **Autostart** so it lights (the shared set has it off), then save the set (`Ctrl`/`Cmd` + `S`). With Autostart on, the set plays pattern 1's scene and starts the transport 1.5 s after it opens — what an unattended laptop needs.
+7. Turn K4 on the panel: Live's MIDI *In* indicator flashes, the device's upper line changes to `PC n ch1 -> n: …` and the clip in that row starts (green ▶). Turn K1–K3: the sound changes with the picture.
+8. **For an unattended laptop, make Live open the set at login.** Autostart only acts once the set is open. Windows: `Win` + `R` → `shell:startup` → new shortcut to `"C:\ProgramData\Ableton\Live 12 Suite\Program\Ableton Live 12 Suite.exe" "<this repo>\set Project\set.als"` (or a Task Scheduler *At log on* task with a 30 s delay — [`ableton/README.en.md`](ableton/README.en.md) §7 has the full kiosk checklist). Then reboot once: Live opens the set by itself and the device reads `fired hh:mm:ss`.
 
 The full Live and Max guide — including how to rebuild the `.amxd` from the `.maxpat` if you change the device — is [`ableton/README.en.md`](ableton/README.en.md).
 
@@ -270,18 +275,18 @@ Also in the set: return **A-Reverb** (Reverb) and return **B-Delay** (Delay, pre
 
 ### Samples
 
-All three samples, and Granulator III itself, are from Ableton packs: *Scratching Velvet Texture* and *Birds and Insects in Forest 02* from **Mood Reel**, *Solfeggio Gong 3* from **Drone Lab**. The copies the show laptop kept inside the project (`set Project/Samples/Imported/`) are not in this repo. With the packs installed Live should find the originals; if it reports them missing, use the File Manager's search, or drop any sound of your own into Granulator III (tracks 1–2) or Simpler (track 3) — the mappings stay.
+All three samples, and Granulator III itself, are from Ableton packs: *Scratching Velvet Texture* and *Birds and Insects in Forest 02* from **Mood Reel**, *Solfeggio Gong 3* from **Drone Lab**. The copies the show laptop kept inside the project (`set Project/Samples/Imported/`) are not in this repo. With the packs installed Live should find the originals. If Live reports missing media (a message at the bottom of the window), click it to open the File Manager, search your Factory Packs folder (Windows `Documents\Ableton\Factory Packs`, macOS `~/Music/Ableton/Factory Packs`), then save the set. Or drag any sound of your own from Live's browser onto Granulator III (tracks 1–2) or Simpler (track 3) — the mappings stay.
 
 ### Before you play the set
 
-These are saved in `set.als` as shared, and differ from what the Korean guide recommends. The file is published as it ran, untouched; change them in Live and save. Step 4 above already covers the first two.
+These are saved in `set.als` as shared, and differ from what the Korean guide recommends. The file is published as it ran, untouched; change them in Live and save. Steps 4–6 above already cover the first three.
 
 | In the set as shared | The guide's setting | Why it matters |
 |---|---|---|
 | PF Exhibit Scenes **Autostart off** | **On** for the show | With Autostart on, the set fires the Start PC scene (1) and starts the transport 1.5 s after it opens — needed for an unattended laptop. |
 | Control track MIDI From **Patternflow Exhibit / Ch. 1** | **All Channels** | Program Changes (channel 1) get through either way. Only the device's *Alt CC* fallback reads FlowLocal's channel-16 mirror, and Ch. 1 filters it out. |
-| Tracks 1, 2, 3, 5, 6: MIDI From **All Ins / Ch. 1**, Monitor Auto | **No Input** | Not harmless: selecting one of these tracks can arm it (Live arms the selected MIDI track when *Arm Exclusive* is on), and the knob-press notes 60–62 then play its instrument. Set them to *No Input*. **Leave track `4.도마뱀` as it is** — All Ins / **Ch. 10**, Monitor **In**: it is the footstep track. (The Korean guide describes the footsteps on a separate track; the shared set plays them on scene track 4 itself.) |
-| Scenes have **no names** | named after the patterns | The table above is the order. Name them if you like. |
+| `1.은행나무`, `2.괘짝`, `3.산`, `5.기하학`, `6.물고기`: MIDI From **All Ins / Ch. 1**, Monitor Auto | **No Input** (step 5) | Not harmless: selecting one of these tracks can arm it (Live arms the selected MIDI track when *Arm Exclusive* is on), and the knob-press notes 60–62 then play its instrument. Set them to *No Input*. **Leave track `4.도마뱀` as it is** — All Ins / **Ch. 10**, Monitor **In**: it is the footstep track. (The Korean guide describes the footsteps on a separate track; the shared set plays them on scene track 4 itself.) |
+| Scenes have **no names** | named after the patterns | Until you name them, the device's upper line reads `PC n ch1 -> n: (unnamed)` — that is normal. The table above is the order (rows 1–6: BAKWAN … YUJIN). |
 
 The status line says `scenes 0-7` (the set has 8 scenes); the Korean guide shows `0-6` from a 7-scene version.
 
@@ -331,7 +336,7 @@ Every pattern opens with all three knobs in the middle (position 0.5, CC 64), so
 
 **K1 and return A work together.** Return A's Dry/Wet is also on K1, reversed. On track 4 that agrees with its reversed send: less reverb as K1 rises. On track 3 it works against the send: at K1 = 127 a 0 dB send reaches a fully dry return, so track 3 gets louder and drier, and its reverb peaks around the middle. To make K1 on track 3 only add reverb, remove return A's mapping and leave its Dry/Wet at 100 %.
 
-**To see or change the mappings**: press `Ctrl`/`Cmd` + `M` for MIDI Map Mode. Mapped parameters turn blue, and the Mapping Browser on the left lists them (channel 1, CC 24/25/26). To add one, click a parameter, turn the panel knob, then set Min and Max in the Mapping Browser (Min > Max reverses it). Press `Ctrl`/`Cmd` + `M` again to leave. Do not turn K4 while mapping. Keep both ends listenable — until the 3-minute idle return, the next visitor inherits whatever the last one left (a closed filter, say). Do not let scene tempo or clip automation move a mapped parameter: the same knob position would then sound different.
+**To see or change the mappings**: press `Ctrl`/`Cmd` + `M` for MIDI Map Mode. Mapped parameters turn blue, and the Mapping Browser on the left lists them (channel 1, CC 24/25/26). To add one, click a parameter, turn the panel knob over a wide range, then set Min and Max in the Mapping Browser (Min > Max reverses it) and check its **Mode is Absolute** — a small turn from the middle (64 → 68 → 72) can look like a relative encoder to Live; every mapping in the shared set is Absolute. Press `Ctrl`/`Cmd` + `M` again to leave. Do not turn K4 while mapping. Keep both ends listenable — until the 3-minute idle return, the next visitor inherits whatever the last one left (a closed filter, say). Do not let scene tempo or clip automation move a mapped parameter: the same knob position would then sound different.
 
 ---
 
@@ -343,7 +348,7 @@ Every pattern opens with all three knobs in the middle (position 0.5, CC 64), so
 - **After a restart** — the device asks FlowLocal for the current pattern 0.5 s after the set loads (the resync request); FlowLocal re-sends the Program Change and the last knob CCs, so Live picks up where the panel is. If the panel has sent nothing since FlowLocal started, nothing comes back and *Autostart* plays the Start PC scene instead. The device's **Resync** button sends the same request by hand.
 - **Device settings**: Enable on · Autostart (see above) · Start PC 1 · Offset 0 · Thru **off** · Alt CC **off** · Alt CC number 118. Turn *Alt CC* on only if Live does not hand Program Changes to Max for Live devices — it did in the pre-show test (Live 12 Suite, 2026-09-19). The device code is commented in full: [`pf_exhibit_scenes.js`](ableton/pf-exhibit-scenes/pf_exhibit_scenes.js).
 
-**Try the Live side without hardware.** Make a virtual MIDI port called `PF Test` (Windows: loopMIDI; macOS: Audio MIDI Setup → MIDI Studio → IAC Driver → *Device is online*, and use that port's name). In Live's settings: **In: PF Test** Track and Remote **on**, **Out: PF Test** everything **off** (a loop port echoes its output back in). On `1-MIDI`, set MIDI From to `PF Test` / All Channels and MIDI To to **No Output**. Then:
+**Try the Live side without hardware.** Make a virtual MIDI port called `PF Test` (Windows: loopMIDI; macOS: Audio MIDI Setup → MIDI Studio → IAC Driver → tick *Device is online* and rename *Bus 1* to `PF Test`, so the commands below work as written). In Live's settings: **In: PF Test** Track and Remote **on**, **Out: PF Test** everything **off** (a loop port echoes its output back in). On `1-MIDI`, set MIDI From to `PF Test` / All Channels and MIDI To to **No Output**. Then:
 
 ```bash
 python tools/send_test.py --port "PF Test" pc 1            # fires scene 1
@@ -393,7 +398,9 @@ Do this once after setting up, and again after reflashing a board.
 - [ ] Twelve seconds after FlowLocal powers up, the hotspot `PatternflowLocal` is there; the panel joins it and FlowLocal's page (`http://192.168.66.1/`, from a phone) reads **Everything connected**.
 - [ ] Panel `http://<panel>/api/status`: `"variant":"exhibit"`, and in `"midi"`: `"outLaneAbs":true`, `"locked":true`, `"rtpPeers":1`.
 - [ ] Panel `/knobs` page: all four knobs **Direction = Normal**, **Edges per click = 4**; one clockwise detent raises the knob's Position by 1.
-- [ ] Live: the device shows `ready - scenes 0-7`, then `fired hh:mm:ss`; **Autostart** on and the set saved (see [Before you play the set](#before-you-play-the-set)).
+- [ ] Live settings (per computer, and again after every Live update): In *Patternflow Exhibit* Track + Remote on; Out Track on, Remote and Sync off; Takeover Mode **None**.
+- [ ] Live set: `1-MIDI` on Patternflow Exhibit / All Channels → Ch. 16, Monitor In; the five scene tracks on **No Input**; `4.도마뱀` on Ch. 10, Monitor In; **Autostart** on; saved. The device shows `ready - scenes 0-7`, then `fired hh:mm:ss`.
+- [ ] Reboot the laptop: Live opens the set by itself and the sound starts (step 8).
 - [ ] K4, three detents: the pattern changes **and** the Live scene changes.
 - [ ] K1–K3: the picture and the sound change together; at a knob's end both stop together. In MIDI Map Mode (`Ctrl`/`Cmd` + `M`) the mapped parameters show channel 1, CC 24/25/26.
 - [ ] Pattern 4 (HEOEUNBIN): footstep sounds follow the lizard's steps; K3 changes their rate.
@@ -401,7 +408,8 @@ Do this once after setting up, and again after reflashing a board.
 - [ ] Leave everything for three minutes: back to pattern 1, knobs to the middle.
 - [ ] Brightness: set it with the room lights as they will be (panel's web console → Brightness).
 - [ ] The laptop is **not** on the hotspot (remove `PatternflowLocal` from its saved networks); operator phones' Wi-Fi off after checks.
-- [ ] Captions (artist names on switching) are off by default; `http://<panel>/api/exhibit?caption=1` turns them on, `?caption=0` off.
+- [ ] Captions are off by default and should stay off: they would show the code names (`BAKWAN`, `HANYEONGHOE` …), not the artists' names. To use them, first put the names you want in `PF_EXHIBIT_LIST` ([setup notes §5](docs/setup-notes.en.md#5-replacing-an-artists-pattern), step 4) and rebuild; `http://<panel>/api/exhibit?caption=1` turns them on, `?caption=0` off.
+- [ ] Next to the panel, a label names the six artists in K4 order (1 Bak Hwan … 6 Yu Jin), so visitors know whose work they are playing.
 
 Daily opening order: laptop (Live opens) → panel power. Closing: panel off → Live → laptop (FlowLocal turns off with the laptop's USB power).
 
@@ -424,7 +432,7 @@ The [full troubleshooting table](docs/setup-notes.en.md#when-something-goes-wron
 | K1–K3 do not change the sound | no mapping, In port **Remote** off, or Takeover **Pick-Up** | map with Ctrl-M, Remote on, Takeover **None** |
 | Picture and sound disagree (one stops at the end, the other does not) | not the exhibition image, or a knob slider on the panel's web console was used | check `/api/status` → `midi.outLaneAbs`; one detent on that knob brings them back together |
 | Footstep notes silent | track `4.도마뱀` no longer on Monitor **In**, or its MIDI From not on Ch. 10 | Monitor **In**, MIDI From *All Ins* (or *Patternflow Exhibit*) / **Ch. 10** |
-| Device stuck at `waiting for Live` | Max for Live did not start (Live is not Suite, or not authorised), or a rebuilt device cannot find its `.js` | the shared `.amxd` is already frozen: check that Live is Suite, then delete the device and drag `PF Exhibit Scenes.amxd` back in from `set Project/Presets/MIDI Effects/Max MIDI Effect/`. If you rebuilt the device, use **Freeze Device** in the Max editor (the snowflake) — not Live's *Freeze Track* ([`ableton/README.en.md`](ableton/README.en.md) §1) |
+| Device stuck at `waiting for Live` | Max for Live did not start (Live is not Suite, or not authorised), or a rebuilt device cannot find its `.js` | the shared `.amxd` is already frozen: check that Live is Suite, then delete the device and drag it back onto `1-MIDI` from Live's browser (**Current Project** → Presets → MIDI Effects → Max MIDI Effect → `PF Exhibit Scenes`). A re-inserted device starts from its defaults: turn **Autostart** on again, check Enable on, Thru off, Alt CC off, Start PC 1, Offset 0, and save the set. If you rebuilt the device, use **Freeze Device** in the Max editor (the snowflake) — not Live's *Freeze Track* ([`ableton/README.en.md`](ableton/README.en.md) §1) |
 | After restarting FlowLocal, ~15 s without MIDI | it keeps the hotspot off for 12 s on purpose | wait; the panel rejoins within a few seconds after that |
 | A phone cannot join the hotspot | three devices already on it | switch off other phones' Wi-Fi; make sure the laptop is not on it |
 | Live crashes inside `rthdasio64.dll` (Windows) | the Realtek ASIO driver | use FlexASIO |
@@ -458,26 +466,26 @@ The [full troubleshooting table](docs/setup-notes.en.md#when-something-goes-wron
 
 ## Credits
 
-**The artists.** Each pattern is drawn from one artist's work. The works themselves — paintings, ceramics, sculptures — are the artists' and are not in this repository.
+**The artists.** Each pattern was made after one artist's work. The works themselves are the artists' and are not in this repository. The press descriptions are of each artist's work in the show; this repository does not name the specific piece each pattern follows.
 
 | Artist | Their work in the show (from the press) | The pattern | What the pattern shows |
 |---|---|---|---|
 | **Bak Hwan** 박환 | mountains and waterfalls in earth, thread, denim scraps and bark | 1 · `BAKWAN` | a tree with golden leaves in the wind |
 | **Choe Gyeong-eun** 최경은 | ceramics that start from the six dots of braille | 2 · `CHOEGYEONGEUN` | a wooden chest whose doors open on flowers |
 | **Han Yeong-hui** 한영희 | cosmos flowers, the road to Jebudo, the South Sea | 3 · `HANYEONGHOE` | a green mountain, clouds and flowers in the wind |
-| **Heo Eun-bin** 허은빈 | clay shapes built and painted on canvas; the character 「우산토끼」 (*Umbrella Rabbit*) | 4 · `HEOEUNBIN` | a walking lizard (the gallery wall names a lizard among her characters) |
+| **Heo Eun-bin** 허은빈 | clay shapes built and painted on canvas; the character 「우산토끼」 (*Umbrella Rabbit*) | 4 · `HEOEUNBIN` | a walking lizard (the wall text beside her works, seen in [`media/anbu-visitors.jpg`](media/anbu-visitors.jpg), names a lizard among her characters) |
 | **Jeong Eun-gyo** 정은교 | fish scales in hanji and silicone on black braille paper | 5 · `JEONGEUNGYO` | round shapes that drift together into a 3 × 3 grid |
 | **Yu Jin** 유진 | afterimages of the sea in glow-in-the-dark paint | 6 · `YUJIN` | fish swimming in a sea current |
 
-**The exhibition** — *안부 — 보이지 않는 안부를 묻다* / ***Anbu — Asking After the Unseen*** (*안부* is a greeting that asks how someone is): a group show of six visually impaired artists about nature and relationships, 40 works, 25 of them to be touched. 3–9 October 2026, free entry, Gallery 1, Modu Art Space (모두미술공간 전시실1), Seoul Square annex 5F, Jung-gu, Seoul. Organised by **Ablind** (에이블라인드), CEO **Yang Dream** (양드림). The exhibition was supported by the **Korea Arts Management Service** (KAMS, 예술경영지원센터) through its 2026 early-stage arts startup programme.
+**The exhibition** — *안부 — 보이지 않는 안부를 묻다* / ***Anbu — Asking After the Unseen*** (*안부* is a greeting that asks how someone is): a group show of six visually impaired artists about nature and relationships, 40 works, 25 of them to be touched. 3–9 October 2026, free entry, Gallery 1, Modu Art Space (모두미술공간 전시실1), Seoul Square annex 5F, Jung-gu, Seoul. Organised by **Ablind** (에이블라인드), CEO **Yang Dream** (양드림), with support from the **Korea Arts Management Service** (KAMS, 예술경영지원센터) 2026 early-stage arts startup programme.
 
 **Patternflow** by **Seunghun Lee** — the panel and its firmware, the pattern code (the files name `@engmung` as their author) and its C++ versions for the panel, the FlowLocal exhibition build, the Live set and the Max for Live device. FlowLocal grew out of the FlowLocal show appliance ([SimonePDA/flowlocal](https://github.com/SimonePDA/flowlocal)).
 
-Artists' names are romanised approximately (Revised Romanization), always with the Korean beside them. The code names in `patterns/` are older, looser spellings (`bakwan` for 박환, `hanyeonghoe` for 한영희), kept because the firmware reads them. More in [`CREDITS.md`](CREDITS.md), with sources.
+The English spellings of the artists' names are our own approximate romanisation (Revised Romanization), not confirmed by the artists; the Korean names are the reference. The code names in `patterns/` are looser spellings still (`bakwan` for 박환, `hanyeonghoe` for 한영희 — not the artists' names), kept only because the firmware reads them. More in [`CREDITS.md`](CREDITS.md), with sources.
 
 ## Licences
 
-Patternflow firmware and web code: **MIT**. Hardware, designs, documentation and patterns: **CC BY-SA 4.0**. The six patterns: **CC BY-SA 4.0, with credit to each artist** — the organiser allowed the exhibition's work to be used freely, and the creator publishes the patterns on these terms. The licence covers the pattern code and the pictures it draws, not the artists' original works. FlowLocal: **MIT**. Details for each folder: [`LICENSE.md`](LICENSE.md).
+Patternflow firmware and web code: **MIT**. Hardware, designs, documentation and patterns: **CC BY-SA 4.0**. The six patterns: **CC BY-SA 4.0, with credit to each artist** — the organiser allowed the creator, Seunghun Lee, to use the exhibition's work freely, and he publishes the patterns on these terms. The licence covers the pattern code and the pictures it draws, not the artists' original works. Ready-made credit lines: [`CREDITS.md`](CREDITS.md#how-to-credit-a-pattern-when-you-reuse-it). Artists or their representatives who want something changed can open an issue in this repository. FlowLocal: **MIT**. Details for each folder: [`LICENSE.md`](LICENSE.md).
 
 ## Sources
 
