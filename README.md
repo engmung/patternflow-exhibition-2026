@@ -344,7 +344,7 @@ python tools/send_test.py --port "PF Test" demo --hold 8   # behaves like the pa
 
 The panel image from this patch is locked to one job: it joins only the network compiled into `patternflow_secrets.h`, and it always invites **192.168.66.1** to an RTP-MIDI session (the `/midi` page cannot change either). FlowLocal is the box that answers. Without it:
 
-- **Give a computer that address.** On a Wi-Fi router whose network name and password match your secrets file, make the LAN `192.168.66.0/24` and give the laptop the fixed address `192.168.66.1`. Run an RTP-MIDI session on port 5004 that accepts invitations from anyone — Windows: [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html), *Who may connect to me: Anyone*; macOS: Audio MIDI Setup → MIDI Network Setup, the same setting.
+- **Give a computer that address.** On a Wi-Fi router whose network name and password match your secrets file, make the LAN `192.168.66.0/24`, move the router's own address off `.1` (to `192.168.66.254`, say) and give the laptop the fixed address `192.168.66.1`. Run an RTP-MIDI session on port 5004 that accepts invitations from anyone — Windows: [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html), *Who may connect to me: Anyone*; macOS: Audio MIDI Setup → MIDI Network Setup, the same setting.
 - **Or build the panel for your own host.** In *your* patched checkout, set `PF_MIDI_DEFAULT_HOST` in `firmware/bundles/exhibit/overrides.h` to your computer's address before building.
 - In Live, use the network session's port in place of `Patternflow Exhibit` (Settings and the control track), and set the control track's **MIDI To to No Output** — nobody answers the resync request, and it should not go to the panel.
 
