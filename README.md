@@ -43,58 +43,62 @@ flowchart LR
 
 ## What you need
 
-- A **Patternflow** panel ([build it](https://github.com/engmung/Patternflow)). Run it on 5 V through the **J4 screw terminal only, never over USB-C**: one board powered over USB-C smoked at the connector. USB is only for flashing, with the DevKit off the board.
+- A **Patternflow** panel ([build it](https://github.com/engmung/Patternflow)), powered with 5 V through the **J4 screw terminal only, never over USB-C**: one board smoked at the connector.
 - A computer with **Chrome or Edge** and a USB data cable, to flash the panel.
-- A 2.4 GHz Wi-Fi network that the panel and the laptop can share (not a guest network: those keep devices apart).
-- A laptop with **Ableton Live 12 Suite**, 12.4 or newer. It must be Suite: the set uses Max for Live and Suite's instruments and packs. Live's free 30-day trial is Suite, but this set has not been tried with it. And speakers.
-- Network MIDI on the laptop. macOS has it built in; on Windows, install the free [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html).
+- A 2.4 GHz Wi-Fi network that the panel and the laptop share (not a guest network: those keep devices apart).
+- A laptop with **Ableton Live 12 Suite**, 12.4 or newer (Suite for Max for Live; the free 30-day trial is Suite, but untried with this set), network MIDI (built into macOS; on Windows the free [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html)), and speakers.
 - *Optional, as at the show:* a second board, an **ESP32-S3-DevKitC-1 N16R8**, for FlowLocal.
 
-The show ran with FlowLocal on a Windows 11 laptop. The quick route below (no FlowLocal) and macOS were not tested there.
+The show ran with FlowLocal on Windows 11. The quick route below has not been tested end to end, and macOS was not tested.
 
 ## Make it
 
 ### 1. Flash the panel in the browser
 
-1. Open **[patternflow.work/flash](https://patternflow.work/flash)** in Chrome or Edge.
-2. Unplug the 5 V from J4 and take the ESP32-S3 DevKit off the panel board, as in the Patternflow build guide. Plug the DevKit's **USB** jack (not the one labelled COM or UART) into the computer.
-3. Click the install button and pick the board's port. When the uploader asks for Wi-Fi, give it the network the laptop is on. Then put the DevKit back on the panel board and power the panel through J4.
-4. Use the **Audio edition**, the one with network MIDI. If the uploader offers editions, pick it there; otherwise switch to it in one click over Wi-Fi, keeping your patterns ([Patternflow editions](https://github.com/engmung/Patternflow/blob/main/docs/EDITIONS.md)).
+Already running the Audio edition, v0.5.0 or newer? Skip to step 2.
 
-There is nothing to install and nothing to build. The Audio edition sends the same kinds of messages as the show's panel: a Program Change on every pattern change and CC 24–27 from the four knobs.
+1. Unplug the 5 V from J4 and take the ESP32-S3 DevKit off the panel board. Plug the DevKit's **USB** jack (not the one labelled COM or UART) into the computer.
+2. Open **[patternflow.work/flash](https://patternflow.work/flash)** in Chrome or Edge, click the install button and pick the board's port. Choose the **Audio edition**, the one with network MIDI, if the uploader offers it; otherwise switch to it afterwards over Wi-Fi ([Patternflow editions](https://github.com/engmung/Patternflow/blob/main/docs/EDITIONS.md)). When it asks for Wi-Fi, give it the laptop's network.
+3. Unplug the USB cable, put the DevKit back and power the panel through J4. Never connect USB and J4 at the same time.
 
-> The uploader installs Patternflow as it ships, not the show's own build. That build had the six patterns built in, K4 set to switch between them, and each knob's sound locked to the picture. You build it from source: [full guide → Build it](docs/full-guide.en.md#build-it-step-by-step). Its ready-made images are not published, because they contained the venue's Wi-Fi password.
+Nothing to build. The Audio edition sends the same kinds of messages as the show's panel: a Program Change on every pattern change and CC 24–27 from the four knobs.
+
+> This is Patternflow as it ships, not the show's build, which had the six patterns built in, K4 switching between them, and each knob's sound locked to the picture. That one you build from source: [full guide → Build it](docs/full-guide.en.md#build-it-step-by-step). Its ready-made images held the venue's Wi-Fi password and are not published.
 
 ### 2. Connect the panel to the laptop
 
-1. **On the laptop**, start a network MIDI session called **Patternflow** that lets anyone connect.
-   - macOS: open *Audio MIDI Setup* → Window → *Show MIDI Studio* and double-click **Network**. Under *My Sessions* click **+**, name the session **Patternflow**, tick it, and set *Who may connect to me* to **Anyone**.
-   - Windows: open rtpMIDI and do the same (**+** under *My Sessions*, name, tick, *Who may connect to me*: **Anyone**). If Windows asks whether rtpMIDI may use the network, allow it.
-   - The session's **Port** must be **5004**, the default. If another session already uses 5004, delete it first: the panel calls port 5004 only.
-2. **On the panel**: in the laptop's browser open `http://patternflow.local/midi`. If that does not open, use `http://<panel-ip>/midi`; your router's list of connected devices shows the panel's address. Make sure MIDI is on and the knobs are on **Knob value** (the default, not *Relative steps*), and click **Use this computer**. Optional: **Sensitivity ×4** gives the show's feel, about 32 detents from end to end.
-3. **Check**: within about 20 seconds the panel appears in the session's participant list. From now on it connects about 20 seconds after each start. If the laptop's address on the network changes, click **Use this computer** again.
+1. **Laptop**: create a network MIDI session named **Patternflow**, on port **5004** (the default; the panel calls 5004 only), with *Who may connect to me* set to **Anyone**. macOS: *Audio MIDI Setup* → Window → *Show MIDI Studio*, double-click **Network**, **+** under *My Sessions*. Windows: rtpMIDI, **+** under *My Sessions*; let it through the firewall.
+2. **Panel**: in the laptop's browser open `http://patternflow.local/midi`, or `http://<panel-ip>/midi` (your router lists the address). Check that MIDI is on and the knobs are on **Knob value** (the default, not *Relative steps*), then click **Use this computer**. *Sensitivity ×4* makes each knob's CC cross its range in about 32 detents, as at the show.
+3. **Check**: within about 20 seconds the panel shows up in the session's participant list. It reconnects about 20 seconds after each start; if the laptop's address changes, click **Use this computer** again.
 
 ### 3. Open the Live set
 
-New to Live? Read the two-minute primer first: [full guide → Open the Live set](docs/full-guide.en.md#4-open-the-live-set). Its numbered steps are for the FlowLocal route; on the quick route, follow the steps below.
+New to Live? Read the two-minute primer first: [full guide → Open the Live set](docs/full-guide.en.md#4-open-the-live-set) (its numbered steps are for FlowLocal; on the quick route, use these).
 
-1. **Download this repo**: on GitHub, *Code → Download ZIP*, then unzip it. The set needs its whole folder, because its scene device lives inside it.
-2. Install the packs: in Live's browser open **Packs** and download **Mood Reel**, **Drone Lab** and **Granulator III** (the set's samples come from them). Then open `set Project/set.als` from the unzipped folder.
-3. **Settings → Audio**: pick your speakers. **Settings → Link, Tempo & MIDI**: set the **Patternflow** In port to **Track on** and **Remote on** (on macOS Live may list it as *Network (Patternflow)*). Leave the **Patternflow** Out port all **off**. Set **Takeover Mode** to **None**.
-4. Click the leftmost track, `1-MIDI`. Set its MIDI From to **Patternflow / All Channels**, MIDI To to **No Output** and Monitor to **In**. Nothing may go back to the panel, because it acts on MIDI it receives.
-5. Set MIDI From to **No Input** on the scene tracks numbered 1, 2, 3, 5 and 6 (`1.은행나무`, `2.괘짝`, `3.산`, `5.기하학`, `6.물고기`), so a knob press cannot play them. Leave track 4 (`4.도마뱀`) as it is.
-6. On the **PF Exhibit Scenes** device (it is on `1-MIDI`), click **Autostart** so it lights. Then save the set.
-7. Click the ▶ of the second scene from the top (Live labels it 2). If you hear a slow drone, the sound side works; stop it with ■ *Stop All Clips*. Now change the pattern on the panel: Live's scene follows.
-
-Patternflow as it ships does not resend its pattern when it connects. After restarting Live or the panel, change the pattern once and Live catches up.
+1. **Download this repo** (*Code → Download ZIP*) and unzip it. The set needs its whole folder: its scene device lives inside it.
+2. In Live, signed in to your Ableton account, open the browser (`Ctrl`/`Cmd` + `Alt` + `B`) → **Packs** and install **Mood Reel** and **Drone Lab** (the set's three samples) and **Granulator III** (the instrument on tracks 1 and 2; if it is not listed, download it from your Ableton account). Then open `set Project/set.als`.
+3. **Settings → Audio**: pick your speakers. **Settings → Link, Tempo & MIDI**: the **Patternflow** In port **Track on** and **Remote on**, its Out port all **off** (macOS may list it as *Network (Patternflow)*). **Takeover Mode: None**.
+4. Click the leftmost track, `1-MIDI`: MIDI From **Patternflow / All Channels**, MIDI To **No Output**, Monitor **In**. Nothing may go back to the panel, because it acts on MIDI it receives.
+5. On scene tracks 1, 2, 3, 5 and 6 (`1.은행나무`, `2.괘짝`, `3.산`, `5.기하학`, `6.물고기`) set MIDI From to **No Input**, so a knob press cannot play them. Leave track 4 (`4.도마뱀`) as it is.
+6. On the **PF Exhibit Scenes** device on `1-MIDI`, switch **Autostart** on, then save the set. It now opens on scene 1 and plays.
+7. **Test**: click ▶ on the second scene from the top (Live labels it 2). A slow drone means the sound works; stop it with ■ *Stop All Clips*. Then step the panel to its pattern 1 or 2: Live's MIDI *In* light flashes, the device's top line reads `PC n ch1 -> n: …`, and that scene plays.
 
 ### 4. Play
 
-At the show, **K4 changed the pattern**, and Live's scene with it. Visitors played only the **other three knobs, K1–K3**. Each one changes the picture and the sound together, and each does something different in every pattern. Turn them and find out.
+At the show, **K4 changed the pattern**, and Live's scene with it. Visitors played only the **other three knobs, K1–K3**. Each one changes the picture and the sound together, and differently in every pattern. Turn them and find out.
 
-On your web-flashed panel, change patterns the way you always do, and Live follows: pattern *n* fires scene *n*, counting from 0 at the top. Your patterns 1, 2, 3, 5 and 6 get the show's sounds, whatever those patterns are. Patterns 0, 4 and 7 are silent (scene 4 plays only the footstep notes the show's build sends), and from 8 up Live stays where it was. K1–K3 shape the sound. Here all four knobs play the pattern; K4's CC 27 is not mapped in the set.
+On a web-flashed panel, change patterns the way you usually do: pattern *n* fires scene *n*, counting from 0 at the top. Patterns 1, 2, 3, 5 and 6 get the show's sounds. Patterns 0, 4 and 7 are silent (track 4's sound was the show build's footstep notes), and from 8 up Live stays where it was. K4's CC 27 is not mapped.
 
-Every knob, CC and range, picture and sound side by side: [full guide → MIDI map](docs/full-guide.en.md#midi-map).
+Every knob, CC and range: [full guide → MIDI map](docs/full-guide.en.md#midi-map).
+
+<details>
+<summary><b>Not working?</b></summary>
+
+- **The panel never joins the session.** On Windows, set this Wi-Fi to *Private* or allow rtpMIDI on public networks too. On macOS, allow the browser's local-network prompt. Panel and laptop must be on the same network, not a guest one.
+- **It stopped after a drop** (laptop asleep, a Wi-Fi gap). Patternflow as it ships can take about 70 seconds to come back, and sometimes stops calling until it restarts. Not back after 90 seconds, or listed while Live's MIDI *In* light stays dark when you turn a knob? Power-cycle the panel.
+- **After restarting Live or the panel, Live is on the wrong scene.** Patternflow as it ships does not resend its pattern when it connects. Change the pattern once and Live catches up.
+- More: [full guide → Troubleshooting](docs/full-guide.en.md#troubleshooting).
+</details>
 
 ## Going further
 
