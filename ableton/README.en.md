@@ -1,6 +1,6 @@
 # Ableton setup for the exhibition — PF Exhibit Scenes
 
-> **English translation.** The Korean original is [`README.md`](README.md). It was written for the crew of the 2026 exhibition *Anbu* in Seoul and describes that installation as it was — the exhibition laptop's paths, COM ports and dates are kept as facts. In this public copy the hotspot password reads `YOUR_HOTSPOT_PASSWORD`; the prebuilt firmware images, `flasher.html`, `backups/`, the `patternflow/` and `flowlocal/` clones and the audio samples are not included, and the FlowLocal firmware source is not public — the [front page](../README.md) says what to do instead. Where the original says "the root `README.md`", it means the Korean notes now in [`README.ko.md`](../README.ko.md), translated in [`docs/setup-notes.en.md`](../docs/setup-notes.en.md).
+> **English translation.** The Korean original is [`README.md`](README.md). It was written for the crew of the 2026 exhibition *Anbu* in Seoul and describes that installation as it was — the exhibition laptop's paths, COM ports and dates are kept as facts. In this public copy the hotspot password reads `YOUR_HOTSPOT_PASSWORD`; the prebuilt firmware images, `flasher.html`, `backups/` and the project's copies of the audio samples are not included — build from source as the [front page](../README.md) shows. The original's `patternflow/` (the panel firmware clone) is what you get by applying [`firmware/panel-exhibit-2026.patch`](../firmware/panel-exhibit-2026.patch) to Patternflow `4d264d5`, inside this repo; its `flowlocal/` (the FlowLocal firmware clone) is [`firmware/flowlocal/`](../firmware/flowlocal/) here, so `flowlocal/EXHIBIT.md` means `firmware/flowlocal/EXHIBIT.md`. Where the original says "the root `README.md`", it means the Korean notes now in [`README.ko.md`](../README.ko.md), translated in [`docs/setup-notes.en.md`](../docs/setup-notes.en.md).
 
 When you change the pattern on the panel with K4, the scene in Live follows. K1–K3 move Live parameters.
 
@@ -227,12 +227,12 @@ The check items (panel MIDI page, knob page, saved Wi-Fi, captions, brightness) 
 
 ## 4.5 Continuing work on another computer (laptop)
 
-The set lives inside the repo (`set Project/`), and the only sounds it uses are Live's built-in instruments (Collision, Drift, Wavetable, Dream Keys) and the M4L device in this folder. It refers to no outside samples, so it opens as it is once you have the repo.
+The set lives inside the repo (`set Project/`), and the only sounds it uses are Live's built-in instruments (Collision, Drift, Wavetable, Dream Keys) and the M4L device in this folder. It refers to no outside samples, so it opens as it is once you have the repo. *(Translator's note: this describes an earlier version of the set. The shared `set.als` also uses Meld, Corpus, Granulator III and three samples from the Mood Reel and Drone Lab packs; see [The Live set, track by track](../README.md#the-live-set-track-by-track) on the front page.)*
 
 What the receiving computer needs:
 
 - **Live 12 Suite** and the Core Library. Collision and Wavetable are Suite devices, so in Intro/Standard those tracks open empty. Max for Live is also included in Suite (the device is frozen, so there is no need to open Max separately).
-- git. It is a private repo, so you need to sign in.
+- git. It is a private repo, so you need to sign in. *(Translator's note: the public copy is `https://github.com/Patternflow-lab/patternflow-exhibition-2026`; no sign-in needed.)*
 
 ```bash
 git clone https://github.com/engmung/patternflow-exhibition-2026.git

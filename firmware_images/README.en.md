@@ -1,6 +1,6 @@
 # Ready-to-flash firmware images
 
-> **English translation.** The Korean original is [`README.md`](README.md). It was written for the crew of the 2026 exhibition *Anbu* in Seoul and describes that installation as it was — the exhibition laptop's paths, COM ports and dates are kept as facts. In this public copy the hotspot password reads `YOUR_HOTSPOT_PASSWORD`; the prebuilt firmware images, `flasher.html`, `backups/`, the `patternflow/` and `flowlocal/` clones and the audio samples are not included, and the FlowLocal firmware source is not public — the [front page](../README.md) says what to do instead. Where the original says "the root `README.md`", it means the Korean notes now in [`README.ko.md`](../README.ko.md), translated in [`docs/setup-notes.en.md`](../docs/setup-notes.en.md).
+> **English translation.** The Korean original is [`README.md`](README.md). It was written for the crew of the 2026 exhibition *Anbu* in Seoul and describes that installation as it was — the exhibition laptop's paths, COM ports and dates are kept as facts. In this public copy the hotspot password reads `YOUR_HOTSPOT_PASSWORD`; the prebuilt firmware images, `flasher.html`, `backups/` and the project's copies of the audio samples are not included — build from source as the [front page](../README.md) shows. The original's `patternflow/` (the panel firmware clone) is what you get by applying [`firmware/panel-exhibit-2026.patch`](../firmware/panel-exhibit-2026.patch) to Patternflow `4d264d5`, inside this repo; its `flowlocal/` (the FlowLocal firmware clone) is [`firmware/flowlocal/`](../firmware/flowlocal/) here, so `flowlocal/EXHIBIT.md` means `firmware/flowlocal/EXHIBIT.md`. Where the original says "the root `README.md`", it means the Korean notes now in [`README.ko.md`](../README.ko.md), translated in [`docs/setup-notes.en.md`](../docs/setup-notes.en.md).
 
 This folder alone, with no build environment, lets you put both boards back to their current state. Use it when a board has to be flashed again from another computer (the laptop).
 
@@ -16,7 +16,7 @@ The commands below do the same job from the command line (for when the browser d
 | `flowlocal/firmware.bin` | FlowLocal | Same build | 1,170,816 B, sha256 `bcfe677e…`. App only. Normally you use the factory image |
 
 - To check that the files arrived intact: in this folder, `sha256sum -c SHA256SUMS`
-- Both images contain the exhibition hotspot password. **Keep this repo private.**
+- Both images contain the exhibition hotspot password. **Keep this repo private.** *(Translator's note: in this public copy the images are not included, for that reason; build your own with your own password.)*
 
 ## Preparation (once)
 
