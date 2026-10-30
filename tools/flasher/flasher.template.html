@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>패턴플로우 굽기</title>
+<style>
+  :root {
+    --room: #0c0d10;
+    --housing: #17191e;
+    --housing-edge: #262a31;
+    --line: #2a2e36;
+    --ink: #ece8df;
+    --muted: #8f949e;
+    --accent: #f2b04c;
+    --ok: #7fcf8a;
+    --warn: #f2c14c;
+    --bad: #ff8a7a;
+    --sans: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  html, body { background: var(--room); color: var(--ink); margin: 0; }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.55; padding: 24px 16px 48px; }
+  .wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+  h1 { margin: 0; font-size: 1.5rem; }
+  .lead { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+  .alert { border: 1px solid var(--bad); color: var(--bad); border-radius: 10px; padding: 12px 14px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .card { background: var(--housing); border: 1px solid var(--housing-edge); border-radius: 12px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+  .card h2 { margin: 0; font-size: 1.1rem; }
+  .jack { margin: 0; font-size: 0.85rem; color: var(--muted); }
+  .jack b { color: var(--ink); }
+  .img { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 2px; }
+  .img .okmark { color: var(--ok); }
+  .img .badmark { color: var(--bad); }
+  label.opt { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; cursor: pointer; }
+  label.opt small { color: var(--muted); display: block; }
+  button { font: inherit; color: var(--ink); background: #22262d; border: 1px solid #353a44; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: #4a505c; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.go { background: var(--accent); color: #1b1406; border-color: var(--accent); font-weight: 700; font-size: 1rem; padding: 10px 16px; }
+  button.go:hover:not(:disabled) { filter: brightness(1.08); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .status { background: var(--housing); border: 1px solid var(--housing-edge); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+  .status h2 { margin: 0; font-size: 1rem; }
+  #msg { font-size: 1rem; }
+  #msg.ok { color: var(--ok); } #msg.bad { color: var(--bad); } #msg.warn { color: var(--warn); }
+  .bar { height: 10px; background: #0f1114; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.2s linear; }
+  #board { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+  pre#log { margin: 8px 0 0; max-height: 280px; overflow: auto; background: #0f1114; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 0.75rem; white-space: pre-wrap; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .note { color: var(--muted); font-size: 0.82rem; margin: 0; }
+  a { color: var(--accent); }
+  input[type=file] { color: var(--muted); font-size: 0.85rem; max-width: 100%; }
+  @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>패턴플로우 굽기</h1>
+    <p class="lead">보드를 USB로 꽂고 → 아래에서 버튼을 누르고 → 뜨는 창에서 포트를 고르면 끝입니다. 인터넷 없이 됩니다. Chrome이나 Edge에서 여세요.</p>
+  </header>
+
+  <div class="alert" id="noserial" hidden>이 브라우저는 USB 시리얼 연결을 지원하지 않습니다. <b>Chrome</b>이나 <b>Edge</b>로 이 파일을 여세요(파일을 브라우저 창에 끌어다 놓아도 됩니다).</div>
+
+  <div class="cards">
+    <section class="card" aria-labelledby="t-panel">
+      <h2 id="t-panel">전시 패널</h2>
+      <p class="jack">꽂는 곳: <b>패널 DevKit의 USB 잭</b>. DevKit을 패널 보드에서 빼서 PC에 꽂는다(패널 전원은 J4로만).</p>
+      <label class="opt"><input type="radio" name="panelmode" value="app" checked> <span>펌웨어만 바꾸기 <small>밝기·자막 같은 설정은 그대로. 보통은 이것.</small></span></label>
+      <label class="opt"><input type="radio" name="panelmode" value="full"> <span>전부 지우고 처음부터 <small>설정도 초기화된다. 이상할 때만.</small></span></label>
+      <div class="img" id="img-panel"></div>
+      <button class="go" id="go-panel">전시 패널 굽기</button>
+    </section>
+
+    <section class="card" aria-labelledby="t-fl">
+      <h2 id="t-fl">FlowLocal</h2>
+      <p class="jack">꽂는 곳: <b>오른쪽 잭 (COM)</b>, 또는 전시 때 꽂는 <b>왼쪽 잭 (USB)</b> 그대로. 왼쪽 잭이면 먼저 굽기 모드로: <b>BOOT를 누른 채 RST를 한 번 눌렀다 떼고, BOOT를 뗀다</b>. 굽고 나면 <b>RST를 한 번</b> 누른다.</p>
+      <p class="note">핫스팟 설정이 펌웨어에 들어 있어서 지워도 잃는 게 없다. 켜지고 12초 뒤에 핫스팟이 뜬다.</p>
+      <div class="img" id="img-fl"></div>
+      <button class="go" id="go-fl">FlowLocal 굽기</button>
+    </section>
+
+    <section class="card" aria-labelledby="t-mine">
+      <h2 id="t-mine">내 파일 (연구용)</h2>
+      <p class="jack">직접 빌드한 <b>.bin</b>을 올린다. 일반 패턴플로우 펌웨어는 <a href="https://patternflow.work/flash" target="_blank" rel="noopener">patternflow.work/flash</a>에서.</p>
+      <input type="file" id="mine-file" accept=".bin">
+      <label class="opt"><input type="radio" name="minemode" value="app" checked> <span>앱 이미지 (firmware.bin) <small>0x10000에 쓴다. 설정은 그대로.</small></span></label>
+      <label class="opt"><input type="radio" name="minemode" value="merged"> <span>합친 이미지 (factory·merged) <small>전부 지우고 0x0에 쓴다.</small></span></label>
+      <div class="img" id="img-mine">파일을 고르면 여기에 나온다.</div>
+      <button class="go" id="go-mine" disabled>내 파일 굽기</button>
+    </section>
+  </div>
+
+  <section class="status" aria-live="polite">
+    <div class="row" style="justify-content:space-between">
+      <h2>진행</h2>
+      <button id="go-info">보드 확인만 하기</button>
+    </div>
+    <div id="msg">준비됨. 위에서 버튼을 누르세요.</div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="bar"></div></div>
+    <div id="board"></div>
+    <details><summary>자세한 기록</summary><pre id="log"></pre></details>
+  </section>
+
+  <p class="note">이 파일에는 전시 이미지(핫스팟 비밀번호 포함)가 통째로 들어 있다. 비공개 레포 밖으로 보내지 않는다. 이미지를 새로 빌드했으면 <code>firmware_images/</code>를 바꾼 뒤 <code>node tools/flasher/build.mjs</code>로 이 파일을 다시 만든다. 만든 때: <span id="built"></span></p>
+</div>
+
+<script>/*__LIB__*/</script>
+<script>
+(() => {
+  "use strict";
+  const DATA = /*__DATA__*/null;
+  const { ESPLoader, Transport, md5hex } = window.PFFlash;
+
+  // Boards this show knows by MAC (esptool prints the same form).
+  const KNOWN = {
+    "44:bd:8d:75:e3:54": { name: "전시 패널 DevKit", kind: "panel" },
+    "14:c1:9f:32:29:6c": { name: "FlowLocal", kind: "flowlocal" },
+    "e8:3d:c1:f7:d3:08": { name: "개발용 보드 (.144)", kind: "dev" },
+  };
+  const VID_ESPRESSIF = 0x303a;   // the panel DevKit's own USB (USB-Serial/JTAG)
+  const USB_UART_VIDS = [0x1a86, 0x10c4, 0x0403]; // CH34x, CP210x, FTDI - FlowLocal's COM jack
+
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+  function log(line) { logEl.textContent += line + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+  function say(text, cls) { const m = $("msg"); m.textContent = text; m.className = cls || ""; }
+  function progress(pct) {
+    const v = Math.max(0, Math.min(100, pct));
+    $("bar").style.width = v + "%";
+    document.querySelector(".bar").setAttribute("aria-valuenow", String(Math.round(v)));
+  }
+  const busyButtons = ["go-panel", "go-fl", "go-mine", "go-info"];
+  function busy(on) {
+    busyButtons.forEach((id) => { $(id).disabled = on || (id === "go-mine" && !mine.bytes); });
+  }
+
+  if (!("serial" in navigator)) { $("noserial").hidden = false; busyButtons.forEach((id) => { $(id).disabled = true; }); }
+  $("built").textContent = DATA.built;
+
+  // ── the embedded images ──
+  const images = {};
+  function b64bytes(b64) {
+    const s = atob(b64); const u = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    return u;
+  }
+  async function sha256hex(bytes) {
+    const d = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  async function loadImages() {
+    for (const [key, img] of Object.entries(DATA.images)) {
+      const bytes = b64bytes(img.b64);
+      const sha = await sha256hex(bytes);
+      images[key] = { ...img, bytes, intact: sha === img.sha256 };
+    }
+    const line = (img) => `${img.name} · ${img.size.toLocaleString()} B · sha ${img.sha256.slice(0, 12)}` +
+      ` · ${img.intact ? '<span class="okmark">온전함</span>' : '<span class="badmark">깨짐 - 쓰지 마세요</span>'}`;
+    $("img-panel").innerHTML = `<div>${line(images.panel_firmware)}</div><div>레포에 들어온 날: ${images.panel_firmware.date}</div>`;
+    $("img-fl").innerHTML = `<div>${line(images.flowlocal_factory)}</div><div>레포에 들어온 날: ${images.flowlocal_factory.date}</div>`;
+  }
+
+  // ── "내 파일" ──
+  const mine = { bytes: null, name: "" };
+  $("mine-file").addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    mine.bytes = new Uint8Array(await f.arrayBuffer());
+    mine.name = f.name;
+    // A merged image carries the partition table at 0x8000 (magic AA 50).
+    const merged = mine.bytes.length > 0x8002 && mine.bytes[0x8000] === 0xaa && mine.bytes[0x8001] === 0x50;
+    document.querySelector(`input[name=minemode][value=${merged ? "merged" : "app"}]`).checked = true;
+    const sha = await sha256hex(mine.bytes);
+    $("img-mine").innerHTML = `<div>${f.name} · ${mine.bytes.length.toLocaleString()} B · sha ${sha.slice(0, 12)}</div>` +
+      `<div>${merged ? "합친 이미지로 보인다 (0x8000에 파티션 표)" : "앱 이미지로 보인다"}</div>`;
+    busy(false);
+  });
+
+  // ── one run ──
+  // kind: "panel" | "flowlocal" | "mine" | "info"
+  async function run(kind) {
+    if (!("serial" in navigator)) return;
+    logEl.textContent = "";
+    progress(0);
+    $("board").textContent = "";
+    let port;
+    const filters = kind === "panel" ? [{ usbVendorId: VID_ESPRESSIF }]
+      // The USB jack runs MIDI only, so it is listed here only in the ROM's
+      // download mode (BOOT + RST), as the chip's own USB-Serial/JTAG.
+      : kind === "flowlocal" ? USB_UART_VIDS.concat(VID_ESPRESSIF).map((v) => ({ usbVendorId: v }))
+      : [];
+    try {
+      port = await navigator.serial.requestPort(filters.length ? { filters } : {});
+    } catch (e) {
+      say(kind === "panel" ? "포트를 고르지 않았어요. 목록이 비어 있으면 패널 DevKit이 USB로 꽂혀 있는지 보세요."
+        : kind === "flowlocal" ? "포트를 고르지 않았어요. 목록이 비어 있으면: 오른쪽(COM) 잭이면 꽂혀 있는지, 왼쪽(USB) 잭이면 BOOT를 누른 채 RST를 한 번 눌러 굽기 모드로 했는지 보세요."
+        : "포트를 고르지 않았어요.", "warn");
+      return;
+    }
+    const info = port.getInfo();
+    busy(true);
+    let transport = null;
+    const terminal = {
+      clean() {},
+      writeLine(d) { log(d); },
+      write(d) { logEl.textContent += d; },
+    };
+    try {
+      say("보드에 연결하는 중…");
+      transport = new Transport(port, false);
+      const loader = new ESPLoader({ transport, baudrate: 921600, terminal, debugLogging: false });
+      const chipDesc = await loader.main();
+      const mac = (await loader.chip.readMac(loader)).toLowerCase();
+      const flash = await loader.detectFlashSize();
+      const known = KNOWN[mac];
+      const who = known ? known.name : "처음 보는 보드";
+      $("board").textContent = `${who} · ${chipDesc} · MAC ${mac} · 플래시 ${flash || "?"}`;
+      log(`board: ${who} / ${chipDesc} / ${mac} / flash ${flash} / usb ${info.usbVendorId?.toString(16)}:${info.usbProductId?.toString(16)}`);
+      progress(5);
+
+      if (kind === "info") {
+        say(`${who}예요. 굽지 않고 다시 켭니다.`, "ok");
+        await loader.after("hard_reset");
+        progress(100);
+        return;
+      }
+
+      // ── safety checks before anything is written ──
+      const isS3 = /ESP32-S3/i.test(chipDesc);
+      if ((kind === "panel" || kind === "flowlocal") && !isS3) {
+        throw new Error(`이 보드는 ${chipDesc}예요. 전시 이미지는 ESP32-S3용입니다.`);
+      }
+      if (kind === "panel") {
+        if (known && known.kind === "flowlocal") throw new Error("이 보드는 FlowLocal이에요. 전시 패널 DevKit을 꽂아 주세요.");
+        if (!known && USB_UART_VIDS.includes(info.usbVendorId)) throw new Error("COM 잭(USB-UART)으로 연결된 보드예요. 패널 DevKit은 자기 USB 잭으로 꽂습니다.");
+      }
+      if (kind === "flowlocal") {
+        if (known && known.kind !== "flowlocal") throw new Error(`이 보드는 ${known.name}예요. 목록에서 FlowLocal 포트를 골라 주세요.`);
+      }
+      const needs16 = (kind === "panel" && modePanel() === "full") || kind === "flowlocal";
+      if (needs16 && flash && flash !== "16MB") {
+        throw new Error(`플래시가 ${flash}예요. 전시 이미지의 파티션 표는 16MB 보드용입니다.`);
+      }
+      if ((kind === "panel" || kind === "flowlocal") && !known) {
+        if (!confirm(`처음 보는 보드예요 (MAC ${mac}).\n여기에 ${kind === "panel" ? "전시 패널" : "FlowLocal"} 펌웨어를 굽을까요?`)) {
+          say("취소했어요. 아무것도 쓰지 않았습니다.", "warn");
+          await loader.after("hard_reset");
+          return;
+        }
+      }
+      if (kind === "panel" && known && known.kind === "dev") {
+        if (!confirm(`${known.name}에 전시 패널 펌웨어를 굽습니다. 맞나요?`)) {
+          say("취소했어요. 아무것도 쓰지 않았습니다.", "warn");
+          await loader.after("hard_reset");
+          return;
+        }
+      }
+
+      // ── what goes where ──
+      let files = [];
+      let erase = false;
+      if (kind === "panel") {
+        need(["panel_boot_app0", "panel_firmware"].concat(modePanel() === "full" ? ["panel_bootloader", "panel_partitions"] : []));
+        if (modePanel() === "full") {
+          erase = true;
+          files = [
+            { data: images.panel_bootloader.bytes, address: 0x0 },
+            { data: images.panel_partitions.bytes, address: 0x8000 },
+            { data: images.panel_boot_app0.bytes, address: 0xe000 },
+            { data: images.panel_firmware.bytes, address: 0x10000 },
+          ];
+        } else {
+          files = [
+            { data: images.panel_boot_app0.bytes, address: 0xe000 },
+            { data: images.panel_firmware.bytes, address: 0x10000 },
+          ];
+        }
+      } else if (kind === "flowlocal") {
+        need(["flowlocal_factory"]);
+        erase = true;
+        files = [{ data: images.flowlocal_factory.bytes, address: 0x0 }];
+      } else if (kind === "mine") {
+        if (!mine.bytes) throw new Error("파일을 먼저 고르세요.");
+        if (modeMine() === "merged") {
+          erase = true;
+          files = [{ data: mine.bytes, address: 0x0 }];
+        } else {
+          need(["panel_boot_app0"]);
+          files = [
+            { data: images.panel_boot_app0.bytes, address: 0xe000 },
+            { data: mine.bytes, address: 0x10000 },
+          ];
+        }
+      }
+
+      if (erase) {
+        say("전부 지우는 중… (10~30초)");
+        await loader.eraseFlash();
+        progress(15);
+      }
+      const total = files.reduce((n, f) => n + f.data.length, 0);
+      const before = files.map((f, i) => files.slice(0, i).reduce((n, g) => n + g.data.length, 0));
+      const start = erase ? 15 : 5;
+      say("쓰는 중…");
+      await loader.writeFlash({
+        fileArray: files,
+        flashMode: "keep",
+        flashFreq: "keep",
+        flashSize: "keep",
+        eraseAll: false,
+        compress: true,
+        reportProgress: (i, written, size) => {
+          const done = before[i] + files[i].data.length * (size ? written / size : 0);
+          progress(start + (95 - start) * (done / total));
+        },
+        calculateMD5Hash: (image) => md5hex(image),
+      });
+      say("다시 켜는 중…");
+      await loader.after("hard_reset");
+      progress(100);
+      const what = kind === "panel" ? (modePanel() === "full" ? "전시 패널 펌웨어 (전부 지우고)" : "전시 패널 펌웨어 (설정 유지)")
+        : kind === "flowlocal" ? "FlowLocal 펌웨어" : mine.name;
+      // Put in download mode with the buttons, an S3 on its own USB stays there
+      // through the software reset above: only RST starts the new firmware.
+      const viaUsbJack = kind === "flowlocal" && info.usbVendorId === VID_ESPRESSIF;
+      say(viaUsbJack
+        ? `끝났어요. ${who}에 ${what}를 굽고, 보드에서 다시 읽어 대조까지 마쳤습니다. 이제 보드의 RST 버튼을 한 번 누르세요(BOOT는 누르지 않아요). 몇 초 뒤 노트북에 MIDI 포트 "Patternflow Exhibit"가 다시 생기고, 12초 뒤 핫스팟이 뜹니다.`
+        : `끝났어요. ${who}에 ${what}를 굽고, 보드에서 다시 읽어 대조까지 마쳤습니다. 보드가 다시 켜졌어요.` +
+          (kind === "flowlocal" ? " 전시 때처럼 왼쪽 잭으로 옮겨 꽂으세요." : ""), "ok");
+    } catch (e) {
+      const text = String(e && e.message ? e.message : e);
+      log("error: " + text);
+      if (/Failed to open|already open|NetworkError|Access denied/i.test(text)) {
+        say("포트를 열 수 없어요. 다른 프로그램(시리얼 모니터, 다른 브라우저 탭)이 이 포트를 쓰고 있지 않은지 보세요.", "bad");
+      } else if (/Failed to connect|Timed out|wrong boot mode|No serial data/i.test(text)) {
+        say("보드와 연결이 안 돼요. 케이블(충전 전용이 아닌지)과 잭을 확인하고 다시 해 보세요. 안 되면 보드의 BOOT 버튼을 누른 채로 RESET을 한 번 누른 뒤 다시 하세요.", "bad");
+      } else {
+        say(text, "bad");
+      }
+    } finally {
+      try { if (transport) await transport.disconnect(); } catch (e) { /* already closed */ }
+      busy(false);
+    }
+  }
+
+  function need(keys) {
+    for (const k of keys) {
+      if (!images[k]) throw new Error(`이 파일에 ${k} 이미지가 없어요.`);
+      if (!images[k].intact) throw new Error(`${images[k].name} 이미지가 깨져 있어요. 이 파일을 다시 만드세요.`);
+    }
+  }
+  const modePanel = () => document.querySelector("input[name=panelmode]:checked").value;
+  const modeMine = () => document.querySelector("input[name=minemode]:checked").value;
+
+  $("go-panel").addEventListener("click", () => run("panel"));
+  $("go-fl").addEventListener("click", () => run("flowlocal"));
+  $("go-mine").addEventListener("click", () => run("mine"));
+  $("go-info").addEventListener("click", () => run("info"));
+
+  loadImages().catch((e) => say("이미지를 읽지 못했어요: " + e, "bad"));
+})();
+</script>
+</body>
+</html>

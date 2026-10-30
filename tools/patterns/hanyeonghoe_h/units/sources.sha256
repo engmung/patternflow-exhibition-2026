@@ -1,0 +1,8 @@
+# sha256 of each code layer's JavaScript (the layer's "code" string in
+# patterns/3_hanyeonghoe/hanyeonghoe.project.json, UTF-8) that the hand translation
+# beside this file was written against. gen/extract.js refuses to build when the
+# JSON's code no longer matches. Update a line ONLY after updating its unit by hand
+# (see ../README.md, "When a layer's JS changes").
+# unit     layer    sha256
+L1.tpl     Cloud    8a8f50a214f10d49f8f8e94d1019dff47ea5fbb34f6862717d26a8830aaa0a9b
+L2.cpp     flower   3f46b20ad10d6d7ad7ca5fc5b2b6f943edb79fde22c7099fd31d2fc0ffe1a2cf

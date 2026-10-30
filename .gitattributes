@@ -1,0 +1,14 @@
+# The shell tools must keep LF even with core.autocrlf on (bash rejects CRLF).
+*.sh text eol=lf
+# Pattern sources stay byte-identical to what goes into Pattern Lab.
+patterns/**/*.js text eol=lf
+patterns/**/*.json text eol=lf
+
+# Firmware images are binary.
+*.bin binary
+# sha256sum -c needs LF line ends.
+firmware_images/SHA256SUMS text eol=lf
+patterns/**/*.h text eol=lf
+# cmd.exe mis-reads labels in LF-only batch files; PowerShell 5.1 needs the ps1 BOM kept.
+*.bat text eol=crlf
+tools/monitor/*.ps1 text eol=crlf

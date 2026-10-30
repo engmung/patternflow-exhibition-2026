@@ -1,0 +1,11 @@
+{
+  "name": "exhibit-flasher",
+  "private": true,
+  "description": "Builds flasher.html: the exhibit firmware images and esptool-js in one offline page",
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": {
+    "crypto-js": "4.2.0",
+    "esbuild": "0.25.10",
+    "esptool-js": "0.7.0"
+  }
+}
