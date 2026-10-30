@@ -189,6 +189,8 @@ Later updates can keep the settings: `write-flash 0xe000 "$BOOT_APP0" 0x10000 "$
 
 ### 4. Open the Live set
 
+> These steps are for the FlowLocal route, as at the show: the MIDI port is **Patternflow Exhibit**. Without FlowLocal, follow the [front page](../README.md#3-open-the-live-set) instead (or [Without a second board](#without-a-second-board) below); the primer just below applies to both.
+
 <details>
 <summary><b>New to Live? The two minutes you need first</b></summary>
 
