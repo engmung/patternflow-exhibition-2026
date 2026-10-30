@@ -341,11 +341,13 @@ python tools/send_test.py --port "PF Test" demo --hold 8   # behaves like the pa
 
 The panel image from this patch is locked to one job: it joins only the network compiled into `patternflow_secrets.h`, and it always invites **192.168.66.1** to an RTP-MIDI session (the `/midi` page cannot change either). FlowLocal is the box that answers. Without it:
 
+> With Patternflow as it ships (the [front page](../README.md#make-it)'s quick route) the panel joins any Wi-Fi and invites whatever computer you set on its `/midi` page, so you need neither of the first two points; but it does not resend its pattern or knobs when it connects.
+
 - **Give a computer that address.** On a Wi-Fi router whose network name and password match your secrets file, make the LAN `192.168.66.0/24`, move the router's own address off `.1` (to `192.168.66.254`, say) and give the laptop the fixed address `192.168.66.1`. Run an RTP-MIDI session on port 5004 that accepts invitations from anyone — Windows: [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html), *Who may connect to me: Anyone*; macOS: Audio MIDI Setup → MIDI Network Setup, the same setting.
 - **Or build the panel for your own host.** In *your* patched checkout, set `PF_MIDI_DEFAULT_HOST` in `firmware/bundles/exhibit/overrides.h` to your computer's address before building.
 - In Live's settings, set the network session's **In** port to Track **on**, Remote **on**, and its **Out** port to Track **off**, Sync **off**, Remote **off**. Use that port in place of `Patternflow Exhibit` as the control track's MIDI From, and set its **MIDI To to No Output**. This port now leads straight to the panel, and the panel acts on any Program Change or CC 24–27 it receives (a Program Change picks a pattern; an incoming CC holds that knob for 5 s), so nothing may go back to it: no Remote feedback, no resync request, device Thru off.
 
-What you lose: the program mirror (CC 118) and FlowLocal's answer to the resync request — the panel itself still re-sends the Program Change and K1–K3 whenever its session connects, so a reconnect still brings Live back in step. After restarting only Live, though, Live stays on the Start PC scene with the set's saved parameter values until someone turns K4 or a knob, or the panel's session reconnects. You also lose the staff monitor and FlowLocal's status page, which talk to FlowLocal. Live needs none of these to play.
+What you lose: the program mirror (CC 118) and FlowLocal's answer to the resync request — the show's panel itself still re-sends the Program Change and K1–K3 whenever its session connects, so a reconnect still brings Live back in step. After restarting only Live, though, Live stays on the Start PC scene with the set's saved parameter values until someone turns K4 or a knob, or the panel's session reconnects. You also lose the staff monitor and FlowLocal's status page, which talk to FlowLocal. Live needs none of these to play.
 
 ---
 

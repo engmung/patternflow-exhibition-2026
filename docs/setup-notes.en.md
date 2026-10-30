@@ -402,7 +402,7 @@ export PLATFORMIO_PACKAGES_DIR=C:/Users/user/flx-pio/packages
 export PLATFORMIO_BUILD_DIR=C:/Users/user/flx-pio/build
 python -m platformio pkg install -e exhibit     # first time only
 python -m platformio run -e exhibit
-python tools/check_exhibit_image.py             # must print PASS  (public copy: with your own password the 'exhibit AP password' line reads FAIL — see the front page)
+python tools/check_exhibit_image.py             # must print PASS  (public copy: with your own password the 'exhibit AP password' line reads FAIL — see docs/full-guide.en.md, step 1)
 python tools/check_exhibit_bridge.py            # host test, PASS (includes the monitor SysEx)
 ```
 

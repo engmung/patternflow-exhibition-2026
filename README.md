@@ -70,8 +70,9 @@ There is nothing to install and nothing to build. The Audio edition sends the sa
 1. **On the laptop**, start a network MIDI session called **Patternflow** that lets anyone connect.
    - macOS: open *Audio MIDI Setup* → Window → *Show MIDI Studio* and double-click **Network**. Under *My Sessions* click **+**, name the session **Patternflow**, tick it, and set *Who may connect to me* to **Anyone**.
    - Windows: open rtpMIDI and do the same (**+** under *My Sessions*, name, tick, *Who may connect to me*: **Anyone**). If Windows asks whether rtpMIDI may use the network, allow it.
-2. **On the panel**: in the laptop's browser open `http://patternflow.local/midi`. If that does not open, use `http://<panel-ip>/midi`; your router's list of connected devices shows the panel's address. Make sure MIDI is on, leave the knobs on their default absolute values (not *Relative*), and click **Use this computer**.
-3. **Check**: within a few seconds the panel appears in the session's participant list. From now on it connects every time it starts. If the laptop's address on the network changes, click **Use this computer** again.
+   - The session's **Port** must be **5004**, the default. If another session already uses 5004, delete it first: the panel calls port 5004 only.
+2. **On the panel**: in the laptop's browser open `http://patternflow.local/midi`. If that does not open, use `http://<panel-ip>/midi`; your router's list of connected devices shows the panel's address. Make sure MIDI is on and the knobs are on **Knob value** (the default, not *Relative steps*), and click **Use this computer**. Optional: **Sensitivity ×4** gives the show's feel, about 32 detents from end to end.
+3. **Check**: within about 20 seconds the panel appears in the session's participant list. From now on it connects about 20 seconds after each start. If the laptop's address on the network changes, click **Use this computer** again.
 
 ### 3. Open the Live set
 
@@ -79,17 +80,19 @@ New to Live? Read the two-minute primer first: [full guide → Open the Live set
 
 1. **Download this repo**: on GitHub, *Code → Download ZIP*, then unzip it. The set needs its whole folder, because its scene device lives inside it.
 2. Install the packs: in Live's browser open **Packs** and download **Mood Reel**, **Drone Lab** and **Granulator III** (the set's samples come from them). Then open `set Project/set.als` from the unzipped folder.
-3. **Settings → Audio**: pick your speakers. **Settings → Link, Tempo & MIDI**: set the **Patternflow** In port to **Track on** and **Remote on**. Leave the **Patternflow** Out port all **off**. Set **Takeover Mode** to **None**.
+3. **Settings → Audio**: pick your speakers. **Settings → Link, Tempo & MIDI**: set the **Patternflow** In port to **Track on** and **Remote on** (on macOS Live may list it as *Network (Patternflow)*). Leave the **Patternflow** Out port all **off**. Set **Takeover Mode** to **None**.
 4. Click the leftmost track, `1-MIDI`. Set its MIDI From to **Patternflow / All Channels**, MIDI To to **No Output** and Monitor to **In**. Nothing may go back to the panel, because it acts on MIDI it receives.
-5. Set MIDI From to **No Input** on the five tracks `1.은행나무`, `2.괘짝`, `3.산`, `5.기하학` and `6.물고기`. Leave `4.도마뱀` as it is.
+5. Set MIDI From to **No Input** on the scene tracks numbered 1, 2, 3, 5 and 6 (`1.은행나무`, `2.괘짝`, `3.산`, `5.기하학`, `6.물고기`), so a knob press cannot play them. Leave track 4 (`4.도마뱀`) as it is.
 6. On the **PF Exhibit Scenes** device (it is on `1-MIDI`), click **Autostart** so it lights. Then save the set.
-7. Click the ▶ of the second scene from the top. If you hear a slow drone, the sound side works. Now change the pattern on the panel: Live's scene follows.
+7. Click the ▶ of the second scene from the top (Live labels it 2). If you hear a slow drone, the sound side works; stop it with ■ *Stop All Clips*. Now change the pattern on the panel: Live's scene follows.
+
+Patternflow as it ships does not resend its pattern when it connects. After restarting Live or the panel, change the pattern once and Live catches up.
 
 ### 4. Play
 
 At the show, **K4 changed the pattern**, and Live's scene with it. Visitors played only the **other three knobs, K1–K3**. Each one changes the picture and the sound together, and each does something different in every pattern. Turn them and find out.
 
-On your web-flashed panel, change patterns the way you always do, and Live follows: pattern *n* fires scene *n*, counting from 0 at the top, and only scenes 1–6 have sounds. K1–K3 shape the sound. Here all four knobs play the pattern; K4's CC 27 is not mapped in the set.
+On your web-flashed panel, change patterns the way you always do, and Live follows: pattern *n* fires scene *n*, counting from 0 at the top. Your patterns 1, 2, 3, 5 and 6 get the show's sounds, whatever those patterns are. Patterns 0, 4 and 7 are silent (scene 4 plays only the footstep notes the show's build sends), and from 8 up Live stays where it was. K1–K3 shape the sound. Here all four knobs play the pattern; K4's CC 27 is not mapped in the set.
 
 Every knob, CC and range, picture and sound side by side: [full guide → MIDI map](docs/full-guide.en.md#midi-map).
 
