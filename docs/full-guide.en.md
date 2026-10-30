@@ -107,7 +107,7 @@ Plan an afternoon: about an hour for the two firmware builds (most of it downloa
 ### 0. Get the repo and pick a hotspot password
 
 ```bash
-git clone https://github.com/Patternflow-lab/patternflow-exhibition-2026
+git clone https://github.com/engmung/patternflow-exhibition-2026
 cd patternflow-exhibition-2026
 ```
 

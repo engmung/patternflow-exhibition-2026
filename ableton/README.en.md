@@ -239,10 +239,10 @@ The set lives inside the repo (`set Project/`), and the only sounds it uses are 
 What the receiving computer needs:
 
 - **Live 12 Suite** and the Core Library. Collision and Wavetable are Suite devices, so in Intro/Standard those tracks open empty. *(Translator's note: for the shared set the Suite-only parts are Max for Live (this device and Granulator III), Meld, Collision and Corpus; in Intro or Standard they, and the scene device, do not load.)* Max for Live is also included in Suite (the device is frozen, so there is no need to open Max separately).
-- git. It is a private repo, so you need to sign in. *(Translator's note: the public copy is `https://github.com/Patternflow-lab/patternflow-exhibition-2026`; no sign-in needed.)*
+- git. It is a private repo, so you need to sign in. *(Translator's note: the repo is public now, so no sign-in is needed.)*
 
 ```bash
-git clone https://github.com/Patternflow-lab/patternflow-exhibition-2026.git   # the original named the private repo engmung/patternflow-exhibition-2026
+git clone https://github.com/engmung/patternflow-exhibition-2026.git
 ```
 
 Then open `set Project/set.als`. Without the panel and FlowLocal, Live reports that `Patternflow Exhibit` is missing from the MIDI tracks' inputs, but the set still opens and all sound work can be done. On the day you connect the hardware, do the Live settings from §2 (input: Track and Remote on; output: Track only) once on that computer. **Live settings are saved on the computer, not in the set.** *(Translator's note: and per Live version: each update starts a new `%APPDATA%\Ableton\Live 12.x.y\Preferences` folder, so check the MIDI port switches and Takeover Mode again after updating Live.)*
