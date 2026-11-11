@@ -105,6 +105,7 @@ Every knob, CC and range: [full guide → MIDI map](docs/full-guide.en.md#midi-m
 - **[The full guide](docs/full-guide.en.md)**: the setup exactly as it ran at the show, with both boards (FlowLocal too) built from source, every track and mapping, the staff monitor, a first-run checklist and troubleshooting.
 - [Live and Max for Live in depth](ableton/README.en.md) · [what the knobs do in each pattern](PATTERN_KNOBS.en.md) · [the show's install and operations notes](docs/setup-notes.en.md) · [the gallery staff card](STAFF_CARD.en.md)
 - This repo is a worked example of what Patternflow + sound can do, not a product. A free, lightweight Patternflow tool for sound/MIDI is planned separately.
+- **[Ensemble](ensemble/README.md)** (November 2026, after the show, in Korean): eight or more panels on one hub. Turn a knob on one and the others follow at once, or as a wave across the room. Not tried on hardware yet; [`ensemble/console/index.html`](ensemble/console/index.html) runs it in a browser with virtual panels.
 - **Korean originals.** Every document was first written in Korean, and the Korean files are kept as they were: [`README.ko.md`](README.ko.md) and the files without `.en`. Where code or the Korean docs say `README.md`, they mean `README.ko.md`.
 
 ## Credits

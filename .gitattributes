@@ -12,3 +12,6 @@ patterns/**/*.h text eol=lf
 # cmd.exe mis-reads labels in LF-only batch files; PowerShell 5.1 needs the ps1 BOM kept.
 *.bat text eol=crlf
 tools/monitor/*.ps1 text eol=crlf
+# Ensemble: generated from ensemble/core and ensemble/console (tools/build_wasm.py, tools/build_console.py).
+ensemble/console/pfe_sim.wasm.js linguist-generated -diff
+ensemble/hub/src/console_page.h linguist-generated -diff

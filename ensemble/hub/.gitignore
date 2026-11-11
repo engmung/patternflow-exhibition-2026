@@ -1,0 +1,4 @@
+# This installation's Wi-Fi password - never commit.
+hub_secrets.h
+# PlatformIO's build output.
+.pio/

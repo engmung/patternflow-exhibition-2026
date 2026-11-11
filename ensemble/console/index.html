@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Patternflow Ensemble</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: three columns - the rules a turn follows, the room as a map, the
+   panel in hand - around one dark stage where the LEDs are. Colours and type
+   are the Patternflow device console's own tokens. */
+:root {
+  --cream: #F4EFE6; --panel: #FFFCFA; --ink: #1A1814; --muted: #625C51; --faint: #7D7668;
+  --rule: #DDD5C6; --ghost: #E3DCCE; --led: #FF5C2E; --led-ink: #B83C1C;
+  --bad: #B83C1C; --ok: #2B7A4B; --warn: #85600E;
+  --stage: #171512; --stage-grid: #2E2A24; --stage-ink: #EDE7DB; --stage-muted: #8F8778;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Roboto Mono', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cream: #0C0B09; --panel: #131110; --ink: #EDE7DB; --muted: #A39B8A; --faint: #7A7364;
+    --rule: #2B2721; --ghost: #2A2620; --led: #FF5C2E; --led-ink: #FF7A55;
+    --bad: #FF7A55; --ok: #57B87F; --warn: #D9A03F;
+    --stage: #050504; --stage-grid: #211E19; --stage-ink: #EDE7DB; --stage-muted: #8F8778;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --cream: #0C0B09; --panel: #131110; --ink: #EDE7DB; --muted: #A39B8A; --faint: #7A7364;
+  --rule: #2B2721; --ghost: #2A2620; --led: #FF5C2E; --led-ink: #FF7A55;
+  --bad: #FF7A55; --ok: #57B87F; --warn: #D9A03F;
+  --stage: #050504; --stage-grid: #211E19; --stage-ink: #EDE7DB; --stage-muted: #8F8778;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--cream); color: var(--ink);
+  font: 14px/1.45 var(--sans);
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 12px;
+}
+button, input, select { font: inherit; color: inherit; }
+button { white-space: nowrap; flex: none; }
+:focus-visible { outline: 2px solid var(--led); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; font-weight: 650; text-wrap: balance; }
+h1 { font-size: 16px; letter-spacing: -0.01em; }
+h2 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+
+/* ── Top bar ─────────────────────────────────────────── */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.brand { display: flex; align-items: center; gap: 9px; }
+.mark { width: 22px; height: 11px; border-radius: 2px; background:
+  radial-gradient(circle at 25% 50%, var(--led) 0 2.2px, transparent 2.6px),
+  radial-gradient(circle at 50% 50%, var(--led) 0 2.2px, transparent 2.6px),
+  radial-gradient(circle at 75% 50%, var(--led) 0 2.2px, transparent 2.6px), var(--ink); }
+.conn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stats { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.stats b { color: var(--ink); font-weight: 600; }
+
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; padding: 5px 11px; cursor: pointer; color: var(--muted); border-left: 1px solid var(--rule); }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--cream); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.seg.small button { padding: 3px 9px; font-size: 12.5px; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--rule); font-size: 12px; color: var(--muted); background: var(--panel); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.pill.ok::before { background: var(--ok); }
+.pill.warn::before { background: var(--warn); }
+.pill.bad::before { background: var(--bad); }
+
+.btn { border: 1px solid var(--rule); background: var(--panel); border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--led); border-color: var(--led); color: #1A1814; font-weight: 600; }
+.btn.quiet { background: transparent; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.small { padding: 3px 8px; font-size: 12.5px; }
+
+/* ── Grid ────────────────────────────────────────────── */
+.grid { flex: 1; min-height: 0; display: grid; gap: 12px; grid-template-columns: 264px minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
+.col { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.group { display: flex; flex-direction: column; gap: 9px; }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.row > label, .row > .lab { width: 44px; flex: none; color: var(--muted); font-size: 12.5px; }
+.row > .grow { flex: 1; min-width: 0; }
+.row .val { width: 54px; flex: none; text-align: right; color: var(--muted); font-size: 12.5px; }
+.note { color: var(--faint); font-size: 12px; margin: 0; }
+input[type="range"] { width: 100%; accent-color: var(--led); margin: 0; }
+input[type="text"], input[type="number"], select {
+  border: 1px solid var(--rule); background: var(--cream); border-radius: 6px; padding: 4px 7px; min-width: 0; width: 100%; }
+.row input[type="number"] { flex: 1; width: auto; padding: 4px 5px; appearance: textfield; -moz-appearance: textfield; }
+.row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="checkbox"] { accent-color: var(--led); }
+.check { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+
+.scenes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.scene { border: 1px solid var(--rule); background: var(--cream); border-radius: 7px; padding: 7px 0 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.scene b { font-size: 14px; }
+.scene span { font-size: 10.5px; color: var(--faint); }
+.scene.used { border-color: var(--ink); background: var(--panel); }
+.scene.used span { color: var(--muted); }
+
+/* ── Stage ───────────────────────────────────────────── */
+.center { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.stage { position: relative; flex: 1; min-height: 260px; background: var(--stage); border-radius: 10px; overflow: hidden; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.stage-tools { position: absolute; left: 10px; top: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; max-width: calc(100% - 20px); }
+.stage-tools .btn, .stage-tools select { background: color-mix(in srgb, var(--stage) 78%, var(--stage-ink)); border-color: var(--stage-grid); color: var(--stage-ink); font-size: 12.5px; padding: 3px 9px; width: auto; }
+.stage-hint { position: absolute; left: 12px; right: 12px; bottom: 9px; margin: 0; color: var(--stage-muted); font-size: 12px; pointer-events: none; z-index: 2; }
+.stage-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; color: var(--stage-muted); padding: 24px; z-index: 1; }
+.stage-empty strong { color: var(--stage-ink); font-size: 15px; font-weight: 600; }
+
+.log { flex: none; height: 168px; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; }
+.log-head { display: flex; align-items: center; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--rule); }
+.log-head .check { margin-left: auto; font-size: 12px; }
+.log-body { flex: 1; overflow-y: auto; padding: 6px 12px; font: 12px/1.5 var(--mono); min-height: 0; }
+.log-body div { white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-body .t { color: var(--faint); }
+.log-body .err { color: var(--bad); }
+.log-body .raw { color: var(--faint); }
+.log-body .me { color: var(--led-ink); }
+.log-form { display: flex; gap: 6px; padding: 6px 12px 8px; border-top: 1px solid var(--rule); }
+.log-form input { font: 12px var(--mono); }
+
+/* ── Inspector ───────────────────────────────────────── */
+.insp-head { display: flex; align-items: center; gap: 10px; }
+.insp-head .big { font-size: 26px; font-weight: 700; line-height: 1; min-width: 30px; }
+.insp-head .pill { margin-left: auto; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field > span { font-size: 11.5px; color: var(--faint); }
+.knob { display: grid; grid-template-columns: 26px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
+.knob .lab { color: var(--muted); font-size: 12.5px; }
+.knob .val { text-align: right; font-size: 12.5px; color: var(--muted); }
+.hand { display: grid; grid-template-columns: 26px 1fr 1fr; gap: 6px; align-items: center; }
+.hand .lab { color: var(--muted); font-size: 12.5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; }
+dl.diag { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; font-size: 12px; }
+dl.diag dt { color: var(--faint); }
+dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
+.empty { color: var(--muted); margin: 0; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--cream); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 20; max-width: min(92vw, 560px); }
+
+@media (max-width: 1040px) {
+  html, body { height: auto; }
+  .grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .center { order: 1; }
+  .insp { order: 2; }
+  .rules { order: 3; }
+  .col { overflow: visible; }
+  .stage { flex: none; height: min(68vw, 420px); }
+  .stats { margin-left: 0; }
+}
+@media (max-width: 700px) { .stage-hint { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Patternflow Ensemble</h1></div>
+  <div class="conn">
+    <div class="seg" role="group" aria-label="허브 연결 방법">
+      <button type="button" id="conn-demo" aria-pressed="true">데모</button>
+      <button type="button" id="conn-usb" aria-pressed="false">USB</button>
+      <button type="button" id="conn-wifi" aria-pressed="false">Wi-Fi</button>
+    </div>
+    <span class="pill" id="conn-status">시작하는 중</span>
+  </div>
+  <div class="stats num" id="hub-stats" aria-live="off"></div>
+</header>
+
+<main class="grid">
+
+  <section class="col rules" aria-label="연결 규칙">
+    <div class="group">
+      <h2>노브를 돌리면</h2>
+      <div id="links"></div>
+      <p class="note">단독: 그 패널만. 동시: 모든 패널이 바로. 물결: 돌린 패널에서 거리만큼 늦게.</p>
+    </div>
+
+    <div class="group">
+      <h2>물결</h2>
+      <div class="row"><label for="cfg-speed">속도</label><div class="grow"><input type="range" id="cfg-speed" min="0.2" max="12" step="0.1" value="2"></div><span class="val num" id="cfg-speed-v">2 칸/초</span></div>
+      <div class="row"><label for="cfg-glide">번짐</label><div class="grow"><input type="range" id="cfg-glide" min="0" max="1500" step="10" value="80"></div><span class="val num" id="cfg-glide-v">80 ms</span></div>
+      <p class="note">지도의 한 칸은 패널 사이 기준 간격입니다. 속도 2면 한 칸 떨어진 패널이 0.5초 뒤에 따라옵니다.</p>
+    </div>
+
+    <div class="group">
+      <h2>K4</h2>
+      <div class="seg small" role="group" aria-label="K4의 역할">
+        <button type="button" id="cfg-k4-pattern" aria-pressed="true">패턴 넘기기</button>
+        <button type="button" id="cfg-k4-knob" aria-pressed="false">네 번째 노브</button>
+      </div>
+      <div class="row" id="k4-range">
+        <span class="lab">범위</span>
+        <input type="number" id="cfg-pmin" min="0" max="254" value="0" aria-label="첫 패턴 번호">
+        <span class="note">~</span>
+        <input type="number" id="cfg-pmax" min="0" max="255" value="255" aria-label="마지막 패턴 번호">
+        <input type="number" id="cfg-k4s" min="1" max="24" value="3" aria-label="패턴 한 칸에 드는 클릭 수" title="패턴 한 칸에 드는 클릭 수">
+      </div>
+      <p class="note" id="k4-note">패턴 번호 0부터 끝까지, 세 클릭에 한 패턴. 마지막 칸의 255는 "끝까지"입니다.</p>
+      <label class="check"><input type="checkbox" id="cfg-lock"> 패널의 길게 누르기 메뉴 잠그기</label>
+    </div>
+
+    <div class="group">
+      <h2>장면</h2>
+      <div class="scenes" id="scenes"></div>
+      <div class="row">
+        <div class="seg small" role="group" aria-label="장면 버튼의 동작">
+          <button type="button" id="scene-recall" aria-pressed="true">불러오기</button>
+          <button type="button" id="scene-save" aria-pressed="false">저장</button>
+          <button type="button" id="scene-clear" aria-pressed="false">비우기</button>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="scene-ripple" checked> 고른 패널에서 물결로 불러오기</label>
+    </div>
+
+    <div class="group" id="demo-box" hidden>
+      <h2>데모 설정</h2>
+      <div class="row"><label for="demo-count">패널</label><div class="grow"><input type="range" id="demo-count" min="2" max="24" step="1" value="10"></div><span class="val num" id="demo-count-v">10대</span></div>
+      <div class="row"><label for="demo-lat">지연</label><div class="grow"><input type="range" id="demo-lat" min="0" max="200" step="5" value="5"></div><span class="val num" id="demo-lat-v">5 ms</span></div>
+      <div class="row"><label for="demo-loss">손실</label><div class="grow"><input type="range" id="demo-loss" min="0" max="60" step="5" value="0"></div><span class="val num" id="demo-loss-v">0 %</span></div>
+      <label class="check"><input type="checkbox" id="demo-auto" checked> 누군가 돌리는 것처럼 자동 시연</label>
+      <div class="actions"><button type="button" class="btn small" id="demo-hub-restart">허브 껐다 켜기</button></div>
+      <p class="note">데모는 허브와 패널 펌웨어에 들어가는 코드를 그대로 브라우저에서 돌립니다. 패널 화면은 값이 보이도록 그린 그림이고 실제 패턴은 아닙니다.</p>
+    </div>
+  </section>
+
+  <section class="center">
+    <div class="stage" id="stage">
+      <div class="stage-tools">
+        <button type="button" class="btn" id="map-fit">화면에 맞추기</button>
+        <select id="map-arrange" aria-label="패널 자동 배치">
+          <option value="">자동 배치</option>
+          <option value="row">한 줄</option>
+          <option value="grid">격자</option>
+          <option value="ring">원</option>
+          <option value="stagger">엇갈린 두 줄</option>
+        </select>
+        <button type="button" class="btn" id="map-identify">전체 번호 표시</button>
+      </div>
+      <canvas id="map" aria-label="패널 배치도"></canvas>
+      <div class="stage-empty" id="stage-empty" hidden>
+        <strong>아직 패널이 없습니다</strong>
+        <span>패널이 허브의 Wi-Fi에 들어오면 여기에 나타납니다.</span>
+      </div>
+      <p class="stage-hint" id="stage-hint">패널을 끌어 실제 자리에 놓으세요. 빈 곳을 끌면 지도가 움직이고, 휠로 확대합니다.</p>
+    </div>
+
+    <section class="log" aria-label="로그">
+      <div class="log-head">
+        <h2>로그</h2>
+        <label class="check"><input type="checkbox" id="log-raw"> 오가는 줄 모두 보기</label>
+        <button type="button" class="btn small quiet" id="log-clear">지우기</button>
+      </div>
+      <div class="log-body" id="log" role="log" aria-live="off"></div>
+      <form class="log-form" id="log-form">
+        <input type="text" id="log-input" placeholder='허브에 보낼 줄  {"c":"get"}' autocomplete="off" spellcheck="false" aria-label="허브에 보낼 JSON 한 줄">
+        <button type="submit" class="btn small">보내기</button>
+      </form>
+    </section>
+  </section>
+
+  <section class="col insp" aria-label="고른 패널">
+    <div id="insp-none" class="group">
+      <h2>패널</h2>
+      <p class="empty">지도에서 패널을 누르면 여기서 번호와 자리, 패턴, 노브 값을 바꿉니다.</p>
+    </div>
+
+    <div id="insp" class="group" hidden>
+      <div class="insp-head">
+        <span class="big num" id="insp-id">1</span>
+        <div><h3 id="insp-title" style="font-size:14px">패널</h3><span class="note mono" id="insp-uid"></span></div>
+        <span class="pill" id="insp-state">연결됨</span>
+      </div>
+      <div class="two">
+        <label class="field"><span>번호</span><input type="number" id="p-id" min="1" max="250"></label>
+        <label class="field"><span>이름</span><input type="text" id="p-name" maxlength="16" placeholder="입구 쪽"></label>
+        <label class="field"><span>가로 (칸)</span><input type="number" id="p-x" step="0.25"></label>
+        <label class="field"><span>세로 (칸)</span><input type="number" id="p-y" step="0.25"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="p-linked"> 다른 패널과 함께 움직이기</label>
+    </div>
+
+    <div id="insp-set" class="group" hidden>
+      <h2>콘솔에서 정하기</h2>
+      <div class="seg small" role="group" aria-label="값을 받을 패널">
+        <button type="button" id="scope-one" aria-pressed="true">이 패널만</button>
+        <button type="button" id="scope-wave" aria-pressed="false">여기서 물결로</button>
+        <button type="button" id="scope-all" aria-pressed="false">전체 동시에</button>
+      </div>
+      <label class="field"><span>패턴</span><select id="p-pattern"></select></label>
+      <div id="p-knobs"></div>
+    </div>
+
+    <div id="insp-hand" class="group" hidden>
+      <h2>손으로 돌리기 (가상)</h2>
+      <div id="p-hand"></div>
+      <div class="actions">
+        <button type="button" class="btn small" id="p-power">전원 끄기</button>
+      </div>
+      <p class="note">패널 앞에 선 사람의 손입니다. 왼쪽의 규칙대로 다른 패널에 전해집니다. 고른 패널 위에서 휠을 굴려도 K1이 돌아갑니다 (Shift K2, Alt K3, Ctrl K4).</p>
+    </div>
+
+    <div id="insp-act" class="group" hidden>
+      <h2>패널에게</h2>
+      <div class="actions">
+        <button type="button" class="btn small" id="p-identify">번호 표시</button>
+        <button type="button" class="btn small" id="p-reboot">다시 시작</button>
+        <button type="button" class="btn small" id="p-forget">목록에서 지우기</button>
+      </div>
+    </div>
+
+    <div id="insp-diag" class="group" hidden>
+      <h2>진단</h2>
+      <dl class="diag" id="p-diag"></dl>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="pfe_sim.wasm.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
