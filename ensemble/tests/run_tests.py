@@ -9,6 +9,8 @@ What runs:
             through whole simulated installations (lossy air, power cuts)
   panel     tests/test_panel_glue.cpp: the panel feature's device side,
             compiled against stand-ins for the Patternflow headers
+  tool      tests/test_panels_tool.py: tools/panels.py against stand-in
+            panels (what it refuses to send, what it skips, when it stops)
   console   the page the hub serves (hub/src/console_page.h) is up to date
   --patternflow <checkout>
             the stand-in for features/pf_feature.h still lists the hooks in
@@ -118,6 +120,12 @@ def main():
         ok &= build_and_run(cc, tmp, "core", ROOT / "tests" / "test_core.cpp", [])
         tree = panel_tree(tmp)
         ok &= build_and_run(cc, tmp, "panel", ROOT / "tests" / "test_panel_glue.cpp", [tree])
+    tool = subprocess.run([sys.executable, str(ROOT / "tests" / "test_panels_tool.py")], capture_output=True, text=True)
+    out = (tool.stdout + tool.stderr).strip()
+    print("tool: " + (out.splitlines()[-1] if out else "no output"))
+    if tool.returncode != 0 and out:
+        print("\n".join("  " + line for line in out.splitlines()[:-1]))
+    ok &= tool.returncode == 0
     console = subprocess.run([sys.executable, str(ROOT / "tools" / "build_console.py"), "--check"],
                              capture_output=True, text=True)
     print("console: " + (console.stdout + console.stderr).strip())

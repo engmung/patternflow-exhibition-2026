@@ -87,6 +87,7 @@ inline std::atomic<uint32_t> statStates{0};
 inline std::atomic<uint32_t> statSent{0};
 inline std::atomic<uint32_t> statHub{0};
 inline std::atomic<uint16_t> statKnob[pfe::KNOBS] = {};
+inline char statUid[13] = "";        // written once in setup(), before any request can come
 
 inline void setup() {
   uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
@@ -98,6 +99,7 @@ inline void setup() {
   cfg.fw = PF_IMPROV_FW_VERSION;
   cfg.variant = PF_VARIANT " " PF_VARIANT_VERSION;
   engine.begin(mac, cfg, millis());
+  snprintf(statUid, sizeof(statUid), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   hubFixed = hubIp.fromString(PF_ENSEMBLE_HOST);
   hubKnown = hubFixed;
   Serial.printf("[ENSEMBLE] panel %02x%02x%02x%02x%02x%02x, hub %s, %d detents a knob, K4 %s\n", mac[0],
@@ -261,7 +263,12 @@ inline void drawOverlay(const PFFeatureFrame& frame) {
 
 inline void appendStatus(String& json) {
   const uint32_t hub = statHub.load(std::memory_order_relaxed);
-  json += ",\"ensemble\":{\"linked\":";
+  // `uid` is the name the hub knows this panel by. Nothing else on this
+  // API tells one panel from another, so a script matching the hub's list
+  // to the panels it can reach matches on this.
+  json += ",\"ensemble\":{\"uid\":\"";
+  json += statUid;
+  json += "\",\"linked\":";
   json += statLinked.load(std::memory_order_relaxed) ? "true" : "false";
   json += ",\"id\":";
   json += (int)statId.load(std::memory_order_relaxed);

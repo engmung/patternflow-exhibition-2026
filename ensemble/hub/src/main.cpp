@@ -10,6 +10,10 @@
 //                                   │                          UART (the "COM" jack)
 //                                   └── flash (NVS): setup     WebSocket /ws + the page at /
 //
+// Two more things answer over HTTP, for scripts: /api/status (the hub) and
+// /api/panels (every panel's number, uid and address - what
+// ../../tools/panels.py reads to put firmware on the panels or take it off).
+//
 // Everything that decides anything is ../../core/pfe_conductor.h, the same
 // file the tests and the console's demo run. This file is the wiring:
 // Wi-Fi, a UDP socket, three places a console can be, and flash.
@@ -33,6 +37,7 @@
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/message_buffer.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include "../hub_config.h"
@@ -70,6 +75,12 @@ struct Port {
   bool overflow = false;
 };
 Port usbPort, uartPort;
+
+// The panel list for GET /api/panels. The conductor belongs to loop(); the
+// web server answers from another task. So loop() writes the list here once
+// a second and the handler only copies it, both under the lock.
+SemaphoreHandle_t panelsLock = nullptr;
+char panelsJson[6144] = "[]";
 
 bool wifiUp = false;
 bool udpOpen = false;
@@ -292,6 +303,13 @@ void startServices() {
              (unsigned long)usbStalls);
     req->send(200, "application/json", body);
   });
+  web.on("/api/panels", HTTP_GET, [](AsyncWebServerRequest* req) {
+    static char copy[sizeof(panelsJson) + 16];
+    xSemaphoreTake(panelsLock, portMAX_DELAY);
+    snprintf(copy, sizeof(copy), "{\"panels\":%s}", panelsJson);
+    xSemaphoreGive(panelsLock);
+    req->send(200, "application/json", copy);
+  });
   web.onNotFound([](AsyncWebServerRequest* req) { req->send(404, "text/plain", "not here"); });
   web.begin();
 }
@@ -358,6 +376,7 @@ void setup() {
   toUsb = xMessageBufferCreate(OUT_BUFFER);
   toUart = xMessageBufferCreate(OUT_BUFFER);
   fromSocket = xMessageBufferCreate(IN_BUFFER);
+  panelsLock = xSemaphoreCreateMutex();
 
   // USB first, so the laptop has the port while the Wi-Fi comes up.
   USB.productName(HUB_USB_NAME);
@@ -418,6 +437,14 @@ void loop() {
   if (millis() - lastCleanup > 1000) {
     lastCleanup = millis();
     socket.cleanupClients();
+    static char fresh[sizeof(panelsJson)];
+    pfe::Out out(fresh, sizeof(fresh));
+    conductor.writePanels(out);
+    if (!out.overflow) {
+      xSemaphoreTake(panelsLock, portMAX_DELAY);
+      memcpy(panelsJson, fresh, out.len + 1);
+      xSemaphoreGive(panelsLock);
+    }
   }
 
   if (restartAsked && (int32_t)(millis() - restartAtMs) >= 0) ESP.restart();

@@ -461,6 +461,24 @@ static void testJoin() {
   }
   // A seventh report from a full table would not crash; nothing is "bad".
   CHECK_EQ(sim->conductor().stats().bad, 0);
+  // The list a script reads: every panel, its number, uid and address.
+  static char list[6144];
+  Out lo(list, sizeof(list));
+  sim->conductor().writePanels(lo);
+  CHECK(!lo.overflow);
+  const std::string panels(list);
+  CHECK(panels.front() == '[' && panels.back() == ']');
+  CHECK(panels.find("{\"id\":1,\"uid\":\"025046000001\",\"n\":\"\",\"on\":1,\"ip\":\"192.168.66.2\",\"fw\":\"3.12.0\",\"var\":\"ensemble sim\"}") != std::string::npos);
+  CHECK(panels.find("\"id\":6,\"uid\":\"025046000006\"") != std::string::npos);
+  // Twenty-four of them still fit the hub's buffer.
+  fresh(24, 2);
+  run(1500);
+  for (int i = 0; i < 24; i++)
+    cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(i) + "\",\"name\":\"\uc77c\uc774\uc0bc\uc0ac\uc624\uc721\uce60\"}");
+  Out full(list, sizeof(list));
+  sim->conductor().writePanels(full);
+  CHECK(!full.overflow);
+  CHECK(full.len < 4200);
 }
 
 static void testSync() {

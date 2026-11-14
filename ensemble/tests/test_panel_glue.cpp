@@ -196,6 +196,7 @@ int main() {
   F.appendStatus(json);
   const std::string st = json.c_str();
   CHECK(st.rfind(",\"ensemble\":{", 0) == 0 && st.back() == '}');
+  CHECK(st.find("\"uid\":\"246f28010203\"") != std::string::npos);
   CHECK(st.find("\"linked\":true") != std::string::npos);
   CHECK(st.find("\"id\":1") != std::string::npos);
   CHECK(st.find("\"hub\":\"192.168.66.1\"") != std::string::npos);

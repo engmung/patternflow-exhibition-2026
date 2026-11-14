@@ -403,6 +403,27 @@ class Conductor {
     consoleLines();
   }
 
+  // Every panel the hub knows, as one JSON array: who it is, where it is
+  // on the network and whether it is there. For a script that has to reach
+  // each panel itself - to put firmware on it, or take it off again.
+  void writePanels(Out& o) const {
+    o.ch('[');
+    bool first = true;
+    for (int i = 0; i < MAX_PANELS; i++) {
+      const Panel& p = panels_[i];
+      if (!p.used) continue;
+      if (!first) o.ch(',');
+      first = false;
+      o.str("{\"id\":").u32(p.id).str(",\"uid\":\"");
+      for (int b = 0; b < 6; b++) o.hex8(p.uid[b]);
+      o.str("\",\"n\":").json(p.name, NAME_LEN).str(",\"on\":").u32(p.online ? 1 : 0);
+      o.str(",\"ip\":\"").u32(p.ep.ip >> 24).ch('.').u32((p.ep.ip >> 16) & 255).ch('.')
+          .u32((p.ep.ip >> 8) & 255).ch('.').u32(p.ep.ip & 255).ch('"');
+      o.str(",\"fw\":").json(p.fw, 16).str(",\"var\":").json(p.variant, 16).ch('}');
+    }
+    o.ch(']');
+  }
+
   // How often a busy panel's line may go to the console. The hub lowers it
   // when the only console is on the 115200-baud UART.
   void setConsoleRate(uint32_t minMs) { uiMinMs_ = minMs < 20 ? 20 : minMs; }

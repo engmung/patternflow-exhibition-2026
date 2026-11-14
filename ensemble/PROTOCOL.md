@@ -146,6 +146,17 @@ A `p` line:
 | `fw`, `var` | firmware and variant |
 | `rst`, `lost`, `hands`, `rep` | restarts seen, reports lost, hand moves, reports received |
 
+## The hub over HTTP
+
+For scripts, on the hub's port 80 beside the console page and `/ws`. Read-only.
+
+| Route | |
+|---|---|
+| `GET /api/status` | The hub itself: `fw`, `proto`, `uptime_s`, `mode`, `panels`, `online`, `stations`, `heap`, `rx`, `tx`, `bad`, `lines_dropped`, `usb_stalls` |
+| `GET /api/panels` | `{"panels":[{"id":1,"uid":"246f28010203","n":"door","on":1,"ip":"192.168.66.2","fw":"3.12.0","var":"ensemble v0.1.0"}]}`: every panel the hub knows, refreshed once a second. `ip` is where the panel's last report came from, which is also where its own web console is. [`tools/panels.py`](tools/panels.py) `--hub` reads this |
+
+A panel says its side in its own `/api/status`, in an `ensemble` object: `uid` (the same twelve hex digits), `linked`, `id`, `hub`, `states`, `sent`, `detents`, `knob`.
+
 ## What the hub keeps
 
 Across restarts, in flash: the config, each panel's uid, number, place, name and linked flag, and the scenes. Not the live targets: after a restart the panels report where they are and the hub takes that.

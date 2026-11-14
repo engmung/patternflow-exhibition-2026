@@ -85,23 +85,27 @@ PF_BUILD_DIR=$HOME/pf-build ./firmware/bundles/build.sh ensemble
 
 USB는 필요 없다. 에디션을 바꿀 때와 같은 길이다. Patternflow 코어에는 `/update`가 있고, 이 빌드는 코어를 건드리지 않으니 들어갈 때도 나올 때도 그 길을 쓴다. 패널과 같은 Wi-Fi에 있는 컴퓨터에서 한다.
 
-- 브라우저: `http://<패널 주소>/update`를 열고 `firmware.bin`을 끌어다 놓는다.
-- 한 대, 빌드까지 한 번에: `./firmware/bundles/build.sh ensemble flash <패널 주소>`
-- 여러 대: 주소를 한 줄에 하나씩 `panels.txt`에 적고
+여러 대는 [`tools/panels.py`](tools/panels.py)로 한 번에 한다. Python만 있으면 되고 따로 깔 것은 없다.
 
-  ```bash
-  BIN=$HOME/pf-build/firmware/firmware.bin
-  while read p; do
-    echo "== $p"
-    curl -sS --max-time 180 -F "firmware=@$BIN" "http://$p/update?size=$(stat -c%s "$BIN")"; echo
-  done < panels.txt
-  ```
+```bash
+python ensemble/tools/panels.py scan -o panels.txt                             # 이 네트워크의 패널을 찾아 목록으로
+python ensemble/tools/panels.py flash $HOME/pf-build/firmware/firmware.bin     # 목록의 패널 전부에 올린다
+python ensemble/tools/panels.py status                                         # 무엇이 돌고 있는지
+```
 
-패널 주소는 IP(패널의 NETWORK 화면이나 공유기의 목록)를 쓰거나 `patternflow-a1b2.local`처럼 MAC 끝 네 자리가 붙은 이름을 쓴다. `patternflow.local`은 모든 패널이 함께 쓰는 이름이라 여러 대가 켜져 있으면 어느 패널이 답할지 모른다.
+`flash`는 조심해서 올린다. 켜지지 않는 이미지는 Wi-Fi로 되돌릴 수 없기 때문이다.
+
+- 올리기 전에 파일을 본다. ESP32-S3 앱 이미지가 아니거나, 패널의 3 MB 자리보다 크거나, `/update`가 들어 있지 않으면(허브 펌웨어를 잘못 고른 경우) 보내지 않는다.
+- 이미 그 이미지를 돌리는 패널은 건너뛴다. 그래서 중간에 실패하면 같은 명령을 다시 돌리면 되고, 남은 패널만 올라간다.
+- 첫 한 대를 먼저 올리고, 다시 켜져서 10초 동안 그대로 있는지 본 뒤 나머지를 올린다. 돌아오지 않는 패널이 나오면 그 자리에서 멈추고 다음 패널에는 손대지 않는다.
+
+**그래도 첫 한 대는 USB를 꽂을 수 있는 패널로 한다.** 이 이미지는 아직 보드에서 켜 본 적이 없다. 켜지다 멈추면 그 한 대는 USB로 다시 구워야 한다([patternflow.work/flash](https://patternflow.work/flash)). `panels.txt`의 맨 윗줄이 첫 대다.
+
+패널을 고르는 방법은 넷이다: 명령 뒤에 주소를 적거나, `--hub <허브 주소>`(허브가 아는 패널, `--only 1,3`으로 번호를 고른다), `--file <목록>`, 아무것도 없으면 지금 폴더의 `panels.txt`. 주소는 IP거나 `patternflow-a1b2.local`처럼 MAC 끝 네 자리가 붙은 이름이다. `patternflow.local`은 모든 패널이 함께 쓰는 이름이라 여러 대가 켜져 있으면 어느 패널이 답할지 모른다.
+
+한 대만이면 도구 없이도 된다. 브라우저에서 `http://<패널 주소>/update`를 열어 `firmware.bin`을 끌어다 놓거나, 빌드까지 한 번에 `./firmware/bundles/build.sh ensemble flash <패널 주소>`.
 
 패턴, 저장된 Wi-Fi, 밝기, 노브 설정은 그대로 남는다. 파티션 표가 같고 이 기능은 플래시에 아무것도 쓰지 않는다.
-
-**첫 한 대는 USB를 꽂을 수 있는 패널로 한다.** 이 이미지는 아직 보드에서 켜 본 적이 없다. 켜지다 멈추는 이미지는 `/update`까지 가지 못하니 Wi-Fi로는 되돌릴 수 없고, 그때는 USB로 다시 굽는다([patternflow.work/flash](https://patternflow.work/flash)). 한 대가 켜지고 허브에 붙는 것을 본 다음 나머지를 올린다.
 
 ### 허브에 붙이기
 
@@ -113,22 +117,28 @@ USB는 필요 없다. 에디션을 바꿀 때와 같은 길이다. Patternflow �
 | **전용 공유기를 작업실과 전시장에서 같이 쓴다** | 그 공유기를 패널에 한 번 저장해 두면 끝 |
 | **허브의 핫스팟** | 허브의 Wi-Fi를 패널마다 저장한다 (아래) |
 
-패널에 Wi-Fi를 더 저장하는 것도 Wi-Fi로 한다. 패널의 Wi-Fi 화면에서 넣거나, 한 줄로:
+패널에 Wi-Fi를 더 저장하는 것도 Wi-Fi로 한다.
 
 ```bash
-curl -X POST "http://<패널 주소>/api/wifi" --data-urlencode "ssid=PatternflowEnsemble" --data-urlencode "pass=<비밀번호>" -d connect=1
+python ensemble/tools/panels.py wifi-add "PatternflowEnsemble" --connect      # 비밀번호는 물어본다
 ```
 
-`connect=1`이면 그 자리에서 옮겨 가고, 다음부터도 그 네트워크를 먼저 찾는다. 빼면 저장만 한다. 패널은 네트워크를 다섯 개까지 기억하고, 먼저 찾던 것이 안 보이면 5초쯤마다 다음 것을 시도한다. 그래서 허브를 끄면 패널들은 저장돼 있던 작업실 Wi-Fi로 알아서 돌아온다.
+`--connect`면 그 자리에서 옮겨 가고, 다음부터도 그 네트워크를 먼저 찾는다. 빼면 저장만 한다(전시장의 공유기를 미리 넣어 둘 때). 패널은 네트워크를 다섯 개까지 기억하고, 먼저 찾던 것이 안 보이면 5초쯤마다 다음 것을 시도한다. 그래서 허브를 끄면 패널들은 저장돼 있던 작업실 Wi-Fi로 알아서 돌아온다. 한 대만이면 패널의 Wi-Fi 화면에서 넣어도 된다.
 
 `patternflow_secrets.h`에 허브의 Wi-Fi를 적어 빌드하는 방법은 **저장된 네트워크가 하나도 없는 패널**(막 지우고 구운 보드)에만 통한다. 하나라도 저장돼 있으면 코어는 컴파일된 것을 쓰지 않는다. 쓰던 패널에는 위의 방법을 쓴다.
 
 ### 원래 펌웨어로 되돌리기
 
-같은 길로 나온다. 원래 쓰던 에디션의 `.bin`을 `/update`에 올리면 된다. 위의 반복문에서 `BIN`만 바꾸면 여러 대가 한 번에 돌아가고, 노트북이 인터넷과 패널에 함께 닿는 네트워크에 있으면 [patternflow.work/editions](https://patternflow.work/editions)의 한 번 누르기도 그대로 된다(패널마다 그 패널의 주소를 적는다).
+같은 길로 나온다. 원래 쓰던 에디션의 `.bin`을 올리면 된다.
 
-- 패널 주소는 콘솔의 **주소 복사**가 모아 준다. 지금 허브에 붙어 있는 패널의 주소가 한 줄에 하나씩 복사되니 `panels.txt`에 붙여 넣는다.
-- 패턴, Wi-Fi, 밝기는 그대로다. 패널에 저장해 둔 허브의 Wi-Fi는 목록에 남으니, 없애려면 패널의 Wi-Fi 화면에서 지운다(`curl -X DELETE "http://<패널 주소>/api/wifi?ssid=PatternflowEnsemble"`).
+```bash
+python ensemble/tools/panels.py flash <원래 에디션의 .bin> --hub pf-ensemble.local     # 허브가 아는 패널 전부
+python ensemble/tools/panels.py wifi-forget "PatternflowEnsemble"                       # 허브의 Wi-Fi를 저장했었다면
+```
+
+- `--hub`는 허브에게 패널 목록을 물어 온다(`http://<허브>/api/panels`). 허브의 핫스팟에서는 주소가 `192.168.66.1`이다. 이름이 안 풀리는 컴퓨터에서는 허브의 IP를 적는다. 허브 없이 하려면 `scan`으로 다시 찾거나, 콘솔의 **주소 복사**로 모은 주소를 `panels.txt`에 붙여 넣는다.
+- 노트북이 인터넷과 패널에 함께 닿는 네트워크에 있으면 [patternflow.work/editions](https://patternflow.work/editions)의 한 번 누르기도 그대로 된다(패널마다 그 패널의 주소를 적는다).
+- 패턴, Wi-Fi, 밝기는 그대로다.
 - 허브의 핫스팟에 붙어 있는 패널은 인터넷이 없는 네트워크에 있다. `.bin`을 미리 받아 두고 노트북을 그 핫스팟에 넣어 올리거나, 허브를 꺼서 패널이 작업실 Wi-Fi로 돌아온 뒤에 올린다.
 - 허브 자체는 Wi-Fi로 굽지 않는다. 노트북에 USB로 꽂혀 있으니 그대로 굽는다.
 
@@ -174,6 +184,7 @@ C++17 컴파일러가 있어야 한다(g++, clang++, 없으면 `python -m pip in
 
 - **core**: 규약의 바이트, 패널 쪽 엔진, 허브를 가상 설치 통째로 돌린다. 동시와 물결의 도착 시간, 엇갈리는 물결, 패킷 30% 손실, 순서가 뒤바뀐 패킷, 패널 전원 재시작, 5초와 12초 Wi-Fi 끊김, 허브 재시작, 24대.
 - **panel**: 패널 기능의 기기 쪽(소켓, 프레임 훅, 메뉴 잠금, 번호 표시)을 Patternflow 헤더의 대역(`tests/panel_stub/`)에 대고 컴파일해, 진짜 허브 코드와 맞물려 돌린다.
+- **tool**: `tools/panels.py`를 패널 대역(패널의 HTTP 규약대로 답하는 작은 서버)에 대고 돌린다. 잘못된 파일을 보내지 않는지, 이미 올라간 패널을 건너뛰는지, 돌아오지 않는 패널에서 멈추는지.
 - **console**: 허브가 내주는 페이지(`hub/src/console_page.h`)가 `console/`과 같은지.
 
 `core/`를 고치면 `python ensemble/tools/build_wasm.py`로 데모를 다시 만들고, `console/`을 고치면 `python ensemble/tools/build_console.py`로 허브의 페이지를 다시 만든다.
@@ -184,8 +195,8 @@ C++17 컴파일러가 있어야 한다(g++, clang++, 없으면 `python -m pip in
 
 확인된 것:
 
-- PC 테스트 통과(core 358, panel 56). 주소·정의되지 않은 동작 검사(ASan, UBSan)를 켠 채로.
-- 허브 펌웨어가 `espressif32@7.0.1`에서 경고 없이 컴파일·링크된다(RAM 29%, 플래시 27%). 핫스팟 모드와 공유기 모드 둘 다.
+- PC 테스트 통과(core 364, panel 57, tool 44). C++ 쪽은 주소·정의되지 않은 동작 검사(ASan, UBSan)를 켠 채로.
+- 허브 펌웨어가 `espressif32@7.0.1`에서 경고 없이 컴파일·링크된다(RAM 35%, 플래시 27%). 핫스팟 모드와 공유기 모드 둘 다.
 - 콘솔이 헤드리스 Chromium에서 오류 없이 뜨고 데모가 돈다(데스크톱, 전화기 폭, 밝은·어두운 테마).
 - 패널 기능의 훅 순서가 Patternflow v3.12.0의 `features/pf_feature.h`와 같다.
 
@@ -199,6 +210,7 @@ C++17 컴파일러가 있어야 한다(g++, clang++, 없으면 `python -m pip in
 - 공유기 모드 전체.
 - 패턴 번호는 패널마다 같은 패턴이 같은 순서로 깔려 있다고 본다. 다르게 깔린 패널이 섞이면 같은 번호가 다른 패턴이 된다.
 - Wi-Fi로 올리고 되돌리는 길(4장)은 Patternflow의 문서와 소스(`docs/EDITIONS.md`, `docs/rest-api.md`, `src/core_web_update.h`, `src/core_wifi.h`)를 읽고 쓴 것이다. 이 이미지로 해 본 적은 없다.
+- `tools/panels.py`는 진짜 패널에 대고 돌려 본 적이 없다. 테스트의 상대는 규약을 읽고 만든 대역이다. 처음 쓸 때는 `status`와 `scan`처럼 읽기만 하는 명령부터, `flash`는 한 대만 적어서 해 본다. 이미지 파일에서 빌드 번호(0xB0의 네 바이트)와 칩 번호가 있는 자리는 실제 ESP32-S3 이미지 하나로 확인했다. 패널이 그 값을 `/api/status`의 `build`로 말한다는 것은 소스(`src/core_build.h`)로만 확인했다.
 
 들어 있지 않은 것:
 
@@ -216,7 +228,7 @@ C++17 컴파일러가 있어야 한다(g++, clang++, 없으면 `python -m pip in
 | [`panel/`](panel/) | 패널 기능과 번들, `install.py` |
 | [`console/`](console/) | 콘솔. `pfe_sim.wasm.js`는 `core/`에서 만든 데모 |
 | [`tests/`](tests/) | PC 테스트와 `run_tests.py` |
-| [`tools/`](tools/) | `build_wasm.py`, `build_console.py` |
+| [`tools/`](tools/) | `panels.py`(패널 여러 대에 Wi-Fi로 올리기·되돌리기·Wi-Fi 저장), `build_wasm.py`, `build_console.py` |
 | [`PROTOCOL.md`](PROTOCOL.md) | 패널과 허브 사이의 바이트, 허브와 콘솔 사이의 줄 |
 
 코드는 MIT.
