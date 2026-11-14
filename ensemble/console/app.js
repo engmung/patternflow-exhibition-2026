@@ -986,6 +986,21 @@
       $('map-identify').textContent = allIdentify ? '번호 표시 끄기' : '전체 번호 표시';
     });
 
+    // Every connected panel's address, one a line, in the order of their
+    // numbers: what a loop that pushes firmware to each of them reads.
+    $('map-addresses').addEventListener('click', async () => {
+      const list = [...S.panels.values()].filter((p) => p.on).sort((a, b) => a.id - b.id);
+      if (!list.length) { toast('연결된 패널이 없습니다.'); return; }
+      const text = list.map((p) => p.ip).join('\n');
+      for (const p of list) log('', `패널 ${p.id}  ${p.ip}  ${p.uid}  ${p.fw || '?'} ${p.var || ''}`);
+      try {
+        await navigator.clipboard.writeText(text + '\n');
+        toast(`패널 ${list.length}대의 주소를 복사했습니다.`);
+      } catch (_) {
+        toast('복사하지 못했습니다. 아래 로그에 주소를 적어 두었습니다.');
+      }
+    });
+
     for (const sc of ['one', 'wave', 'all'])
       $('scope-' + sc).addEventListener('click', () => {
         S.scope = sc;

@@ -76,12 +76,61 @@ cd patternflow
 PF_BUILD_DIR=$HOME/pf-build ./firmware/bundles/build.sh ensemble
 ```
 
-`install.py`가 넣는 것은 `firmware/patternflow/features/ensemble/`(기능과 `core/`의 헤더 셋)와 `firmware/bundles/ensemble/`(빌드를 정하는 파일 둘)뿐이다. 굽는 법은 전시 때와 같다([전체 안내 4장](../README.ko.md)).
+`install.py`가 넣는 것은 `firmware/patternflow/features/ensemble/`(기능과 `core/`의 헤더 셋)와 `firmware/bundles/ensemble/`(빌드를 정하는 파일 둘)뿐이다. 나오는 이미지는 `$PF_BUILD_DIR/firmware/firmware.bin`이다.
 
-- `patternflow_secrets.h`에 허브의 Wi-Fi를 적어 두면 이 빌드로 구운 패널은 모두 알아서 허브에 붙는다. 적지 않으면 패널마다 Wi-Fi 화면에서 고른다.
-- 패널은 허브의 주소를 몰라도 된다. 네트워크 전체에 대고 부르다가 허브가 답하면 그 뒤로는 허브하고만 이야기한다.
 - 이 빌드에는 `ensemble`만 들어 있다. OSC, MQTT, 네트워크 MIDI는 저마다 노브와 패턴을 움직이기 때문에, 함께 넣으려면 누가 이끄는지부터 정해야 한다.
 - 전시용 패치(`firmware/panel-exhibit-2026.patch`)와는 따로다. 그 패치의 작가 패턴 여섯과 한 이미지에 넣는 것은 아직 해 보지 않았다.
+
+### Wi-Fi로 올리기
+
+USB는 필요 없다. 에디션을 바꿀 때와 같은 길이다. Patternflow 코어에는 `/update`가 있고, 이 빌드는 코어를 건드리지 않으니 들어갈 때도 나올 때도 그 길을 쓴다. 패널과 같은 Wi-Fi에 있는 컴퓨터에서 한다.
+
+- 브라우저: `http://<패널 주소>/update`를 열고 `firmware.bin`을 끌어다 놓는다.
+- 한 대, 빌드까지 한 번에: `./firmware/bundles/build.sh ensemble flash <패널 주소>`
+- 여러 대: 주소를 한 줄에 하나씩 `panels.txt`에 적고
+
+  ```bash
+  BIN=$HOME/pf-build/firmware/firmware.bin
+  while read p; do
+    echo "== $p"
+    curl -sS --max-time 180 -F "firmware=@$BIN" "http://$p/update?size=$(stat -c%s "$BIN")"; echo
+  done < panels.txt
+  ```
+
+패널 주소는 IP(패널의 NETWORK 화면이나 공유기의 목록)를 쓰거나 `patternflow-a1b2.local`처럼 MAC 끝 네 자리가 붙은 이름을 쓴다. `patternflow.local`은 모든 패널이 함께 쓰는 이름이라 여러 대가 켜져 있으면 어느 패널이 답할지 모른다.
+
+패턴, 저장된 Wi-Fi, 밝기, 노브 설정은 그대로 남는다. 파티션 표가 같고 이 기능은 플래시에 아무것도 쓰지 않는다.
+
+**첫 한 대는 USB를 꽂을 수 있는 패널로 한다.** 이 이미지는 아직 보드에서 켜 본 적이 없다. 켜지다 멈추는 이미지는 `/update`까지 가지 못하니 Wi-Fi로는 되돌릴 수 없고, 그때는 USB로 다시 굽는다([patternflow.work/flash](https://patternflow.work/flash)). 한 대가 켜지고 허브에 붙는 것을 본 다음 나머지를 올린다.
+
+### 허브에 붙이기
+
+패널은 허브의 주소를 몰라도 된다. 같은 네트워크에 있기만 하면 전체에 대고 부르다가 허브가 답하는 순간부터 허브하고만 이야기한다. 그래서 할 일은 "같은 Wi-Fi에 있게 하는 것" 하나다.
+
+| | 패널에서 할 일 |
+|---|---|
+| **패널이 이미 쓰는 Wi-Fi에 허브를 넣는다** (공유기 모드, `hub_secrets.h`의 `HUB_STA_SSID`) | 없음. 이미지를 올리면 다시 켜지면서 바로 붙는다. 작업실에서 만지고 디버깅할 때 가장 편하다. 노트북도 같은 Wi-Fi에 있으니 패널의 웹 콘솔과 허브의 콘솔(`http://pf-ensemble.local/`)이 함께 열리고 인터넷도 된다 |
+| **전용 공유기를 작업실과 전시장에서 같이 쓴다** | 그 공유기를 패널에 한 번 저장해 두면 끝 |
+| **허브의 핫스팟** | 허브의 Wi-Fi를 패널마다 저장한다 (아래) |
+
+패널에 Wi-Fi를 더 저장하는 것도 Wi-Fi로 한다. 패널의 Wi-Fi 화면에서 넣거나, 한 줄로:
+
+```bash
+curl -X POST "http://<패널 주소>/api/wifi" --data-urlencode "ssid=PatternflowEnsemble" --data-urlencode "pass=<비밀번호>" -d connect=1
+```
+
+`connect=1`이면 그 자리에서 옮겨 가고, 다음부터도 그 네트워크를 먼저 찾는다. 빼면 저장만 한다. 패널은 네트워크를 다섯 개까지 기억하고, 먼저 찾던 것이 안 보이면 5초쯤마다 다음 것을 시도한다. 그래서 허브를 끄면 패널들은 저장돼 있던 작업실 Wi-Fi로 알아서 돌아온다.
+
+`patternflow_secrets.h`에 허브의 Wi-Fi를 적어 빌드하는 방법은 **저장된 네트워크가 하나도 없는 패널**(막 지우고 구운 보드)에만 통한다. 하나라도 저장돼 있으면 코어는 컴파일된 것을 쓰지 않는다. 쓰던 패널에는 위의 방법을 쓴다.
+
+### 원래 펌웨어로 되돌리기
+
+같은 길로 나온다. 원래 쓰던 에디션의 `.bin`을 `/update`에 올리면 된다. 위의 반복문에서 `BIN`만 바꾸면 여러 대가 한 번에 돌아가고, 노트북이 인터넷과 패널에 함께 닿는 네트워크에 있으면 [patternflow.work/editions](https://patternflow.work/editions)의 한 번 누르기도 그대로 된다(패널마다 그 패널의 주소를 적는다).
+
+- 패널 주소는 콘솔의 **주소 복사**가 모아 준다. 지금 허브에 붙어 있는 패널의 주소가 한 줄에 하나씩 복사되니 `panels.txt`에 붙여 넣는다.
+- 패턴, Wi-Fi, 밝기는 그대로다. 패널에 저장해 둔 허브의 Wi-Fi는 목록에 남으니, 없애려면 패널의 Wi-Fi 화면에서 지운다(`curl -X DELETE "http://<패널 주소>/api/wifi?ssid=PatternflowEnsemble"`).
+- 허브의 핫스팟에 붙어 있는 패널은 인터넷이 없는 네트워크에 있다. `.bin`을 미리 받아 두고 노트북을 그 핫스팟에 넣어 올리거나, 허브를 꺼서 패널이 작업실 Wi-Fi로 돌아온 뒤에 올린다.
+- 허브 자체는 Wi-Fi로 굽지 않는다. 노트북에 USB로 꽂혀 있으니 그대로 굽는다.
 
 ## 5. 콘솔
 
@@ -149,6 +198,7 @@ C++17 컴파일러가 있어야 한다(g++, clang++, 없으면 `python -m pip in
 - 9대째부터의 주소 충돌은 ESP-IDF 소스와 설정값을 읽고 쓴 것이다. 실제로 일으켜 보지는 않았다.
 - 공유기 모드 전체.
 - 패턴 번호는 패널마다 같은 패턴이 같은 순서로 깔려 있다고 본다. 다르게 깔린 패널이 섞이면 같은 번호가 다른 패턴이 된다.
+- Wi-Fi로 올리고 되돌리는 길(4장)은 Patternflow의 문서와 소스(`docs/EDITIONS.md`, `docs/rest-api.md`, `src/core_web_update.h`, `src/core_wifi.h`)를 읽고 쓴 것이다. 이 이미지로 해 본 적은 없다.
 
 들어 있지 않은 것:
 
