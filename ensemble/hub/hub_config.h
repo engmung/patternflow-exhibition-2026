@@ -68,6 +68,22 @@
 #ifndef HUB_USB_NAME
 #  define HUB_USB_NAME "Patternflow Ensemble"
 #endif
+// The USB-MIDI interface beside the console (README 5½). 0 leaves the USB
+// jack a serial port only.
+#ifndef HUB_USB_MIDI
+#  define HUB_USB_MIDI 1
+#endif
+// The USB jack's identity. Not the core's default 303A:1001: that is also the
+// S3's own USB-Serial/JTAG unit, and a Windows that has had its WinUSB driver
+// installed (ESP-IDF, Zadig) puts that driver on interface 2 of any 303A:1001 -
+// which here is the MIDI interface, so no MIDI device appeared (2026-11-14).
+// Any other product number gets Windows' own serial and MIDI drivers.
+#ifndef HUB_USB_VID
+#  define HUB_USB_VID 0x303A
+#endif
+#ifndef HUB_USB_PID
+#  define HUB_USB_PID 0x8E50
+#endif
 
 // A console port that has said nothing for this long gets no more lines.
 // The page sends a ping every three seconds.
@@ -81,6 +97,20 @@
 #endif
 #ifndef HUB_USB_QUIET_MS
 #  define HUB_USB_QUIET_MS 2000
+#endif
+// 1 puts a line about the USB jack's two pipes (serial and MIDI) in the log
+// every two seconds - what was handed over, what is waiting for the
+// computer, what src/usb_s3.cpp had to repair - and answers /api/usb with
+// the USB controller's registers. For when the jack misbehaves;
+// -DHUB_USB_DEBUG=1.
+#ifndef HUB_USB_DEBUG
+#  define HUB_USB_DEBUG 0
+#endif
+// Everything that touches the USB controller on one core (src/usb_s3.cpp,
+// point 1). 0 leaves TinyUSB's task and the hub's USB writer where they
+// used to be, which is how the stalls were found and is of no other use.
+#ifndef HUB_USB_ONE_CORE
+#  define HUB_USB_ONE_CORE 1
 #endif
 // The setup is written to flash this long after the last change, so
 // dragging a panel across the map is one write and not fifty.

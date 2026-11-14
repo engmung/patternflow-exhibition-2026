@@ -73,6 +73,22 @@ class Panel:
         self.wifi = {}
         self.reset_reason = "poweron"
         self.requests = 0
+        # Patterns: the presets compiled into the image, then the modules on
+        # FATFS - alphabetical, or as catalog.txt lists them (pattern_registry.h).
+        self.presets = ["Origin"]
+        self.modules, self.sidecars, self.catalog = {}, {}, None
+        self.puts = []
+        self.fs_error = ""            # "not formatted": a board fresh from the flasher
+        self.formats = 0
+        # The longest piece of free memory, as /api/status says it; None: the
+        # image does not say. A module longer than that is cut off mid-upload.
+        # A restart puts it back to what a fresh panel has.
+        self.heap_largest = quirks.get("heap_largest")
+        self.restarts = 0
+        # Saved networks as core_wifi.h keeps them: a new or re-sent one goes
+        # to the front, and the boot preference follows the network it named,
+        # not the slot. connect=1 switches now and leaves the preference alone.
+        self.networks, self.boot_idx, self.current = ["Studio"], 0, "Studio"
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -121,11 +137,15 @@ class Panel:
                 self.build, self.variant = self.next
                 self.next = None
             self.reset_reason = "sw"
+            self.current = self.networks[self.boot_idx] if self.networks else None   # a boot starts from bootIdx
         if self.quirks.get("crash_loop") and self.variant == "ensemble" and now - self.boot > 0.9:
             self.boot = now
             self.reset_reason = "panic"
 
     def restart(self, into=None, forever=False):
+        self.restarts += 1
+        if self.heap_largest is not None:
+            self.heap_largest = 61428
         now = time.monotonic()
         self.down_from = now + 0.3
         self.down_until = None if forever else now + 1.3
@@ -140,6 +160,10 @@ class Panel:
                 status["build"] = self.build
             if self.variant == "ensemble":
                 status["ensemble"] = {"uid": "246f28" + self.address[-6:].replace(":", "0"), "linked": True, "hub": "192.168.0.9", "id": 3}
+            status["fsMounted"] = not self.fs_error
+            status["fsError"] = self.fs_error
+            if self.heap_largest is not None:
+                status["heapLargest"] = self.heap_largest
             return h.reply(200, status)
         if path == "/update/status":
             return h.reply(200, {"armed": True, "busy": False, "version": "3.12.0", "lastError": "flash write failed",
@@ -174,19 +198,109 @@ class Panel:
             fields = {k: v[0] for k, v in {**query, **form}.items()}
             if not fields.get("ssid"):
                 return h.reply(400, {"ok": False, "error": "ssid missing"})
-            self.wifi[fields["ssid"]] = {"pass": fields.get("pass", ""), "connect": fields.get("connect") == "1"}
+            ssid = fields["ssid"]
+            self.wifi[ssid] = {"pass": fields.get("pass", ""), "connect": fields.get("connect") == "1"}
+            preferred = self.networks[self.boot_idx] if self.networks else None
+            if ssid in self.networks:
+                self.networks.remove(ssid)
+            self.networks.insert(0, ssid)
+            del self.networks[5:]
+            self.boot_idx = self.networks.index(preferred) if preferred in self.networks else 0
+            if fields.get("connect") == "1":
+                self.current = ssid
             return h.reply(200, {"ok": True})
+        if path == "/api/wifi" and method == "GET":
+            return h.reply(200, {"max": 5, "connected": self.current is not None, "current": self.current or "",
+                                 "bootIdx": self.boot_idx, "networks": [{"ssid": s} for s in self.networks]})
+        if path == "/api/wifi/boot" and method == "POST":
+            form = urllib.parse.parse_qs(body.decode())
+            idx = int((form.get("bootIdx") or query.get("bootIdx") or ["-1"])[0])
+            if not 0 <= idx < len(self.networks):
+                return h.reply(400, {"ok": False, "error": "invalid boot index"})
+            self.boot_idx = idx
+            return h.reply(200, {"ok": True, "bootIdx": idx, "reboot": True})
         if path == "/api/wifi" and method == "DELETE":
             ssid = query.get("ssid", [""])[0]
             if ssid in self.wifi:
                 del self.wifi[ssid]
+                preferred = self.networks[self.boot_idx] if self.networks else None
+                if ssid in self.networks:
+                    self.networks.remove(ssid)
+                self.boot_idx = self.networks.index(preferred) if preferred in self.networks else 0
                 return h.reply(200, {"ok": True})
             return h.reply(404, {"ok": False, "error": "not saved"})
         if path == "/api/wifi/reboot" and method == "POST":
             h.reply(200, {"ok": True})
             self.restart()
             return None
+        if path == "/api/patterns" and method == "GET":
+            order = []
+            for slug in self.catalog or []:
+                if slug in self.modules and slug not in order:
+                    order.append(slug)
+            order += [s for s in sorted(self.modules) if s not in order]
+            listing = [{"index": i, "name": n, "module": None} for i, n in enumerate(self.presets)]
+            listing += [{"index": len(self.presets) + i, "name": s.replace("_", " ").title(), "module": s}
+                        for i, s in enumerate(order)]
+            return h.reply(200, {"active": 0, "presets": len(self.presets), "mounted": not self.fs_error,
+                                 "free": 9_000_000, "patterns": listing})
+        if path == "/api/patterns/format" and method == "POST":
+            self.formats += 1
+            if self.fs_error.startswith("not formatted"):
+                self.fs_error = ""
+                self.modules, self.sidecars, self.catalog = {}, {}, None
+                return h.reply(200, {"ok": True})
+            return h.reply(500, {"ok": False, "error": self.fs_error or "format failed"})
+        if path == "/api/patterns" and method == "PUT" and self.fs_error:
+            return h.reply(400, {"ok": False, "error": "filesystem not mounted"})
+        if path == "/api/patterns/file" and method == "GET":
+            slug, ext = query.get("slug", [""])[0], query.get("ext", ["pfm"])[0]
+            data = (self.modules if ext == "pfm" else self.sidecars).get(slug)
+            if data is None:
+                return h.reply(404, {"error": "not found"})
+            h.send_response(200)
+            h.send_header("Content-Length", str(len(data)))
+            h.send_header("Connection", "close")
+            h.end_headers()
+            h.wfile.write(data)
+            h.close_connection = True
+            return None
+        if path == "/api/patterns" and method == "PUT":
+            name = h.headers.get("X-PF-Name", "")
+            if self.heap_largest is not None and len(body) > self.heap_largest:
+                h.close_connection = True         # no room for it in one piece: the panel drops the upload
+                return None
+            self.puts.append(name)
+            if name == "catalog.txt":
+                self.catalog = [line.strip() for line in body.decode().splitlines() if line.strip()]
+            elif name.endswith(".pfm"):
+                self.modules[name[:-4]] = body
+            elif name.endswith(".json"):
+                self.sidecars[name[:-5]] = body
+            else:
+                return h.reply(400, {"ok": False, "error": "only .pfm, .json or catalog.txt accepted"})
+            return h.reply(200, {"ok": True, "slug": name.rsplit(".", 1)[0], "bytes": len(body)})
+        if path == "/api/patterns/delete" and method == "POST":
+            slugs = [line.strip() for line in body.decode().splitlines() if line.strip()]
+            if slugs == ["*"]:
+                slugs = list(self.modules)
+            removed = 0
+            for slug in slugs:
+                removed += 1 if self.modules.pop(slug, None) is not None else 0
+                self.sidecars.pop(slug, None)
+            return h.reply(200, {"ok": True, "removed": removed, "missing": len(slugs) - removed})
         return h.reply(404, {"error": "no such route"})
+
+    def stock(self, *slugs):
+        for slug in slugs:
+            self.modules[slug] = f"PFM:{slug}".encode()
+            self.sidecars[slug] = json.dumps({"name": slug.title(), "slug": slug}).encode()
+        return self
+
+    def listed(self):
+        """The module slugs in the panel's index order, as /api/patterns gives them."""
+        data = panels.pattern_list(self.address)
+        return data["modules"] if data else None
 
 
 class Hub:
@@ -198,12 +312,12 @@ class Hub:
                 pass
 
             def do_GET(self):
-                ok = self.path == "/api/panels"
-                self.send_response(200 if ok else 404)
-                self.send_header("Content-Length", str(len(body) if ok else 0))
+                reply = body if self.path == "/api/panels" else b'{"fw":"0.1.0"}' if self.path == "/api/status" else None
+                self.send_response(200 if reply else 404)
+                self.send_header("Content-Length", str(len(reply) if reply else 0))
                 self.end_headers()
-                if ok:
-                    self.wfile.write(body)
+                if reply:
+                    self.wfile.write(reply)
 
         self.server = HTTPServer(("127.0.0.1", 0), Handler)
         self.address = f"127.0.0.1:{self.server.server_address[1]}"
@@ -344,6 +458,218 @@ def main():
     check(code == 0, "reboot is acknowledged")
     time.sleep(0.5)
     check(panels.get_json(p2.address, "/api/status", timeout=1.0) is None, "and the panel goes away for a moment")
+
+    # --connect has to outlast a restart (2026-11-14: a panel restarted from
+    # the console went back to the studio Wi-Fi, because connect=1 alone
+    # leaves the boot preference where it was).
+    roam = Panel()
+    code, out = run("wifi-add", "PatternflowEnsemble", roam.address, "--pass", "pw", "--connect")
+    check(code == 0 and roam.current == "PatternflowEnsemble", f"--connect moves the panel now\n{out}")
+    check(roam.networks[roam.boot_idx] == "PatternflowEnsemble", "and makes the next boot start there")
+    run("reboot", roam.address)
+    time.sleep(1.8)
+    wifi_now = panels.get_json(roam.address, "/api/wifi", timeout=1.0) or {}
+    check(wifi_now.get("current") == "PatternflowEnsemble", f"after a restart it is still there: {wifi_now}")
+    code, out = run("wifi-add", "Venue", roam.address, "--pass", "pw")
+    check(code == 0 and roam.networks[roam.boot_idx] == "PatternflowEnsemble" and roam.current == "PatternflowEnsemble",
+          "storing another network without --connect changes neither")
+    code, out = run("wifi-add", "PatternflowEnsemble", roam.address, "--pass", "pw", "--connect")
+    check(code == 0 and "이미 그 네트워크에 있음" in out, f"run again where it already is, it only fixes the preference\n{out}")
+
+    # ── Addresses after an option are still panels (Python before 3.12) ─
+    q1 = Panel()
+    code, out = run("wifi-add", "Late", "--connect", "--pass", "pw", q1.address)
+    check(code == 0 and "Late" in q1.wifi, f"an address after the options is a panel\n{out}")
+    code, out = run("wifi-add", "Late", "--pass", "pw", q1.address, "--bogus")
+    check(code != 0, "an unknown option is still refused")
+    eof = Panel()
+    panels.input = lambda prompt="": (_ for _ in ()).throw(EOFError())
+    code, out = run("flash", str(good), eof.address)
+    check(code == 1 and eof.uploads == 0 and "-y" in out, f"no terminal to ask on is a no, said plainly\n{out}")
+    del panels.input
+
+    # ── Patterns: pull a pack, push it, and the numbers mean the same ────
+    ref = Panel().stock("aurora", "bloom", "comet", "drift")
+    ref.catalog = ["drift", "aurora"]                       # drift first, then aurora, then the rest by name
+    other = Panel().stock("aurora", "comet", "xylo")
+    bare = Panel()                                          # Origin only
+    check(ref.listed() == ["drift", "aurora", "bloom", "comet"], "the stand-in orders like the panel")
+    code, out = run("patterns", ref.address, other.address, bare.address)
+    check(code == 1 and out.count("다름") == 2 and "같음" in out, f"patterns says who differs\n{out}")
+    code, out = run("patterns", ref.address, other.address, "-v")
+    check("없는 것: drift, bloom" in out and "Xylo" in out, f"-v names what is missing and what is extra\n{out}")
+
+    pack = tmp / "pack"
+    code, out = run("patterns-pull", ref.address, "-o", str(pack))
+    check(code == 0 and "모듈 4개" in out, f"pull takes the four modules\n{out}")
+    check((pack / "catalog.txt").read_text().split() == ["drift", "aurora", "bloom", "comet"], "in the panel's order")
+    check(sorted(x.name for x in pack.glob("*.pfm")) == ["aurora.pfm", "bloom.pfm", "comet.pfm", "drift.pfm"]
+          and (pack / "drift.json").exists(), "each .pfm with its sidecar")
+    info = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
+    check(info["presets"] == ["Origin"] and info["from"] == ref.address, "pack.json says where from and the presets")
+    code, out = run("patterns-pull", bare.address, "-o", str(tmp / "nothing"))
+    check(code != 0 and "모듈이 없습니다" in out, "a panel with no modules makes no pack")
+
+    backup = tmp / "backup"
+    code, out = run("patterns-push", "--pack", str(pack), other.address, bare.address, "-y", "--backup", str(backup))
+    check(code == 0 and "맞춤 2대, 실패 0대" in out, f"push makes two panels match\n{out}")
+    check(other.listed() == bare.listed() == ref.listed(), "every number now means the same pattern")
+    check("xylo" not in other.modules and list(backup.glob("*/xylo.pfm")), "the extra one is off the panel, and kept here")
+    check(sorted(p for p in other.puts if p.endswith(".pfm")) == ["bloom.pfm", "drift.pfm"] and other.puts[-1] == "catalog.txt",
+          f"only the missing modules travel, the order last: {other.puts}")
+    check(other.sidecars.get("drift") == ref.sidecars["drift"], "sidecars go with them")
+    sent = len(other.puts)
+    code, out = run("patterns-push", "--pack", str(pack), other.address, "-y")
+    check(code == 0 and "이미 같음" in out and len(other.puts) == sent, "a second push sends nothing")
+    code, out = run("patterns", "--pack", str(pack), ref.address, other.address, bare.address)
+    check(code == 0 and out.count("같음") == 3, f"and patterns agrees\n{out}")
+
+    # A panel whose memory is too broken up for the largest module (it has
+    # been on a while) would cut that upload off every time. It is restarted
+    # first, and then takes everything; one with room is left alone.
+    biggest = max((pack / f"{s}.pfm").stat().st_size for s in ("drift", "aurora", "bloom", "comet"))
+    tight = Panel(heap_largest=biggest - 1)
+    roomy = Panel(heap_largest=biggest + 50_000)
+    code, out = run("patterns-push", "--pack", str(pack), tight.address, roomy.address, "-y")
+    check(code == 0 and "맞춤 2대, 실패 0대" in out and "다시 켭니다" in out, f"a panel short of memory is restarted and then filled\n{out}")
+    check(tight.restarts == 1 and roomy.restarts == 0 and tight.listed() == roomy.listed() == ref.listed(),
+          f"only the one that needed it: {tight.restarts}, {roomy.restarts}")
+    sizes = [len(tight.modules[p[:-4]]) for p in tight.puts if p.endswith(".pfm")]
+    check(sizes == sorted(sizes, reverse=True) and tight.puts[-1] == "catalog.txt", f"the largest modules go first: {sizes}")
+
+    reorder = Panel().stock("aurora", "bloom", "comet", "drift")
+    code, out = run("patterns-push", "--pack", str(pack), reorder.address, "-y")
+    check(code == 0 and "순서만 맞춤" in out and reorder.puts == ["catalog.txt"], f"same set, other order: only the order goes\n{out}")
+    check(reorder.listed() == ref.listed(), "and the order is the pack's")
+
+    other_image = Panel().stock("aurora")
+    other_image.presets = ["Origin", "Clock Face"]
+    code, out = run("patterns-push", "--pack", str(pack), other_image.address, "-y")
+    check(code == 1 and "이미지에 든 패턴이 다릅니다" in out and other_image.puts == [],
+          f"a panel whose image holds other presets is left alone\n{out}")
+
+    keep = Panel().stock("zed")
+    panels.input = lambda prompt="": "n"
+    code, out = run("patterns-push", "--pack", str(pack), keep.address)        # no -y, and the answer is no
+    del panels.input
+    check(code == 1 and "zed" in keep.modules and keep.puts == [], "without a yes nothing is removed")
+
+    here = os.getcwd()
+    os.chdir(tmp)
+    fresh_pair = [Panel(), Panel().stock("comet")]
+    code, out = run("patterns-push", "--from", ref.address, ref.address, *[p.address for p in fresh_pair], "-y")
+    os.chdir(here)
+    check(code == 0 and all(p.listed() == ref.listed() for p in fresh_pair) and ref.puts == [],
+          f"--from copies one panel's set to the others and leaves the source alone\n{out}")
+
+    # ── A board fresh from the flasher: its storage is formatted first ───
+    fresh_board = Panel()
+    fresh_board.fs_error = "not formatted"
+    broken = Panel().stock("aurora")
+    broken.fs_error = "boot sector looks valid but does not mount"
+    code, out = run("patterns-push", "--pack", str(pack), fresh_board.address, broken.address, "-y")
+    check(fresh_board.formats == 1 and fresh_board.listed() == ref.listed() and "저장소를 처음 포맷" in out,
+          f"a never-formatted storage is formatted, then filled\n{out}")
+    check(broken.formats == 0 and broken.puts == [] and "boot sector looks valid" in out and code == 1,
+          f"a storage that will not mount for another reason is left alone\n{out}")
+
+    # ── Every pattern any panel has, on every panel ─────────────────────
+    u1 = Panel().stock("aurora", "comet")
+    u1.catalog = ["comet", "aurora"]
+    u2 = Panel().stock("aurora", "zinc", "basalt")
+    u3 = Panel()                                            # Origin only
+    os.chdir(tmp)
+    code, out = run("patterns-push", "--union", u1.address, u2.address, u3.address, "-y")
+    os.chdir(here)
+    union = ["comet", "aurora", "basalt", "zinc"]           # the first panel's order, then what the next adds, by name
+    check(code == 0 and all(p.listed() == union for p in (u1, u2, u3)), f"--union gives everyone everything\n{out}")
+    check("지웁니다" not in out and all(set(p.modules) == set(union) for p in (u1, u2, u3)), "and takes nothing off")
+    check((tmp / "pack-all" / "catalog.txt").read_text().split() == union, "the union pack is kept")
+    check(u2.modules["zinc"] == b"PFM:zinc" and u1.modules["zinc"] == b"PFM:zinc", "each module travels as it was")
+    os.chdir(tmp)
+    code, out = run("patterns-push", "--union", u1.address, u2.address, u3.address, "-y")
+    os.chdir(here)
+    check(code == 0 and out.count("이미 같음") == 3, f"run again, nothing to do\n{out}")
+    merged = tmp / "merged"
+    run("patterns-pull", u1.address, "-o", str(merged))
+    extra = Panel().stock("aurora", "quartz")
+    code, out = run("patterns-pull", extra.address, "-o", str(merged), "--merge")
+    check(code == 0 and (merged / "catalog.txt").read_text().split() == union + ["quartz"],
+          f"--merge adds only what the pack lacks, after it\n{out}")
+    odd = Panel().stock("quartz")
+    odd.presets = ["Origin", "Clock Face"]
+    code, out = run("patterns-pull", odd.address, "-o", str(merged), "--merge")
+    check(code != 0 and "이미지에 든 패턴이 묶음과 다릅니다" in out, "a panel of another image is not merged")
+
+    # ── --hub-wifi: on the hub's network for one command, then back ─────
+    calls = []
+    saved = (panels.wifi_current, panels.wifi_add_profile, panels.wifi_connect, panels.wifi_leave,
+             panels.HUB_SECRETS, panels.HUB_HOTSPOT_ADDRESS, sys.platform)
+    where = {"now": "Studio"}
+    panels.wifi_current = lambda: where["now"]
+    panels.wifi_add_profile = lambda ssid, pw: calls.append(("add", ssid, pw)) or True
+    def connect(ssid):
+        calls.append(("connect", ssid))
+        where["now"] = ssid
+    panels.wifi_connect = connect
+    def leave(previous, ssid, added):
+        calls.append(("leave", previous, ssid, added))
+        where["now"] = previous
+    panels.wifi_leave = leave
+    hw1, hw2 = Panel().stock("aurora"), Panel().stock("aurora", "comet")
+    hub_w = Hub([{"id": 1, "uid": "a", "on": 1, "ip": hw1.address}, {"id": 2, "uid": "b", "on": 1, "ip": hw2.address}])
+    wsecrets = tmp / "hub_secrets_w.h"
+    wsecrets.write_text('#define HUB_AP_SSID "PatternflowEnsemble"\n#define HUB_AP_PASS "hub-pass-1"\n', encoding="utf-8")
+    panels.HUB_SECRETS = wsecrets
+    panels.HUB_HOTSPOT_ADDRESS = hub_w.address
+    sys.platform = "win32"
+    try:
+        os.chdir(tmp)
+        code, out = run("--hub-wifi", "patterns-push", "--union", "-y")
+        os.chdir(here)
+        check(code == 0 and hw1.listed() == hw2.listed() == ["aurora", "comet"],
+              f"--hub-wifi: every panel the hub knows, without naming one\n{out}")
+        check(calls[0] == ("add", "PatternflowEnsemble", "hub-pass-1") and calls[1] == ("connect", "PatternflowEnsemble")
+              and calls[-1] == ("leave", "Studio", "PatternflowEnsemble", True) and where["now"] == "Studio",
+              f"joins the hub's Wi-Fi from hub_secrets.h and goes back: {calls}")
+        calls.clear()
+        def broken(ssid):
+            raise SystemExit("no hub")
+        panels.wifi_connect = broken
+        code, out = run("--hub-wifi", "status")
+        check(code != 0 and calls and calls[-1][0] == "leave" and where["now"] == "Studio",
+              f"when the hub's Wi-Fi is not there, it still goes back: {calls}")
+        sys.platform = "linux"
+        code, out = run("--hub-wifi", "status")
+        check(code != 0 and "Windows" in out, "elsewhere it says how to do it by hand")
+    finally:
+        (panels.wifi_current, panels.wifi_add_profile, panels.wifi_connect, panels.wifi_leave,
+         panels.HUB_SECRETS, panels.HUB_HOTSPOT_ADDRESS, sys.platform) = saved
+
+    # ── join: image, patterns, then the hub's Wi-Fi ─────────────────────
+    secrets = tmp / "hub_secrets.h"
+    secrets.write_text('#define HUB_AP_SSID "PatternflowEnsemble"\n#define HUB_AP_PASS "hub-pass-1"\n'
+                       '// #define HUB_STA_SSID "venue-router"\n// #define HUB_STA_PASS "x"\n', encoding="utf-8")
+    check(panels.hub_network(secrets) == ("PatternflowEnsemble", "hub-pass-1"), "hotspot mode: the hotspot")
+    router = tmp / "router.h"
+    router.write_text('#define HUB_AP_SSID "PatternflowEnsemble"\n#define HUB_AP_PASS "hub-pass-1"\n'
+                      '#define HUB_STA_SSID "venue-router"\n#define HUB_STA_PASS "venue-pass"\n', encoding="utf-8")
+    check(panels.hub_network(router) == ("venue-router", "venue-pass"), "router mode: the router")
+
+    n1, n2 = Panel().stock("xylo"), Panel()
+    code, out = run("join", str(good), n1.address, n2.address, "--pack", str(pack), "--hub-secrets", str(secrets),
+                    "-y", "--backup", str(backup))
+    check(code == 0 and "허브로 간 패널 2대 / 2대" in out, f"join brings two panels in\n{out}")
+    check(all(p.variant == "ensemble" and p.listed() == ref.listed() for p in (n1, n2)), "each on the image, with the pack")
+    check(all(p.wifi.get("PatternflowEnsemble") == {"pass": "hub-pass-1", "connect": True} for p in (n1, n2)),
+          "and told to move to the hub's network")
+    uploads = (n1.uploads, n2.uploads)
+    code, out = run("join", str(good), n1.address, "--pack", str(pack), "--ssid", "PatternflowEnsemble", "--pass", "p", "-y")
+    check(code == 0 and n1.uploads == uploads[0] and "이미 같음" in out, f"a second join redoes nothing it needs not\n{out}")
+
+    stuck = Panel(never_back=True)
+    code, out = run("join", str(good), stuck.address, "--pack", str(pack), "--ssid", "S", "--pass", "p", "-y")
+    check(code == 1 and stuck.wifi == {} and "멈춥니다" in out, f"a panel that did not come back is not moved\n{out}")
 
     # ── No panels named ─────────────────────────────────────────────────
     here = os.getcwd()

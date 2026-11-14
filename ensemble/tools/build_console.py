@@ -63,6 +63,22 @@ def header_text() -> str:
     return "\n".join(lines) + "\n"
 
 
+def colours_agree() -> bool:
+    """The identify marks: the panel draws core/pfe_proto.h's, the map paints
+    console/app.js's. One list in two languages; they must not drift."""
+    proto = (ROOT / "core" / "pfe_proto.h").read_text(encoding="utf-8")
+    app = (ROOT / "console" / "app.js").read_text(encoding="utf-8")
+    block = re.search(r"IDENTIFY_COLOURS\[4\] = \{(.*?)\};", proto, re.S)
+    js = re.search(r"const IDENTIFY_COLOURS = \[(.*?)\];", app, re.S)
+    shapes_c = re.search(r"enum IdentifyShape : uint8_t \{ SHAPE_CIRCLE = 0, SHAPE_SQUARE = 1, SHAPE_TRIANGLE = 2 \};", proto)
+    shapes_js = "const IDENTIFY_SHAPES = ['circle', 'square', 'triangle'];" in app
+    if not block or not js or not shapes_c or not shapes_js:
+        return False
+    c_list = [tuple(map(int, m)) for m in re.findall(r"\{(\d+), (\d+), (\d+)\}", block.group(1))]
+    js_list = [tuple(map(int, m)) for m in re.findall(r"\[(\d+), (\d+), (\d+)\]", js.group(1))]
+    return len(c_list) == 4 and c_list == js_list
+
+
 def main() -> int:
     args = sys.argv[1:]
     if args[:1] == ["--single"] and len(args) == 2:
@@ -72,10 +88,13 @@ def main() -> int:
         return 0
     text = header_text()
     if args == ["--check"]:
+        if not colours_agree():
+            print("the identify marks (colours, shapes) differ between core/pfe_proto.h and console/app.js", file=sys.stderr)
+            return 1
         if not HEADER.exists() or HEADER.read_text(encoding="utf-8") != text:
             print("hub/src/console_page.h is out of date: run python ensemble/tools/build_console.py", file=sys.stderr)
             return 1
-        print("hub/src/console_page.h is up to date")
+        print("hub/src/console_page.h is up to date, the identify marks agree")
         return 0
     if args:
         print(__doc__, file=sys.stderr)

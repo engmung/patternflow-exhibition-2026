@@ -54,11 +54,45 @@ constexpr uint8_t SF_INFO_REQ = 0x08;    // send an INFO now
 constexpr uint8_t CMD_REBOOT = 0x01;
 
 constexpr size_t HEADER_LEN = 5;
-constexpr size_t REPORT_LEN = 36;
+constexpr size_t REPORT_LEN = 37;        // what this version writes
 constexpr size_t INFO_LEN = 72;
-constexpr size_t STATE_LEN = 32;
+constexpr size_t STATE_LEN = 33;
 constexpr size_t CMD_LEN = 8;
 constexpr size_t MAX_PACKET = 96;
+// The shortest of each a reader takes: the first version's, before brightness
+// was appended (2026-11-14). A panel and a hub of different ages still talk;
+// the older one simply knows no brightness.
+constexpr size_t REPORT_MIN_LEN = 36;
+constexpr size_t STATE_MIN_LEN = 32;
+constexpr uint8_t BRIGHTNESS_MIN = 5;   // the panel's own floor (core_display_http.h)
+
+// What a panel shows while it is identified, and its tile on the console's
+// map while it does: a big shape in a colour, both from its number. Four
+// colours that LEDs keep apart (red and orange, blue and sky blue did not,
+// 2026-11-14) and three shapes; the number steps both at once, and as 3 and
+// 4 share no factor the first twelve numbers are twelve different marks,
+// neighbours differing in shape and in colour: 1 red circle, 2 green square,
+// 3 blue triangle, 4 yellow circle, 5 red square ... console/app.js keeps the
+// same lists (IDENTIFY_COLOURS, IDENTIFY_SHAPES); a check holds them together.
+struct Rgb {
+  uint8_t r, g, b;
+};
+constexpr Rgb IDENTIFY_COLOURS[4] = {
+    {255, 0, 0},    // 빨강
+    {0, 220, 0},    // 초록
+    {0, 80, 255},   // 파랑
+    {255, 210, 0},  // 노랑
+};
+enum IdentifyShape : uint8_t { SHAPE_CIRCLE = 0, SHAPE_SQUARE = 1, SHAPE_TRIANGLE = 2 };
+constexpr int IDENTIFY_SHAPES = 3;
+struct IdentifyMark {
+  uint8_t shape;
+  Rgb colour;
+};
+inline IdentifyMark identifyMark(uint8_t panelId) {
+  const int n = panelId ? panelId - 1 : 0;
+  return {(uint8_t)(n % IDENTIFY_SHAPES), IDENTIFY_COLOURS[n % 4]};
+}
 
 struct Report {
   uint8_t flags = 0;
@@ -72,6 +106,7 @@ struct Report {
   int8_t rssi = 0;
   uint8_t fps = 0;
   uint32_t uptimeS = 0;
+  uint8_t brightness = 0;    // the panel's brightness now, 5..255; 0 = it does not say
 };
 
 struct Info {
@@ -98,6 +133,7 @@ struct State {
   uint8_t ack[KNOBS] = {0, 0, 0, 0};   // the touch each target accounts for
   uint16_t glideMs = 0;      // time to reach a new target; 0 = at once
   uint32_t hubMs = 0;        // the hub's clock, for the panel's log only
+  uint8_t brightness = 0;    // target, 5..255; 0 = leave the panel's own
 };
 
 struct Cmd {
@@ -115,9 +151,9 @@ inline uint8_t packetType(const uint8_t* p, size_t len) {
   if (len < HEADER_LEN || p[0] != 'P' || p[1] != 'F' || p[2] != 'E') return 0;
   if (p[3] != PROTO_VERSION) return 0;
   switch (p[4]) {
-    case MSG_REPORT: return len >= REPORT_LEN ? MSG_REPORT : 0;
+    case MSG_REPORT: return len >= REPORT_MIN_LEN ? MSG_REPORT : 0;
     case MSG_INFO: return len >= INFO_LEN ? MSG_INFO : 0;
-    case MSG_STATE: return len >= STATE_LEN ? MSG_STATE : 0;
+    case MSG_STATE: return len >= STATE_MIN_LEN ? MSG_STATE : 0;
     case MSG_CMD: return len >= CMD_LEN ? MSG_CMD : 0;
     default: return 0;
   }
@@ -137,6 +173,7 @@ inline size_t encode(const Report& r, uint8_t* p) {
   p[30] = (uint8_t)r.rssi;
   p[31] = r.fps;
   putU32(p + 32, r.uptimeS);
+  p[36] = r.brightness;
   return REPORT_LEN;
 }
 
@@ -156,6 +193,7 @@ inline bool decode(const uint8_t* p, size_t len, Report* r) {
   r->rssi = (int8_t)p[30];
   r->fps = p[31];
   r->uptimeS = getU32(p + 32);
+  r->brightness = len > 36 ? p[36] : 0;
   return true;
 }
 
@@ -205,6 +243,7 @@ inline size_t encode(const State& s, uint8_t* p) {
   for (int k = 0; k < KNOBS; k++) p[22 + k] = s.ack[k];
   putU16(p + 26, s.glideMs);
   putU32(p + 28, s.hubMs);
+  p[32] = s.brightness;
   return STATE_LEN;
 }
 
@@ -225,6 +264,7 @@ inline bool decode(const uint8_t* p, size_t len, State* s) {
   for (int k = 0; k < KNOBS; k++) s->ack[k] = p[22 + k];
   s->glideMs = getU16(p + 26);
   s->hubMs = getU32(p + 28);
+  s->brightness = len > 32 ? p[32] : 0;
   return true;
 }
 

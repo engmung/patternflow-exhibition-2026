@@ -48,13 +48,13 @@ def compiler():
 def build_and_run(cc, tmp, name, source, includes):
     exe = Path(tmp) / (name + (".exe" if sys.platform.startswith("win") else ""))
     cmd = [*cc, *FLAGS, *[f"-I{i}" for i in includes], "-o", str(exe), str(source)]
-    built = subprocess.run(cmd, capture_output=True, text=True)
+    built = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if built.returncode != 0:
         print(f"{name}: did not compile\n{built.stderr}")
         return False
     if built.stderr.strip():
         print(built.stderr.strip())
-    ran = subprocess.run([str(exe)], capture_output=True, text=True)
+    ran = subprocess.run([str(exe)], capture_output=True, text=True, encoding="utf-8", errors="replace")
     out = (ran.stdout + ran.stderr).strip()
     print(f"{name}: {out.splitlines()[-1] if out else 'no output'}")
     if ran.returncode != 0 and out:
@@ -120,14 +120,14 @@ def main():
         ok &= build_and_run(cc, tmp, "core", ROOT / "tests" / "test_core.cpp", [])
         tree = panel_tree(tmp)
         ok &= build_and_run(cc, tmp, "panel", ROOT / "tests" / "test_panel_glue.cpp", [tree])
-    tool = subprocess.run([sys.executable, str(ROOT / "tests" / "test_panels_tool.py")], capture_output=True, text=True)
+    tool = subprocess.run([sys.executable, str(ROOT / "tests" / "test_panels_tool.py")], capture_output=True, text=True, encoding="utf-8", errors="replace")
     out = (tool.stdout + tool.stderr).strip()
     print("tool: " + (out.splitlines()[-1] if out else "no output"))
     if tool.returncode != 0 and out:
         print("\n".join("  " + line for line in out.splitlines()[:-1]))
     ok &= tool.returncode == 0
     console = subprocess.run([sys.executable, str(ROOT / "tools" / "build_console.py"), "--check"],
-                             capture_output=True, text=True)
+                             capture_output=True, text=True, encoding="utf-8", errors="replace")
     print("console: " + (console.stdout + console.stderr).strip())
     ok &= console.returncode == 0
     if checkout:

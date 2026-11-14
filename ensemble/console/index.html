@@ -138,6 +138,10 @@ input[type="checkbox"] { accent-color: var(--led); }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .field > span { font-size: 11.5px; color: var(--faint); }
+/* A list with a button on each side to go one back or one on. */
+.step { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.step select { flex: 1; min-width: 0; }
+.step .btn { flex: none; min-width: 38px; padding: 5px 0; font-size: 13px; line-height: 1; }
 .knob { display: grid; grid-template-columns: 26px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
 .knob .lab { color: var(--muted); font-size: 12.5px; }
 .knob .val { text-align: right; font-size: 12.5px; color: var(--muted); }
@@ -184,6 +188,18 @@ dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
 
   <section class="col rules" aria-label="연결 규칙">
     <div class="group">
+      <h2>모든 패널</h2>
+      <div class="row"><label for="all-pattern">패턴</label><div class="grow step">
+        <button type="button" class="btn" id="all-pattern-prev" aria-label="이전 패턴" title="이전 패턴">◀</button>
+        <select id="all-pattern"></select>
+        <button type="button" class="btn" id="all-pattern-next" aria-label="다음 패턴" title="다음 패턴">▶</button>
+      </div></div>
+      <div class="row"><label for="all-bright">밝기</label><div class="grow"><input type="range" id="all-bright" min="5" max="255" step="1" value="128"></div><span class="val num" id="all-bright-v">–</span></div>
+      <p class="note">패턴은 모든 패널이 한꺼번에 바꿉니다. ◀ ▶ 로 하나씩 넘기거나 목록에서 고릅니다. 밝기는 지금 있는 패널과 나중에 붙는 패널 모두에게 갑니다. 한 패널만 바꾸려면 지도에서 패널을 고르세요.</p>
+      <p class="note" id="all-pattern-warn" style="color:var(--warn)" hidden></p>
+    </div>
+
+    <div class="group">
       <h2>노브를 돌리면</h2>
       <div id="links"></div>
       <p class="note">단독: 그 패널만. 동시: 모든 패널이 바로. 물결: 돌린 패널에서 거리만큼 늦게.</p>
@@ -210,6 +226,8 @@ dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
         <input type="number" id="cfg-k4s" min="1" max="24" value="3" aria-label="패턴 한 칸에 드는 클릭 수" title="패턴 한 칸에 드는 클릭 수">
       </div>
       <p class="note" id="k4-note">패턴 번호 0부터 끝까지, 세 클릭에 한 패턴. 마지막 칸의 255는 "끝까지"입니다.</p>
+      <p class="note" id="k4-pattern-why">K4가 패턴을 넘기는 동안 패턴의 네 번째 값은 가운데(500)에 머뭅니다. 그 값도 돌리려면 "네 번째 노브"로 바꾸세요.</p>
+      <p class="note" id="k4-knob-note" hidden>K4가 패턴의 네 번째 값을 돌리고, 위의 K4 규칙대로 다른 패널에 전해집니다. 패턴은 패널에서 K4를 1초 길게 눌러 고르거나(아래 잠금이 꺼져 있을 때), 콘솔의 패널 칸에서 고릅니다.</p>
       <label class="check"><input type="checkbox" id="cfg-lock"> 패널의 길게 누르기 메뉴 잠그기</label>
     </div>
 
@@ -233,7 +251,7 @@ dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
       <div class="row"><label for="demo-loss">손실</label><div class="grow"><input type="range" id="demo-loss" min="0" max="60" step="5" value="0"></div><span class="val num" id="demo-loss-v">0 %</span></div>
       <label class="check"><input type="checkbox" id="demo-auto" checked> 누군가 돌리는 것처럼 자동 시연</label>
       <div class="actions"><button type="button" class="btn small" id="demo-hub-restart">허브 껐다 켜기</button></div>
-      <p class="note">데모는 허브와 패널 펌웨어에 들어가는 코드를 그대로 브라우저에서 돌립니다. 패널 화면은 값이 보이도록 그린 그림이고 실제 패턴은 아닙니다.</p>
+      <p class="note">데모는 허브와 패널 펌웨어에 들어가는 코드를 그대로 브라우저에서 돌립니다. 지도의 패널은 패턴 번호와 노브 값만 보여 줍니다. 실제 패턴의 그림은 아닙니다.</p>
     </div>
   </section>
 
@@ -248,7 +266,7 @@ dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
           <option value="ring">원</option>
           <option value="stagger">엇갈린 두 줄</option>
         </select>
-        <button type="button" class="btn" id="map-identify">전체 번호 표시</button>
+        <button type="button" class="btn" id="map-identify">전체 모양·색 표시</button>
         <button type="button" class="btn" id="map-addresses" title="연결된 패널의 주소를 한 줄에 하나씩 복사합니다. 펌웨어를 Wi-Fi로 올리거나 되돌릴 때 씁니다.">주소 복사</button>
       </div>
       <canvas id="map" aria-label="패널 배치도"></canvas>
@@ -301,7 +319,11 @@ dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
         <button type="button" id="scope-wave" aria-pressed="false">여기서 물결로</button>
         <button type="button" id="scope-all" aria-pressed="false">전체 동시에</button>
       </div>
-      <label class="field"><span>패턴</span><select id="p-pattern"></select></label>
+      <div class="field"><span>패턴</span><div class="step">
+        <button type="button" class="btn" id="p-pattern-prev" aria-label="이전 패턴" title="이전 패턴">◀</button>
+        <select id="p-pattern" aria-label="패턴"></select>
+        <button type="button" class="btn" id="p-pattern-next" aria-label="다음 패턴" title="다음 패턴">▶</button>
+      </div></div>
       <div id="p-knobs"></div>
     </div>
 
@@ -317,7 +339,7 @@ dl.diag dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
     <div id="insp-act" class="group" hidden>
       <h2>패널에게</h2>
       <div class="actions">
-        <button type="button" class="btn small" id="p-identify">번호 표시</button>
+        <button type="button" class="btn small" id="p-identify">표시</button>
         <button type="button" class="btn small" id="p-reboot">다시 시작</button>
         <button type="button" class="btn small" id="p-forget">목록에서 지우기</button>
       </div>

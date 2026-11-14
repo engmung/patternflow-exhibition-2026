@@ -21,6 +21,11 @@
 #include <string>
 
 int NUM_PATTERNS = 8;   // the sketch's pattern list length (pattern_registry.h)
+// The sketch's brightness (patternflow.ino).
+uint8_t currentBrightness = 128;
+bool brightnessDirty = false;
+uint32_t brightnessIdleAtMs = 0;
+float contentNoticeTimer = 0.0f;        // the sketch's "show the pattern's name" countdown
 
 static int g_checks = 0, g_failed = 0;
 #define CHECK(cond)                                                       \
@@ -112,6 +117,32 @@ int main() {
   stub::wifiStatus = WL_CONNECTED;
   F.onNetwork();
   CHECK(stub::boundPort == PF_ENSEMBLE_LOCAL_PORT);
+
+  // Two saved networks, the hub's first at boot, the panel on the other one,
+  // no hub yet (switched on together, the panel was quicker than the hub's
+  // hotspot). In its first three minutes it tries the hub's network anyway:
+  // 20 s in, then once a minute; after that it is a panel used on its own.
+  PatternflowWifi::savedSsids[0] = "PatternflowEnsemble";
+  PatternflowWifi::savedPasses[0] = "hub-pass";
+  PatternflowWifi::savedSsids[1] = "Studio";
+  PatternflowWifi::savedPasses[1] = "studio-pass";
+  PatternflowWifi::savedCountValue = 2;
+  PatternflowWifi::bootIdx = 0;
+  PatternflowWifi::activeSsid = "Studio";
+  hubUp = false;
+  size_t triedAt20 = 0;
+  for (int s = 0; s < 240; s++) {                 // four minutes, a second at a time
+    frames(1000 / 16);
+    if (PatternflowWifi::activeSsid == PatternflowWifi::savedSsids[0])
+      PatternflowWifi::activeSsid = "Studio";    // the hub's network is not there: the core goes back
+    if (s == 25) triedAt20 = stub::joins.size();
+  }
+  CHECK(triedAt20 == 1);                          // the first try, about 20 s in
+  CHECK(stub::joins.size() == 3);                 // and at about 80 s and 140 s; none after three minutes
+  CHECK(!stub::joins.empty() && stub::joins[0].ssid == "PatternflowEnsemble");
+  stub::joins.clear();
+  hubUp = true;
+  PatternflowWifi::activeSsid = "PatternflowEnsemble";
   frame();
   CHECK(toBroadcast >= 1 && toHub == 0);
   frames(8);
@@ -183,13 +214,80 @@ int main() {
   frames(6);
   CHECK(btn1.longPressFired && btn2.longPressFired && btn3.longPressFired && btn4.longPressFired);
 
+  // Brightness from the console: set the way /api/display sets it, so the
+  // sketch applies it through the power clamp and stores it once still.
+  CHECK(hub.panel(me).rep.brightness == 128);   // the hub hears the panel's own
+  CHECK(!brightnessDirty);
+  hub.setAllBrightness(60);
+  frames(6);
+  CHECK(currentBrightness == 60);
+  CHECK(brightnessDirty && brightnessIdleAtMs > 0 && brightnessIdleAtMs <= stub::nowMs);
+  frames(40);
+  CHECK(hub.panel(me).rep.brightness == 60);
+  // Changed at the panel (K1's long press) afterwards: it stays.
+  brightnessDirty = false;
+  currentBrightness = 150;
+  frames(80);
+  CHECK(currentBrightness == 150 && !brightnessDirty);
+  CHECK(hub.panel(me).rep.brightness == 150);
+
+  // Back to the hub's network. The hub goes (a firmware update), the core
+  // lands on the studio Wi-Fi and would stay: the panel tries the hub's
+  // network again 20 s after it got there, then once a minute.
+  CHECK(stub::joins.empty());
+  hubUp = false;
+  frames(4000 / 16);                              // the hub is missed, the panel is still home
+  CHECK(stub::joins.empty());
+  PatternflowWifi::activeSsid = "Studio";         // the core moved on
+  frames(18000 / 16);
+  CHECK(stub::joins.empty());
+  frames(4000 / 16);
+  CHECK(stub::joins.size() == 1);
+  CHECK(!stub::joins.empty() && stub::joins[0].ssid == "PatternflowEnsemble" && stub::joins[0].pass == "hub-pass");
+  CHECK(stub::serial.find("no hub on \"Studio\" - trying \"PatternflowEnsemble\" again") != std::string::npos);
+  // The hub's network is not there yet; the core goes back to the studio.
+  PatternflowWifi::activeSsid = "Studio";
+  frames(30000 / 16);
+  CHECK(stub::joins.size() == 1);                 // not before a minute
+  frames(32000 / 16);
+  CHECK(stub::joins.size() == 2);
+  // The core in the middle of a join: left alone.
+  stub::wifiStatus = WL_DISCONNECTED;
+  frames(70000 / 16);
+  CHECK(stub::joins.size() == 2);
+  stub::wifiStatus = WL_CONNECTED;
+  // Home, and the hub is back: found again, nothing more to try.
+  PatternflowWifi::activeSsid = "PatternflowEnsemble";
+  hubUp = true;
+  frames(60);
+  CHECK(hub.panel(me).online);
+  frames(70000 / 16);
+  CHECK(stub::joins.size() == 2);
+
   // "Which panel is this?"
   stub::drawn.clear();
+  // The sketch starts its countdown to show the new pattern's name; the
+  // feature has it back at zero before the name would be drawn.
+  contentNoticeTimer = 1.0f;
+  frames(1);
+  CHECK(contentNoticeTimer == 0.0f);
+
+  stub::lastShape.clear();
   frames(3);
-  CHECK(stub::drawn.empty());
+  CHECK(stub::lastShape.empty());
   hub.identify(me, true);
   frames(6);
-  CHECK(stub::drawn == "1");
+  CHECK(stub::drawn.empty());                                  // the mark alone, no number
+  CHECK(stub::lastShape == "circle" && stub::lastFill == theDisplay.color565(255, 0, 0));   // 1: a red circle
+  // The mark follows the number the console gives it: 6 is a green triangle.
+  const int six = 6;
+  hub.editPanel(me, nullptr, nullptr, &six, nullptr, nullptr);
+  frames(6);
+  CHECK(stub::lastShape == "triangle" && stub::lastFill == theDisplay.color565(0, 220, 0));
+  const int one = 1;
+  hub.editPanel(me, nullptr, nullptr, &one, nullptr, nullptr);
+  hub.identify(me, false);
+  frames(6);
 
   // /api/status.
   String json;

@@ -50,6 +50,7 @@ struct FrameIn {
   bool sleeping = false;
   int8_t rssi = 0;
   uint8_t fps = 0;
+  uint8_t brightness = 0;                // the panel's brightness now, 0 = unknown
 };
 
 // What the frame should carry on to the pattern.
@@ -60,6 +61,7 @@ struct FrameOut {
   bool lockMenus = false;
   bool identify = false;
   uint8_t panelId = 0;
+  uint8_t brightness = 0;    // set the panel's brightness to this now; 0 = leave it
 };
 
 class Follower {
@@ -212,6 +214,18 @@ class Follower {
     out.lockMenus = have_ && (st_.flags & SF_LOCK_MENUS);
     out.identify = have_ && linked(in.nowMs) && (st_.flags & SF_IDENTIFY);
     out.panelId = have_ ? st_.panelId : 0;
+
+    // Brightness: the hub's target is applied when it changes, not held. A
+    // person who sets the brightness at the panel (K1's long press) keeps it
+    // until the console sends a new one; the report says what it is now.
+    if (in.brightness != brightness_) {
+      brightness_ = in.brightness;
+      dirty_ = true;
+    }
+    if (have_ && st_.brightness >= BRIGHTNESS_MIN && st_.brightness != brightnessTaken_) {
+      brightnessTaken_ = st_.brightness;
+      if (st_.brightness != in.brightness) out.brightness = st_.brightness;
+    }
   }
 
   // The pattern this panel wants to switch to, once. `fromHub` says whether
@@ -281,6 +295,7 @@ class Follower {
     r.rssi = rssi_;
     r.fps = fps_;
     r.uptimeS = since(nowMs, bootMs_) / 1000;
+    r.brightness = brightness_;
     return r;
   }
 
@@ -423,6 +438,8 @@ class Follower {
   bool infoDue_ = false;
   int8_t rssi_ = 0;
   uint8_t fps_ = 0;
+  uint8_t brightness_ = 0;         // the panel's, as the last frame said
+  uint8_t brightnessTaken_ = 0;    // the last hub target applied (0 = none since boot)
   bool running_ = true;
   bool chrome_ = false;
   bool sleeping_ = false;

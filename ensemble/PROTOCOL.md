@@ -16,7 +16,7 @@ Not verified on hardware yet. See [README.md §8](README.md#8-아직-실기로-�
 
 Both directions carry whole state, never a change. A lost datagram is repaired by the next one.
 
-### REPORT, panel to hub, type `0x01`, 36 bytes
+### REPORT, panel to hub, type `0x01`, 37 bytes
 
 Sent every 500 ms, within 33 ms of a hand moving a knob, and within 100 ms of applying a new STATE.
 
@@ -34,6 +34,7 @@ Sent every 500 ms, within 33 ms of a hand moving a knob, and within 100 ms of ap
 | 30 | 1 | `rssi` | dBm, signed |
 | 31 | 1 | `fps` | |
 | 32 | 4 | `uptimeS` | seconds since the panel started |
+| 36 | 1 | `brightness` | the panel's brightness now, 5 to 255. Appended 2026-11-14: a panel from before sends 36 bytes, read as `0` (does not say) |
 
 ### INFO, panel to hub, type `0x02`, 72 bytes
 
@@ -54,14 +55,14 @@ Sent at start, when the pattern or its name changes, when a STATE asks, and ever
 
 The hub keeps one table of pattern names by index for the whole ensemble, filled from these as panels visit patterns. It assumes every panel has the same patterns installed in the same order.
 
-### STATE, hub to panel, type `0x10`, 32 bytes
+### STATE, hub to panel, type `0x10`, 33 bytes
 
 Sent when its content changes (at most every 30 ms), again after 200 ms while the panel has not acknowledged it, and once a second regardless.
 
 | Offset | Size | Field | |
 |---|---|---|---|
 | 0 | 5 | header | `50 46 45 01 10` |
-| 5 | 1 | `flags` | bit 0 K4 steps the pattern (else it is a knob) · bit 1 lock the long-press screens · bit 2 show the panel's number · bit 3 send an INFO |
+| 5 | 1 | `flags` | bit 0 K4 steps the pattern (else it is a knob) · bit 1 lock the long-press screens · bit 2 show the panel's mark (shape and colour) · bit 3 send an INFO |
 | 6 | 2 | `seq` | never 0 |
 | 8 | 1 | `panelId` | the number the console shows |
 | 9 | 1 | `pattern` | target, `FF` for none |
@@ -73,6 +74,7 @@ Sent when its content changes (at most every 30 ms), again after 200 ms while th
 | 22 | 4 | `ack[4]` | the `touch` each target accounts for |
 | 26 | 2 | `glideMs` | time to ease into a new target, 0 for at once |
 | 28 | 4 | `hubMs` | the hub's clock, for logs |
+| 32 | 1 | `brightness` | target, 5 to 255; `0` leaves the panel's own. Appended 2026-11-14: a hub from before sends 32 bytes, read as `0` |
 
 ### CMD, hub to panel, type `0x11`, 8 bytes
 
@@ -94,6 +96,8 @@ Sent when its content changes (at most every 30 ms), again after 200 ms while th
 
 **A pattern that will not load.** A panel asks the device for a target pattern at most once a second, five times, then gives up on that target and reports the pattern it has.
 
+**Brightness is set, not held.** It is not a channel: it does not travel as a wave, and a hand at a panel does not send it on. A panel takes a `brightness` target when it differs from the last one it took since it started, the way `GET /api/display?brightness=` sets it (the device stores it once it has been still). A brightness set at the panel afterwards (K1's long press) stays until the console sends a new one. The hub holds targets in RAM only; a panel it meets for the first time since it started takes the brightness the console last gave every panel, if any.
+
 ## The console link
 
 One JSON object per line, UTF-8, `\n` at the end. The same lines go over the hub's USB serial port, its UART (115200), and its WebSocket at `/ws`. On a serial port the hub sends lines only while a console is there: one that sent a JSON line in the last 10 s. A line that does not start with `{` is not protocol (the UART also carries the boot log).
@@ -110,9 +114,9 @@ Every command has `"c"`. An optional `"r"` (integer) comes back in the reply. Pa
 | `cfg` | `link` (four of `"solo"`, `"sync"`, `"ripple"`, or `null` to keep), `plink`, `speed` (units per second), `glide` (ms), `k4` (true: K4 steps patterns), `lock`, `pmin`, `pmax` (255: to the last), `k4s` | Any subset |
 | `panel` | `uid`, and any of `x`, `y`, `id` (1 to 250), `name`, `linked` | Two panels never share a number: the other one takes this panel's old one |
 | `forget` | `uid` | Drops a panel from the table |
-| `set` | `to` (a panel or `"all"`), and any of `pat`, `k` (four numbers or `null`), `kn` + `v` (one knob), `glide`. With `to: "all"`: `mode: "ripple"` and `from` (a panel) make it a wave | To one panel it stays on that panel. This is how each panel gets a pattern of its own |
+| `set` | `to` (a panel or `"all"`), and any of `pat`, `k` (four numbers or `null`), `kn` + `v` (one knob), `glide`, `br` (brightness, 5 to 255). With `to: "all"`: `mode: "ripple"` and `from` (a panel) make it a wave | To one panel it stays on that panel. This is how each panel gets a pattern of its own. `br` alone leaves the pattern and knobs as they are; to `"all"` it is also given to panels that join later |
 | `scene` | `op` (`save`, `recall`, `clear`), `slot` (0 to 7), and for recall `mode`, `from`, `glide` | A scene is every panel's pattern and knobs |
-| `identify` | `uid` (or `"all"`), `on` | Switches itself off after 30 s |
+| `identify` | `uid` (or `"all"`), `on` | The panel shows its mark: a big shape in a colour on black, both from its number (`identifyMark` in `core/pfe_proto.h`: circle, square, triangle and red, green, blue, yellow, stepping together, twelve marks). One panel switches itself off after 30 s. `"all"` stays on until it is switched off, or for 30 minutes, and a panel that joins meanwhile shows its mark too |
 | `reboot` | `uid` (a panel, or `"hub"`) | |
 
 Replies: `{"t":"ack","c":"cfg","r":12}` or `{"t":"err","c":"set","m":"no such panel"}`.
@@ -141,6 +145,7 @@ A `p` line:
 | `rssi`, `fps`, `up`, `fl` | from the last report: dBm, fps, uptime in seconds, flags |
 | `pat`, `pn`, `pc` | reported pattern, its name, how many patterns the panel has |
 | `k`, `tp`, `tk` | reported knobs, target pattern, target knobs |
+| `br`, `tb` | reported brightness (`0`: the panel does not say), target brightness (`0`: none) |
 | `ok` | 1 when the panel reports what the hub wants |
 | `idf` | 1 while identify is on |
 | `fw`, `var` | firmware and variant |
@@ -152,7 +157,7 @@ For scripts, on the hub's port 80 beside the console page and `/ws`. Read-only.
 
 | Route | |
 |---|---|
-| `GET /api/status` | The hub itself: `fw`, `proto`, `uptime_s`, `mode`, `panels`, `online`, `stations`, `heap`, `rx`, `tx`, `bad`, `lines_dropped`, `usb_stalls` |
+| `GET /api/status` | The hub itself: `fw`, `proto`, `uptime_s`, `mode`, `panels`, `online`, `stations`, `heap`, `rx`, `tx`, `bad`, `lines_dropped`, `usb_stalls` (times the USB console stopped taking lines for half a second: a console that is not reading), and two objects about the USB jack. `usb`: `ready` (the computer has configured the device), `open` (a program has the serial port open), `space` (bytes of room in the port's buffer), `busy` (a packet is waiting for the computer), `sent` (bytes handed to the port), `rearmed` and `unstuck` (transfers the hub had to start again, see `hub/src/usb_s3.cpp`; both stay 0). `midi`: `mounted`, `busy`, `sent` (messages the port took), `pending` (values not said yet: the port is full, nobody is listening) |
 | `GET /api/panels` | `{"panels":[{"id":1,"uid":"246f28010203","n":"door","on":1,"ip":"192.168.66.2","fw":"3.12.0","var":"ensemble v0.1.0"}]}`: every panel the hub knows, refreshed once a second. `ip` is where the panel's last report came from, which is also where its own web console is. [`tools/panels.py`](tools/panels.py) `--hub` reads this |
 
 A panel says its side in its own `/api/status`, in an `ensemble` object: `uid` (the same twelve hex digits), `linked`, `id`, `hub`, `states`, `sent`, `detents`, `knob`.
@@ -160,3 +165,22 @@ A panel says its side in its own `/api/status`, in an `ensemble` object: `uid` (
 ## What the hub keeps
 
 Across restarts, in flash: the config, each panel's uid, number, place, name and linked flag, and the scenes. Not the live targets: after a restart the panels report where they are and the hub takes that.
+
+## MIDI (the hub's USB jack)
+
+The hub is a USB-MIDI device named `Patternflow Ensemble` beside its serial console. It speaks Patternflow's MIDI mapping (`docs/midi-spec.md` in Patternflow, the Audio edition's) once per panel: a panel's channel is its number. [`core/pfe_midi.h`](core/pfe_midi.h) is the code; the PC tests hold it.
+
+| Direction | Message | |
+|---|---|---|
+| ensemble to host | CC 24-27 on channel n | knob 1-4 of panel n, 0..127, whenever its target changes: a hand on it, another panel's value arriving (at once, or when a wave reaches it), a scene, the console |
+| | Program Change on channel n | the pattern of panel n |
+| | channel 16 | the value that just left a hand (or the console), once, as it starts to travel |
+| host to ensemble | channel n (1-15): panel n · channel 16: every panel | |
+| | CC 20-23 | knob 1-4, absolute, 0..127 onto 0..1000 |
+| | CC 24-27 | knob 1-4, relative, 64 = no motion, binary offset in detents of 1/32 of the range |
+| | CC 28 | brightness, 0..127 onto 5..255 (the ensemble's own) |
+| | Program Change | pattern |
+
+A knob value the host set is not sent back to it, but remembered as sent, so a hand bringing the knob back is told. A Program Change comes back, as in the panel's own mapping. A value is not sent twice in a row on one channel.
+
+What goes to the host is state, not a queue: per channel and control the hub keeps the value to say and the value the port last took. The USB-MIDI port takes sixteen messages at a time; a change of more than that (a scene) goes out over the next passes of the hub's loop, a millisecond or two each, and none is lost. While no program is listening nothing piles up: when one starts, it hears each control once, where it is now.

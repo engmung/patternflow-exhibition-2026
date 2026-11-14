@@ -19,3 +19,9 @@ patterns/.pf-runtime.js
 
 # The flasher build installs esptool-js and esbuild here.
 tools/flasher/node_modules/
+
+# Pattern packs and backups that ensemble/tools/panels.py writes where it runs.
+/pack-all/
+/pack-*/
+/pattern-backup/
+/panels.txt

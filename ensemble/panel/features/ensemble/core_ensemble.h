@@ -45,12 +45,27 @@
 #include "../../src/core_encoders.h"   // InputFrame, btn1..btn4
 #include "../../src/core_sleep.h"      // PatternflowSleep::isSleeping()
 #include "../../src/core_ui_text.h"    // PatternflowUiText
+#include "../../src/core_wifi.h"       // PatternflowWifi: the saved networks, and a join
 
 #include "pfe_follower.h"
 
 // The length of the pattern list (pattern_registry.h, which the sketch
 // includes after the features). K4 needs it to wrap.
 extern int NUM_PATTERNS;
+
+// The panel's brightness, as the sketch keeps it (patternflow.ino): the value
+// K1's long press sets, and the two words that have loop() store it in NVS
+// once it has been still. Set here the way GET /api/display?brightness= does
+// (core_display_http.h); the frame applies it through the power clamp.
+extern uint8_t currentBrightness;
+extern bool brightnessDirty;
+extern uint32_t brightnessIdleAtMs;
+// The sketch shows a pattern's name for a second whenever the pattern
+// changes, from the countdown below (patternflow.ino). On a wall every
+// change would flash a name across all the panels: drawOverlay(), which the
+// sketch calls just before it draws the name, keeps the countdown at zero
+// unless PF_ENSEMBLE_PATTERN_NAME asks for the name.
+extern float contentNoticeTimer;
 
 #if PF_ENSEMBLE_KNOB_DETENTS < 1 || PF_ENSEMBLE_KNOB_DETENTS > 250
 #error "PF_ENSEMBLE_KNOB_DETENTS must be 1..250"
@@ -119,6 +134,57 @@ inline void onNetwork() {
 
 inline bool online() { return socketOpen && WiFi.status() == WL_CONNECTED; }
 
+// ── Back to the hub's network ─────────────────────────────────────────
+// A panel that has been with a hub belongs on the hub's network. When the
+// hub goes away (a restart, a firmware update) the core moves on to the
+// next saved network within seconds and stays wherever it lands, so a panel
+// could sit on the studio Wi-Fi for good - seen 2026-11-14, both panels,
+// after the hub was flashed. While no hub is heard and the panel is on a
+// network other than the one it boots into, it asks the core to join that
+// one again: PF_ENSEMBLE_HOME_FIRST_MS after it got there, then every
+// PF_ENSEMBLE_HOME_EVERY_MS. Each try costs that network for as long as
+// the join takes, so a panel that has not met a hub since it started is
+// left alone - one being used on its own - except in its first
+// PF_ENSEMBLE_HOME_AFTER_BOOT_MS: everything switched on at once, the
+// panels are up before the hub's hotspot and land on the studio Wi-Fi
+// (seen 2026-11-14, a panel that restarted while the hub was flashed).
+inline bool away = false;       // on another network with no hub to hear
+inline uint32_t awayAtMs = 0;    // since when (the flag says whether: a `now | 1` start can lie a millisecond ahead)
+inline uint32_t homeAtMs = 0;    // the last try
+inline uint32_t homeTries = 0;
+
+inline void comeHome(uint32_t now) {
+  if (PF_ENSEMBLE_HOME_FIRST_MS == 0) return;
+  const bool justStarted = now < (uint32_t)PF_ENSEMBLE_HOME_AFTER_BOOT_MS;   // millis() since boot
+  if (engine.linked(now) || (!engine.everLinked() && !justStarted)) {   // with a hub, or on its own
+    away = false;
+    homeTries = 0;
+    return;
+  }
+  if (WiFi.status() != WL_CONNECTED) return;          // the core is joining something: let it finish
+  const int boot = PatternflowWifi::getBootIndex();
+  if (PatternflowWifi::savedCount() < 2 || boot < 0 || boot >= PatternflowWifi::savedCount()) return;
+  if (PatternflowWifi::currentSsid() == PatternflowWifi::savedSsid(boot)) {   // home; the hub is just quiet
+    away = false;
+    return;
+  }
+  if (!away) {
+    away = true;
+    awayAtMs = now;
+    return;
+  }
+  const uint32_t waited = now - (homeTries ? homeAtMs : awayAtMs);
+  if (waited < (homeTries ? (uint32_t)PF_ENSEMBLE_HOME_EVERY_MS : (uint32_t)PF_ENSEMBLE_HOME_FIRST_MS)) return;
+  // Copies: the core reorders its list while it opens the join (addNetwork).
+  const String ssid = PatternflowWifi::savedSsid(boot);
+  const String pass = PatternflowWifi::savedPasses[boot];
+  Serial.printf("[ENSEMBLE] no hub on \"%s\" - trying \"%s\" again\n", PatternflowWifi::currentSsid().c_str(),
+                ssid.c_str());
+  homeAtMs = now;
+  homeTries++;
+  PatternflowWifi::applyCredentials(ssid, pass);
+}
+
 // Whatever the engine has to say, to the hub - or, while no hub is known,
 // to everybody on the network.
 inline void flush(uint32_t now) {
@@ -180,6 +246,7 @@ inline void loop(const PFFeatureFrame& frame) {
     }
   }
   flush(now);
+  comeHome(now);
 
   if (engine.rebootRequested() && !rebootArmed) {
     rebootArmed = true;
@@ -219,7 +286,14 @@ inline void fillInput(InputFrame& input) {
   frameIn.sleeping = PatternflowSleep::isSleeping();
   frameIn.rssi = rssi;
   frameIn.fps = fps;
+  frameIn.brightness = currentBrightness;
   engine.frame(frameIn, frameOut);
+
+  if (frameOut.brightness) {   // the console asked for a new brightness
+    currentBrightness = frameOut.brightness;
+    brightnessIdleAtMs = input.now;
+    brightnessDirty = true;
+  }
 
   for (int k = 0; k < pfe::KNOBS; k++) {
     // The hand's detents went into the position; taken out of the frame so
@@ -250,15 +324,21 @@ inline bool takePattern(int* idx) {
 inline bool claimsPattern() { return claimNow; }
 
 // "Which panel is this?" - its number, large, over the pattern.
+// "Which panel is this?" - a big shape in a colour on black (pfe_proto.h
+// identifyMark, the same mark as its tile on the console's map). No number:
+// a dark number on a lit shape read as a black blob from across a room
+// (2026-11-14), and the shape and colour already say which panel it is.
 inline void drawOverlay(const PFFeatureFrame& frame) {
+  if (!PF_ENSEMBLE_PATTERN_NAME) contentNoticeTimer = 0.0f;
   if (!frameOut.identify || frame.chromeVisible || !frame.running) return;
-  char text[8];
-  snprintf(text, sizeof(text), "%u", (unsigned)frameOut.panelId);
-  const int h = dma_display->height();
-  dma_display->fillRect(0, 0, dma_display->width(), h, 0);
-  PatternflowUiText::drawLine(PatternflowUiText::useMessageFont, text, h / 2 - 8,
-                              dma_display->color565(255, 92, 46));
-  PatternflowUiText::useDefaultFont();
+  const int w = dma_display->width(), h = dma_display->height();
+  const int cx = w / 2, cy = h / 2, r = h / 2 - 3;   // 128 x 64: a shape 58 LEDs tall
+  const pfe::IdentifyMark m = pfe::identifyMark(frameOut.panelId);
+  const uint16_t c = dma_display->color565(m.colour.r, m.colour.g, m.colour.b);
+  dma_display->fillRect(0, 0, w, h, 0);
+  if (m.shape == pfe::SHAPE_CIRCLE) dma_display->fillCircle(cx, cy, r, c);
+  else if (m.shape == pfe::SHAPE_SQUARE) dma_display->fillRect(cx - r, cy - r, 2 * r, 2 * r, c);
+  else dma_display->fillTriangle(cx, cy - r, cx - r - 6, cy + r, cx + r + 6, cy + r, c);
 }
 
 inline void appendStatus(String& json) {

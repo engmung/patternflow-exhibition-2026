@@ -42,6 +42,7 @@ constexpr size_t SAVE_MAX = 4096;    // the most save() writes
 constexpr uint32_t PANEL_TIMEOUT_MS = 3000;    // six missed heartbeats
 constexpr uint32_t MAX_DELAY_MS = 30000;       // no wave takes longer than this to cross
 constexpr uint32_t IDENTIFY_MS = 30000;        // an identify left on switches itself off
+constexpr uint32_t IDENTIFY_ALL_MS = 1800000;  // all at once is for placing them: on until switched off, or half an hour
 constexpr uint32_t STALE_WINDOW_MS = 2000;     // an older report this soon after a newer one came late
 constexpr uint32_t REJOIN_HAND_MS = 10000;     // back within this, a turn made while away still counts
 
@@ -100,6 +101,7 @@ struct Panel {
   uint8_t tPattern = NO_PATTERN;
   uint16_t tKnob[KNOBS] = {500, 500, 500, 500};
   uint16_t tGlide = 0;
+  uint8_t tBright = 0;       // brightness to set, 5..255; 0 = the panel keeps its own
   uint32_t applied[CHANNELS] = {0, 0, 0, 0, 0};   // the event each channel's target came from
   uint16_t stateSeq = 0;
   uint8_t sent[STATE_LEN] = {0};   // the last STATE sent, to tell a change from a refresh
@@ -107,6 +109,7 @@ struct Panel {
   uint32_t lastSendMs = 0;
   bool identify = false;
   uint32_t identifyAtMs = 0;
+  uint32_t identifyForMs = 0;
   bool infoReq = false;
   char fw[16] = {0};
   char variant[16] = {0};
@@ -145,6 +148,17 @@ struct ConductorIo {
   void (*line)(void* ctx, const char* text, size_t len) = nullptr;   // one console line, no newline
 };
 
+// Listeners beside the io (pfe_midi.h is one): told of every change of a
+// panel's target, and of every value that starts to travel.
+struct ConductorHooks {
+  void* ctx = nullptr;
+  // Panel `index` (number `id`) is now to show `value` on channel `ch`
+  // (0-3 a knob, 0..1000; 4 the pattern).
+  void (*target)(void* ctx, int index, uint8_t id, int ch, uint16_t value) = nullptr;
+  // A value left `origin` (a panel index, -1 the console) on channel `ch`.
+  void (*emitted)(void* ctx, int ch, uint16_t value, int origin) = nullptr;
+};
+
 struct Stats {
   uint32_t rx = 0;       // datagrams understood
   uint32_t bad = 0;      // datagrams that were not PFE/1
@@ -165,6 +179,8 @@ class Conductor {
   };
 
  public:
+  void setHooks(const ConductorHooks& hooks) { hooks_ = hooks; }
+
   void begin(const ConductorIo& io, uint32_t nowMs) {
     io_ = io;
     nowMs_ = nowMs;
@@ -217,7 +233,7 @@ class Conductor {
         p.uiDirty = true;
         logPanel(i, "lost (no report for 3 s)");
       }
-      if (p.identify && since(nowMs, p.identifyAtMs) > IDENTIFY_MS) {
+      if (p.identify && since(nowMs, p.identifyAtMs) > p.identifyForMs) {
         p.identify = false;
         p.uiDirty = true;
       }
@@ -303,17 +319,37 @@ class Conductor {
     Panel& p = panels_[i];
     p.haveTarget = true;
     if (pattern >= 0 && pattern < NO_PATTERN) {
-      p.tPattern = (uint8_t)pattern;
+      setTarget(p, CH_PATTERN, (uint16_t)pattern);
       p.applied[CH_PATTERN] = ++eventSeq_;
     }
     for (int k = 0; k < KNOBS; k++) {
       if (knob[k] < 0) continue;
-      p.tKnob[k] = (uint16_t)clampTo<int>(knob[k], 0, KNOB_MAX);
+      setTarget(p, k, (uint16_t)clampTo<int>(knob[k], 0, KNOB_MAX));
       p.applied[k] = ++eventSeq_;
     }
     p.tGlide = (uint16_t)clampTo<int>(glideMs < 0 ? cfg_.glideMs : glideMs, 0, 60000);
     p.uiDirty = true;
     return true;
+  }
+
+  // Brightness, from the console: one panel, or all of them and every panel
+  // that joins later. Not a channel: it does not travel as a wave and no
+  // hand at a panel sends it on. Held in RAM only - after a restart of the
+  // hub each panel keeps what it was last given (the panel stores it).
+  bool setBrightness(int i, int b) {
+    if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
+    panels_[i].tBright = (uint8_t)clampTo<int>(b, BRIGHTNESS_MIN, 255);
+    panels_[i].uiDirty = true;
+    return true;
+  }
+
+  void setAllBrightness(int b) {
+    allBright_ = (uint8_t)clampTo<int>(b, BRIGHTNESS_MIN, 255);
+    for (int i = 0; i < MAX_PANELS; i++) {
+      if (!panels_[i].used) continue;
+      panels_[i].tBright = allBright_;
+      panels_[i].uiDirty = true;
+    }
   }
 
   // Every panel, from the console: at once, or as a wave from panel `origin`.
@@ -367,15 +403,18 @@ class Conductor {
   }
   bool sceneUsed(int slot) const { return slot >= 0 && slot < SCENES && scenes_[slot].used; }
 
-  bool identify(int i, bool on) {
+  bool identify(int i, bool on, uint32_t forMs = IDENTIFY_MS) {
     if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
     panels_[i].identify = on;
     panels_[i].identifyAtMs = nowMs_;
+    panels_[i].identifyForMs = forMs;
     panels_[i].uiDirty = true;
     return true;
   }
   void identifyAll(bool on) {
-    for (int i = 0; i < MAX_PANELS; i++) identify(i, on);
+    identifyAllOn_ = on;
+    identifyAllAtMs_ = nowMs_;
+    for (int i = 0; i < MAX_PANELS; i++) identify(i, on, IDENTIFY_ALL_MS);
   }
 
   bool rebootPanel(int i) {
@@ -619,7 +658,8 @@ class Conductor {
       if (r.patTouch != prev.patTouch && r.pattern != NO_PATTERN) hand(i, CH_PATTERN, r.pattern);
     }
 
-    if (r.pattern != prev.pattern || r.flags != prev.flags || !sameBytes(r.knob, prev.knob, sizeof(r.knob)))
+    if (r.pattern != prev.pattern || r.flags != prev.flags || r.brightness != prev.brightness ||
+        !sameBytes(r.knob, prev.knob, sizeof(r.knob)))
       p.uiDirty = true;
   }
 
@@ -683,18 +723,30 @@ class Conductor {
       }
     }
     p.tGlide = 0;
+    if (allBright_ && !p.tBright) p.tBright = allBright_;   // the brightness the console last gave everyone
+    // Placing the panels with all of them showing their colours: one that
+    // joins meanwhile shows its colour too.
+    if (identifyAllOn_ && since(nowMs_, identifyAllAtMs_) < IDENTIFY_ALL_MS) {
+      p.identify = true;
+      p.identifyAtMs = identifyAllAtMs_;
+      p.identifyForMs = IDENTIFY_ALL_MS;
+    }
     p.haveTarget = true;
     p.uiDirty = true;
   }
 
   void setTarget(Panel& p, int ch, uint16_t v) {
+    bool changed = false;
     if (ch == CH_PATTERN) {
       if (v >= NO_PATTERN) return;
-      if (p.tPattern != (uint8_t)v) { p.tPattern = (uint8_t)v; p.uiDirty = true; }
+      if (p.tPattern != (uint8_t)v) { p.tPattern = (uint8_t)v; p.uiDirty = true; changed = true; }
     } else {
       v = v > KNOB_MAX ? KNOB_MAX : v;
-      if (p.tKnob[ch] != v) { p.tKnob[ch] = v; p.uiDirty = true; }
+      if (p.tKnob[ch] != v) { p.tKnob[ch] = v; p.uiDirty = true; changed = true; }
     }
+    // Every change of what a panel is to show passes here - a hand, a wave
+    // arriving, a scene, the console - at the moment it is that panel's.
+    if (changed && hooks_.target) hooks_.target(hooks_.ctx, (int)(&p - panels_), p.id, ch, v);
   }
 
   // A hand moved channel `ch` of panel `i` to `v`.
@@ -717,6 +769,7 @@ class Conductor {
             uint8_t kind) {
     Event* e = push((uint8_t)(1u << ch), v, origin, instant, linkedOnly, glide, kind);
     if (!e) return;
+    if (hooks_.emitted) hooks_.emitted(hooks_.ctx, ch, v, origin);
     shared_[ch].valid = true;
     shared_[ch].value = v;
     shared_[ch].seq = e->seq;
@@ -844,6 +897,7 @@ class Conductor {
     }
     s->glideMs = p.tGlide;
     s->hubMs = 0;
+    s->brightness = p.tBright;
   }
 
   void sendStates() {
@@ -933,7 +987,8 @@ class Conductor {
     for (int k = 0; k < KNOBS; k++) { if (k) o.ch(','); o.u32(p.rep.knob[k]); }
     o.str("],\"tp\":").i32(p.haveTarget && p.tPattern != NO_PATTERN ? p.tPattern : -1).str(",\"tk\":[");
     for (int k = 0; k < KNOBS; k++) { if (k) o.ch(','); o.u32(p.tKnob[k]); }
-    o.str("],\"ok\":").u32(settled(p) ? 1 : 0).str(",\"idf\":").u32(p.identify ? 1 : 0);
+    o.str("],\"br\":").u32(p.rep.brightness).str(",\"tb\":").u32(p.tBright);
+    o.str(",\"ok\":").u32(settled(p) ? 1 : 0).str(",\"idf\":").u32(p.identify ? 1 : 0);
     o.str(",\"fw\":").json(p.fw, 16).str(",\"var\":").json(p.variant, 16);
     o.str(",\"rst\":").u32(p.restarts).str(",\"lost\":").u32(p.lost).str(",\"hands\":").u32(p.hands);
     o.str(",\"rep\":").u32(p.reports).ch('}');
@@ -996,6 +1051,7 @@ class Conductor {
   }
 
   ConductorIo io_;
+  ConductorHooks hooks_;
   Config cfg_;
   Panel panels_[MAX_PANELS];
   Scene scenes_[SCENES];
@@ -1003,6 +1059,9 @@ class Conductor {
   int head_ = 0;
   int count_ = 0;
   uint32_t eventSeq_ = 0;
+  uint8_t allBright_ = 0;    // the brightness the console last gave every panel; 0 = none yet
+  bool identifyAllOn_ = false;
+  uint32_t identifyAllAtMs_ = 0;
   Shared shared_[CHANNELS];
   char names_[MAX_NAMES][NAME_LEN] = {{0}};
   Stats stats_;

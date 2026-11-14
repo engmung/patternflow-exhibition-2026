@@ -19,6 +19,21 @@
   const LINK_LABEL = { solo: '단독', sync: '동시', ripple: '물결' };
   const CHANNEL_LABEL = ['K1', 'K2', 'K3', 'K4', '패턴'];
   const TILE_W = 0.84, TILE_H = 0.42;   // a panel on the map, in map units (128 x 64 LEDs)
+  // The mark a panel shows while it is identified, by its number: a shape and
+  // a colour, both stepping with the number (1 red circle, 2 green square,
+  // 3 blue triangle, 4 yellow circle, ...; twelve different marks). The same
+  // lists as core/pfe_proto.h identifyMark (tools/build_console.py --check
+  // holds them together).
+  const IDENTIFY_COLOURS = [[255, 0, 0], [0, 220, 0], [0, 80, 255], [255, 210, 0]];
+  const IDENTIFY_COLOUR_NAMES = ['빨강', '초록', '파랑', '노랑'];
+  const IDENTIFY_SHAPES = ['circle', 'square', 'triangle'];
+  const IDENTIFY_SHAPE_NAMES = ['원', '사각형', '삼각형'];
+  const idMark = (id) => {
+    const n = (id || 1) - 1;
+    const [r, g, b] = IDENTIFY_COLOURS[n % IDENTIFY_COLOURS.length];
+    return { shape: IDENTIFY_SHAPES[n % IDENTIFY_SHAPES.length], colour: `rgb(${r},${g},${b})`,
+             name: `${IDENTIFY_COLOUR_NAMES[n % IDENTIFY_COLOURS.length]} ${IDENTIFY_SHAPE_NAMES[n % IDENTIFY_SHAPES.length]}` };
+  };
 
   // ── What the console knows ─────────────────────────────────────────────
   const S = {
@@ -36,7 +51,6 @@
     sceneOp: 'recall',
     cam: { x: 0, y: 0, z: 90, fitted: false },
     flash: new Map(),        // hub index -> time a hand was last seen there
-    phase: new Map(),        // hub index -> animation phase of its preview
     lastHubLineAt: 0,
   };
 
@@ -198,13 +212,14 @@
       this.port = await navigator.serial.requestPort();
       await this.port.open({ baudRate: 115200 });
       // The hub's own USB jack (Espressif's vendor id) sends only while DTR
-      // is up, which opening the port already did. On the COM jack - a
-      // USB-serial chip - DTR and RTS are the board's reset lines: let go of
-      // both, or the hub restarts and takes its hotspot down with it.
+      // is up. Opening the port raises it; say so anyway, since the hub
+      // goes by nothing else. On the COM jack - a USB-serial chip - DTR and
+      // RTS are the board's reset lines: let go of both, or the hub
+      // restarts and takes its hotspot down with it.
       const native = this.port.getInfo().usbVendorId === 0x303a;
-      if (!native) {
-        try { await this.port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch (_) { /* not every port has them */ }
-      }
+      try {
+        await this.port.setSignals(native ? { dataTerminalReady: true } : { dataTerminalReady: false, requestToSend: false });
+      } catch (_) { /* not every port has them */ }
       this.writer = this.port.writable.getWriter();
       this.enc = new TextEncoder();
       this.reading = this.readLoop();
@@ -344,7 +359,7 @@
         log('', `허브: 프로토콜 ${m.proto}${m.fw ? ', 펌웨어 ' + m.fw : ''}${m.ssid ? ', Wi-Fi ' + m.ssid : ''}`);
         break;
       case 'cfg': S.cfg = m; renderRules(); renderInspector(); break;
-      case 'names': S.names = m.n || []; renderInspector(); break;
+      case 'names': S.names = m.n || []; renderInspector(); renderAllPanels(); break;
       case 'scenes': S.scenes = m.u || []; renderScenes(); break;
       case 'hub':
         S.hub = m;
@@ -357,12 +372,14 @@
         if (prev && m.hands !== prev.hands) S.flash.set(m.i, performance.now());
         S.panels.set(m.i, m);
         if (S.sel === m.i) renderInspector();
+        throttled('allPanels', renderAllPanels, 250);
         $('stage-empty').hidden = true;
         break;
       }
       case 'gone':
         S.panels.delete(m.i);
         if (S.sel === m.i) { S.sel = null; renderInspector(); }
+        renderAllPanels();
         break;
       case 'w': {
         // A turning knob sends a value every few frames. One ring per
@@ -390,6 +407,7 @@
       row.style.marginBottom = '6px';
       const lab = document.createElement('span');
       lab.className = 'lab';
+      lab.id = `rule-lab-${c}`;
       lab.textContent = CHANNEL_LABEL[c];
       const seg = document.createElement('div');
       seg.className = 'seg small';
@@ -424,6 +442,27 @@
 
   function busy(el) { return document.activeElement === el; }
 
+  // The ◀ ▶ beside a pattern list. The panels report a new pattern a moment
+  // after it was asked for; until they do the list shows what was asked,
+  // so that pressing three times quickly goes three on and not one.
+  const stepHeld = new Map();          // list id -> { value, until }
+  function heldStep(sel) {
+    const h = stepHeld.get(sel.id);
+    if (!h) return null;
+    if (performance.now() < h.until && +h.value < sel.options.length) return h.value;
+    stepHeld.delete(sel.id);
+    return null;
+  }
+  function stepPattern(sel, by, apply) {
+    const count = sel.options.length;
+    if (!count || sel.disabled) return;
+    const at = +(heldStep(sel) ?? sel.value) || 0;
+    const next = ((at + by) % count + count) % count;      // round the ends
+    stepHeld.set(sel.id, { value: String(next), until: performance.now() + 1500 });
+    sel.value = String(next);
+    apply(next);
+  }
+
   function renderRules() {
     const cfg = S.cfg;
     if (!cfg) return;
@@ -439,6 +478,10 @@
     setPressed(['cfg-k4-pattern', 'cfg-k4-knob'], cfg.k4 ? 'cfg-k4-pattern' : 'cfg-k4-knob');
     $('k4-range').hidden = !cfg.k4;
     $('k4-note').hidden = !cfg.k4;
+    $('k4-pattern-why').hidden = !cfg.k4;
+    $('k4-knob-note').hidden = !!cfg.k4;
+    // While K4 switches patterns, the pattern row is K4's row: say so.
+    $('rule-lab-4').textContent = cfg.k4 ? 'K4 패턴' : '패턴';
     for (const [id, v] of [['cfg-pmin', cfg.pmin], ['cfg-pmax', cfg.pmax], ['cfg-k4s', cfg.k4s]])
       if (!busy($(id))) $(id).value = v;
     const last = cfg.pmax === 255 ? '끝' : cfg.pmax;
@@ -530,6 +573,32 @@
         b.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); turn(); } });
       }
     }
+    // Brightness: the panel's own setting, not a channel - it does not travel.
+    const br = document.createElement('div');
+    br.className = 'knob';
+    br.id = 'p-bright-row';
+    br.style.marginBottom = '6px';
+    br.innerHTML = '<label class="lab" for="p-br">밝기</label>' +
+      '<input type="range" id="p-br" min="5" max="255" step="1" value="128">' +
+      '<span class="val num" id="p-br-v">–</span>';
+    knobs.append(br);
+    $('p-br').addEventListener('input', (ev) => {
+      const v = +ev.target.value;
+      $('p-br-v').textContent = v;
+      throttled('bright', () => setFromConsole({ br: v }), 120);
+    });
+
+    // K4's place while it switches patterns: not a missing slider, a role.
+    const k4 = document.createElement('div');
+    k4.className = 'knob';
+    k4.id = 'p-k4-pattern';
+    k4.hidden = true;
+    k4.style.marginBottom = '6px';
+    k4.style.gridTemplateColumns = '26px minmax(0, 1fr) auto';
+    k4.innerHTML = '<span class="lab">K4</span><span class="note" style="margin:0">패턴을 넘기는 중 (위의 패턴에서 고름)</span>' +
+      '<button type="button" class="btn small" id="p-k4-as-knob">노브로 쓰기</button>';
+    knobs.append(k4);
+    $('p-k4-as-knob').addEventListener('click', () => send({ c: 'cfg', k4: false }));
   }
 
   function virtualHand(knob, detents) {
@@ -552,6 +621,10 @@
 
   function renderInspector() {
     const p = S.sel != null ? S.panels.get(S.sel) : null;
+    if (renderInspector.shown !== S.sel) {      // another panel: what was stepped to on the last one is not its pattern
+      renderInspector.shown = S.sel;
+      stepHeld.delete('p-pattern');
+    }
     const demo = S.mode === 'demo';
     $('insp-none').hidden = !!p;
     for (const id of ['insp', 'insp-set', 'insp-act', 'insp-diag']) $(id).hidden = !p;
@@ -577,20 +650,24 @@
       sel.textContent = '';
       for (let i = 0; i < count; i++) sel.append(new Option(patternName(i), String(i)));
     }
-    if (!busy(sel)) sel.value = String(p.tp >= 0 ? p.tp : p.pat);
+    if (!busy(sel)) sel.value = heldStep(sel) ?? String(p.tp >= 0 ? p.tp : p.pat);
     for (let k = 0; k < KNOBS; k++) {
       $(`p-knob-row-${k}`).hidden = k === 3 && k4;
       $(`p-hand-row-${k}`).hidden = false;
       const input = $(`p-k${k}`);
       if (!busy(input)) { input.value = p.tk[k]; $(`p-k${k}-v`).textContent = p.tk[k]; }
     }
+    $('p-k4-pattern').hidden = !k4;
+    // The brightness the panel reports; a panel of the first version says none.
+    $('p-bright-row').hidden = !p.br;
+    if (p.br && !busy($('p-br'))) { $('p-br').value = p.br; $('p-br-v').textContent = p.br; }
     $('p-hand-3-down').textContent = k4 ? '◀ 이전 패턴' : '◀ 왼쪽';
     $('p-hand-3-up').textContent = k4 ? '다음 패턴 ▶' : '오른쪽 ▶';
     if (demo && S.transport && S.transport.x) {
       const sim = S.transport.sim(p.uid);
       $('p-power').textContent = sim >= 0 && S.transport.x.pfe_powered(sim) ? '전원 끄기' : '전원 켜기';
     }
-    $('p-identify').textContent = p.idf ? '번호 표시 끄기' : '번호 표시';
+    $('p-identify').textContent = p.idf ? '표시 끄기' : `표시 (${idMark(p.id).name})`;
     $('p-forget').disabled = !!p.on;
     $('p-forget').title = p.on ? '연결이 끊긴 패널만 지울 수 있습니다' : '';
     $('p-reboot').disabled = !p.on;
@@ -618,23 +695,69 @@
     }
   }
 
+  // ── Every panel at once ────────────────────────────────────────────────
+  // The controls show what most of the connected panels show now.
+  function mostCommon(values) {
+    const seen = new Map();
+    let best = null, bestN = 0;
+    for (const v of values) {
+      const n = (seen.get(v) || 0) + 1;
+      seen.set(v, n);
+      if (n > bestN) { best = v; bestN = n; }
+    }
+    return best;
+  }
+
+  function anyIdentified() {
+    return [...S.panels.values()].some((p) => p.on && p.idf);
+  }
+
+  function renderAllPanels() {
+    const ps = [...S.panels.values()].filter((p) => p.on);
+    $('map-identify').textContent = anyIdentified() ? '표시 끄기' : '전체 모양·색 표시';
+    $('map-identify').setAttribute('aria-pressed', String(anyIdentified()));
+    const sel = $('all-pattern');
+    const count = Math.max(1, S.names.length, ...ps.map((p) => p.pc || 0));
+    const key = count + '|' + S.names.join('|');
+    if (sel.dataset.key !== key) {
+      sel.dataset.key = key;
+      sel.textContent = '';
+      for (let i = 0; i < count; i++) sel.append(new Option(patternName(i), String(i)));
+    }
+    const pat = mostCommon(ps.map((p) => p.pat).filter((v) => v >= 0));
+    if (!busy(sel) && pat != null) sel.value = heldStep(sel) ?? String(pat);
+    sel.disabled = !ps.length;
+    $('all-pattern-prev').disabled = $('all-pattern-next').disabled = !ps.length;
+    // Patterns travel by number: panels that hold different lists show
+    // different patterns under one number. Their counts give it away.
+    const counts = ps.filter((p) => p.pc > 0).sort((a, b) => a.id - b.id);
+    const warn = $('all-pattern-warn');
+    warn.hidden = new Set(counts.map((p) => p.pc)).size < 2;
+    if (!warn.hidden) {
+      warn.textContent = `패널마다 패턴 수가 다릅니다 (${counts.map((p) => `${p.id}번 ${p.pc}개`).join(', ')}). ` +
+        '같은 번호가 다른 패턴이 됩니다. 맞추려면 ensemble\\tools\\sync-patterns.cmd 를 두 번 누르세요.';
+    }
+    const slider = $('all-bright');
+    const br = mostCommon(ps.map((p) => p.br).filter((v) => v > 0));
+    slider.disabled = br == null;     // no panel says its brightness: old firmware, or none connected
+    if (!busy(slider)) {
+      if (br != null) slider.value = br;
+      $('all-bright-v').textContent = br != null ? br : '–';
+    }
+  }
+
   function renderAll() {
     renderRules();
     renderScenes();
     renderStats();
     renderInspector();
+    renderAllPanels();
     $('stage-empty').hidden = S.panels.size > 0 || S.mode === 'demo';
   }
 
   // ── The map ────────────────────────────────────────────────────────────
   const canvas = $('map');
   const ctx = canvas.getContext('2d');
-  const led = document.createElement('canvas');
-  const LW = 24, LH = 12;
-  led.width = LW;
-  led.height = LH;
-  const lctx = led.getContext('2d');
-  const limg = lctx.createImageData(LW, LH);
   let W = 0, H = 0, dpr = 1;
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   let colors = {};
@@ -668,51 +791,44 @@
     S.cam.fitted = true;
   }
 
-  function hsv(h, s, v) {
-    h = ((h % 360) + 360) % 360;
-    const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
-    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
-    return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
-  }
-  const BASE_HUE = [16, 196, 268, 322, 132, 214, 38, 60];
-  const fract = (v) => v - Math.floor(v);
+  // What a panel shows on the map: what it is set to, not a picture of it.
+  // The console cannot know how a pattern looks on a panel (two panels may
+  // even hold different patterns under one number), so the tile gives the
+  // pattern number and draws the four knob positions as bars.
+  function drawInfo(x, y, tw, th, pat, k, lit) {
+    ctx.fillStyle = lit ? '#1B1813' : '#0E0D0B';
+    ctx.fillRect(x, y, tw, th);
+    const pad = Math.max(2, Math.round(tw * 0.04));
+    const head = Math.max(15, th * 0.36);       // the number chip sits at this strip's left
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    ctx.font = `700 ${clamp(Math.round(head * 0.62), 9, 26)}px ${css('--sans')}`;
+    ctx.fillStyle = lit ? '#EDE7DB' : '#6F685D';
+    ctx.fillText(`패턴 ${pat}`, x + tw - pad, y + head / 2 + 1);
 
-  // What a panel "shows" here: not its pattern, but a picture in which the
-  // pattern number and every knob value can be seen moving across the room.
-  // K1 how much, K2 colour, K3 speed (in the phase), K4 brightness.
-  function paintLeds(pat, k, phase, on) {
-    const d = limg.data;
-    const shape = ((pat % 8) + 8) % 8;
-    const hue0 = BASE_HUE[shape] + (k[1] - 0.5) * 150;
-    const amount = k[0];
-    const bright = on ? 0.35 + 0.65 * k[3] : 0;
-    for (let y = 0; y < LH; y++) {
-      for (let x = 0; x < LW; x++) {
-        const u = (x + 0.5) / LW, v = (y + 0.5) / LH;
-        const cx = (u - 0.5) * 2, cy = v - 0.5;
-        let b = 0, hue = hue0;
-        switch (shape) {
-          case 0: { const r = Math.hypot(cx, cy); b = 0.5 + 0.5 * Math.sin(r * (4 + 18 * amount) - phase * 3); hue += r * 40; break; }
-          case 1: b = fract(u * (1.5 + 7 * amount) + v * 0.6 - phase * 0.5); break;
-          case 2: b = Math.abs(Math.sin(u * Math.PI * (2 + 9 * amount)) * Math.sin(v * Math.PI * (1 + 4 * amount) + phase)); break;
-          case 3: { const a = Math.atan2(cy, cx), r = Math.hypot(cx, cy); b = 0.5 + 0.5 * Math.cos(a * (2 + Math.round(6 * amount)) + phase) - r * 0.5; hue += r * 60; break; }
-          case 4: b = 0.5 + 0.25 * Math.sin(u * (3 + 10 * amount) + phase) + 0.25 * Math.sin(v * 7 - phase * 1.3 + u * 4); break;
-          case 5: b = 0.5 + 0.5 * Math.sin(v * (3 + 14 * amount) + Math.sin(u * 5 + phase) * 1.2 - phase * 1.5); hue += v * 30; break;
-          case 6: { const n = fract(Math.sin(x * 12.9898 + y * 78.233 + Math.floor(phase * 3) * 37.719) * 43758.5453); b = n < 0.12 + 0.6 * amount ? 0.4 + 0.6 * n : 0; hue += n * 40; break; }
-          default: b = ((x >> 1) + (y >> 1) + Math.floor(phase * 2)) % 2 ? 0.25 + 0.75 * amount : 0.08; break;
-        }
-        const [r, g, bl] = hsv(hue, shape === 7 ? 0.15 : 0.85, clamp(b, 0, 1) * bright);
-        const o = (y * LW + x) * 4;
-        d[o] = r; d[o + 1] = g; d[o + 2] = bl; d[o + 3] = 255;
+    const rows = th - head - pad;
+    if (rows < 8) return;
+    const gap = Math.max(1, rows * 0.08);
+    const bh = (rows - gap * 3) / 4;
+    const labelled = bh >= 7 && tw >= 70;
+    ctx.font = `${clamp(Math.round(bh * 0.85), 7, 12)}px ${css('--sans')}`;
+    ctx.textAlign = 'left';
+    const labelW = labelled ? ctx.measureText('K4 ').width : 0;
+    const bx = x + pad + labelW, bw = tw - pad * 2 - labelW;
+    for (let n = 0; n < 4; n++) {
+      const by = y + head + n * (bh + gap);
+      if (labelled) {
+        ctx.fillStyle = '#8F877A';
+        ctx.fillText(`K${n + 1}`, x + pad, by + bh / 2 + 0.5);
       }
+      ctx.fillStyle = 'rgba(237,231,219,0.10)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = lit ? colors.led : '#4A453D';
+      ctx.fillRect(bx, by, bw * clamp(k[n], 0, 1), bh);
     }
-    lctx.putImageData(limg, 0, 0);
   }
 
-  let lastFrame = performance.now();
   function draw(now) {
-    const dt = Math.min(0.1, (now - lastFrame) / 1000);
-    lastFrame = now;
     if (!S.cam.fitted && S.panels.size) fit();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = colors.stage;
@@ -748,7 +864,6 @@
 
     const demo = S.transport && S.transport.name === 'demo' && S.transport.x ? S.transport : null;
     const tw = TILE_W * z, th = TILE_H * z;
-    ctx.imageSmoothingEnabled = false;
     for (const [i, p] of S.panels) {
       const [cx, cy] = toScreen(p.x, p.y);
       const x = cx - tw / 2, y = cy - th / 2;
@@ -766,19 +881,22 @@
           idf = !!demo.x.pfe_identify(sim);
         }
       }
-      const phase = (S.phase.get(i) || 0) + dt * (0.25 + 3.2 * k[2]);
-      S.phase.set(i, phase);
-      paintLeds(pat, k, phase, lit);
-      ctx.drawImage(led, x, y, tw, th);
+      drawInfo(x, y, tw, th, pat, k, lit);
 
+      // Showing its mark: the tile shows the same shape in the same colour as
+      // the panel in the room, so the one on the wall and the one on the map
+      // are matched by eye. No number in it, as on the panel.
       if (idf && lit) {
-        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        const m = idMark(p.id);
+        ctx.fillStyle = '#000';
         ctx.fillRect(x, y, tw, th);
-        ctx.fillStyle = colors.ink;
-        ctx.font = `700 ${Math.round(th * 0.7)}px ${css('--sans')}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(p.id), cx, cy + 1);
+        ctx.fillStyle = m.colour;
+        const r = th / 2 - Math.max(1, th * 0.05);
+        ctx.beginPath();
+        if (m.shape === 'circle') ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        else if (m.shape === 'square') ctx.rect(cx - r, cy - r, 2 * r, 2 * r);
+        else { ctx.moveTo(cx, cy - r); ctx.lineTo(cx - r * 1.2, cy + r); ctx.lineTo(cx + r * 1.2, cy + r); ctx.closePath(); }
+        ctx.fill();
       }
 
       const flashed = S.flash.get(i);
@@ -979,11 +1097,11 @@
       if (ev.target.value) arrange(ev.target.value);
       ev.target.value = '';
     });
-    let allIdentify = false;
+    // One button for all of them, on and off. What it says follows the
+    // panels (any of them showing its colour = "off" is the next press), so
+    // it is right after a reload, from a second console, or in the demo.
     $('map-identify').addEventListener('click', () => {
-      allIdentify = !allIdentify;
-      send({ c: 'identify', uid: 'all', on: allIdentify });
-      $('map-identify').textContent = allIdentify ? '번호 표시 끄기' : '전체 번호 표시';
+      send({ c: 'identify', uid: 'all', on: !anyIdentified() });
     });
 
     // Every connected panel's address, one a line, in the order of their
@@ -1006,7 +1124,17 @@
         S.scope = sc;
         setPressed(['scope-one', 'scope-wave', 'scope-all'], 'scope-' + sc);
       });
-    $('p-pattern').addEventListener('change', (ev) => setFromConsole({ pat: +ev.target.value }));
+    $('p-pattern').addEventListener('change', (ev) => { stepHeld.delete('p-pattern'); setFromConsole({ pat: +ev.target.value }); });
+    $('all-pattern').addEventListener('change', (ev) => { stepHeld.delete('all-pattern'); send({ c: 'set', to: 'all', pat: +ev.target.value }); });
+    for (const [id, by] of [['prev', -1], ['next', 1]]) {
+      $(`p-pattern-${id}`).addEventListener('click', () => stepPattern($('p-pattern'), by, (pat) => setFromConsole({ pat })));
+      $(`all-pattern-${id}`).addEventListener('click', () => stepPattern($('all-pattern'), by, (pat) => send({ c: 'set', to: 'all', pat })));
+    }
+    $('all-bright').addEventListener('input', (ev) => {
+      const v = +ev.target.value;
+      $('all-bright-v').textContent = v;
+      throttled('allBright', () => send({ c: 'set', to: 'all', br: v }), 120);
+    });
     const edit = (what) => { const uid = selUid(); if (uid) send({ c: 'panel', uid, ...what }); };
     $('p-id').addEventListener('change', (ev) => edit({ id: clamp(Math.round(+ev.target.value) || 1, 1, 250) }));
     $('p-name').addEventListener('change', (ev) => edit({ name: ev.target.value }));

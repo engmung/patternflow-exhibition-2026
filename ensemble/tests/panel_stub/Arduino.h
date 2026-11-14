@@ -43,6 +43,8 @@ class String {
   String& operator+=(unsigned int v) { s_ += std::to_string(v); return *this; }
   String& operator+=(unsigned long v) { s_ += std::to_string(v); return *this; }
   String& operator+=(const String& o) { s_ += o.s_; return *this; }
+  bool operator==(const String& o) const { return s_ == o.s_; }
+  size_t length() const { return s_.size(); }
   const char* c_str() const { return s_.c_str(); }
  private:
   std::string s_;

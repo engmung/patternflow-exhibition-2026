@@ -35,6 +35,7 @@ struct SimPanel {
   uint8_t uid[6] = {0, 0, 0, 0, 0, 0};
   bool powered = false;
   int actual = 0;                 // the pattern its LEDs show
+  uint8_t brightness = 128;       // kept like the device's NVS: a power cut does not reset it
   int delta[KNOBS] = {0, 0, 0, 0};
   bool press[KNOBS] = {false, false, false, false};
   uint32_t nextFrameMs = 0;
@@ -234,8 +235,10 @@ class Sim {
     in.patternName = simPatternName(p.actual);
     in.rssi = (int8_t)(-45 - (i * 7) % 30);
     in.fps = 60;
+    in.brightness = p.brightness;
     p.out = FrameOut();
     p.f.frame(in, p.out);
+    if (p.out.brightness) p.brightness = p.out.brightness;
     int idx;
     bool fromHub;
     if (p.f.takePattern(&idx, &fromHub) && idx >= 0 && idx < SIM_PATTERNS) p.actual = idx;

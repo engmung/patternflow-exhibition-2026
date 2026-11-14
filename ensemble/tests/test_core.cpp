@@ -8,6 +8,7 @@
 //
 // License: MIT
 #include "../core/pfe_sim.h"
+#include "../core/pfe_midi.h"
 
 #include <cmath>
 #include <cstdio>
@@ -120,11 +121,12 @@ static void testCodec() {
   r.rssi = -52;
   r.fps = 60;
   r.uptimeS = 0x01020304;
+  r.brightness = 200;
   uint8_t b[MAX_PACKET];
   CHECK_EQ(encode(r, b), REPORT_LEN);
   const uint8_t expect[REPORT_LEN] = {'P', 'F', 'E', 1, 0x01, 0x01, 0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6,
                                       0x02, 0x01, 0x04, 0x03, 3, 9, 0x00, 0x00, 0xfa, 0x00, 0xe8, 0x03,
-                                      0x13, 0x02, 1, 2, 3, 255, 0xcc, 60, 0x04, 0x03, 0x02, 0x01};
+                                      0x13, 0x02, 1, 2, 3, 255, 0xcc, 60, 0x04, 0x03, 0x02, 0x01, 200};
   CHECK(std::memcmp(b, expect, REPORT_LEN) == 0);
   Report r2;
   CHECK(decode(b, REPORT_LEN, &r2));
@@ -134,10 +136,15 @@ static void testCodec() {
   CHECK_EQ(r2.touch[3], 255);
   CHECK_EQ(r2.rssi, -52);
   CHECK_EQ(r2.uptimeS, r.uptimeS);
+  CHECK_EQ(r2.brightness, 200);
   CHECK(std::memcmp(r2.uid, uid, 6) == 0);
+  // A panel of the first version sends 36 bytes and no brightness: still read.
+  CHECK(decode(b, REPORT_MIN_LEN, &r2));
+  CHECK_EQ(r2.brightness, 0);
+  CHECK_EQ(r2.uptimeS, r.uptimeS);
 
   // Too short, wrong magic, wrong version, wrong type: not ours.
-  CHECK(!decode(b, REPORT_LEN - 1, &r2));
+  CHECK(!decode(b, REPORT_MIN_LEN - 1, &r2));
   b[0] = 'X';
   CHECK(!decode(b, REPORT_LEN, &r2));
   b[0] = 'P';
@@ -169,7 +176,9 @@ static void testCodec() {
   s.ack[0] = 4; s.ack[1] = 3; s.ack[2] = 2; s.ack[3] = 1;
   s.glideMs = 80;
   s.hubMs = 123456;
+  s.brightness = 90;
   CHECK_EQ(encode(s, b), STATE_LEN);
+  CHECK_EQ(b[32], 90);
   State s2;
   CHECK(decode(b, STATE_LEN, &s2));
   CHECK_EQ(s2.flags, s.flags);
@@ -180,6 +189,12 @@ static void testCodec() {
   CHECK_EQ(s2.ack[3], 1);
   CHECK_EQ(s2.glideMs, 80);
   CHECK_EQ(s2.hubMs, 123456);
+  CHECK_EQ(s2.brightness, 90);
+  // A hub of the first version sends 32 bytes: no brightness target.
+  CHECK(decode(b, STATE_MIN_LEN, &s2));
+  CHECK_EQ(s2.brightness, 0);
+  CHECK_EQ(s2.hubMs, 123456);
+  CHECK(!decode(b, STATE_MIN_LEN - 1, &s2));
 
   Info m;
   std::memcpy(m.uid, uid, 6);
@@ -691,6 +706,38 @@ static void testConsoleSets() {
   CHECK(!sim->panel(1).out.identify);
   run(31000);
   CHECK(!sim->panel(2).out.identify);
+  // All at once is for placing them: it stays on until it is switched off.
+  cmd("{\"c\":\"identify\",\"uid\":\"all\",\"on\":true}");
+  run(200);
+  for (int i = 0; i < 5; i++) CHECK(sim->panel(i).out.identify);
+  run(61000);
+  for (int i = 0; i < 5; i++) CHECK(sim->panel(i).out.identify);
+  // A panel that joins meanwhile shows its colour too.
+  sim->power(4, false);
+  run(3500);
+  cmd("{\"c\":\"forget\",\"uid\":\"" + uidOf(4) + "\"}");
+  sim->power(4, true);
+  run(800);
+  CHECK(sim->panel(4).out.identify);
+  cmd("{\"c\":\"identify\",\"uid\":\"all\",\"on\":false}");
+  run(200);
+  for (int i = 0; i < 5; i++) CHECK(!sim->panel(i).out.identify);
+  // The marks: shape and colour step together, twelve different ones.
+  CHECK(identifyMark(1).shape == SHAPE_CIRCLE && identifyMark(1).colour.r == 255 && identifyMark(1).colour.g == 0);
+  CHECK(identifyMark(2).shape == SHAPE_SQUARE && identifyMark(2).colour.g == 220);
+  CHECK(identifyMark(3).shape == SHAPE_TRIANGLE && identifyMark(3).colour.b == 255);
+  CHECK(identifyMark(4).shape == SHAPE_CIRCLE && identifyMark(4).colour.r == 255 && identifyMark(4).colour.g == 210);
+  bool distinct = true;
+  for (int a = 1; a <= 12; a++)
+    for (int b = a + 1; b <= 12; b++) {
+      const IdentifyMark x = identifyMark((uint8_t)a), y = identifyMark((uint8_t)b);
+      if (x.shape == y.shape && x.colour.r == y.colour.r && x.colour.g == y.colour.g && x.colour.b == y.colour.b) distinct = false;
+    }
+  CHECK(distinct);
+  for (int a = 1; a < 12; a++) {   // neighbours differ in both
+    const IdentifyMark x = identifyMark((uint8_t)a), y = identifyMark((uint8_t)(a + 1));
+    CHECK(x.shape != y.shape && !(x.colour.r == y.colour.r && x.colour.g == y.colour.g && x.colour.b == y.colour.b));
+  }
 
   // Reboot one panel from the console.
   const uint32_t boots = sim->panel(3).boots;
@@ -705,6 +752,235 @@ static void testConsoleSets() {
   cmd("{\"c\":\"forget\",\"uid\":\"" + uidOf(4) + "\"}");
   CHECK_EQ(sim->conductor().panelCount(), 4);
   CHECK(anyLine("\"t\":\"gone\""));
+}
+
+// Brightness from the console: one panel, all of them, and whoever joins
+// later. Applied when the target changes, so a panel's own setting (K1's
+// long press) is not pulled back.
+static void testBrightness() {
+  g_test = "brightness";
+  fresh(4);
+  links("sync", "sync");
+  run(400);
+  for (int i = 0; i < 4; i++) CHECK_EQ(sim->panel(i).brightness, 128);   // nobody asked: each keeps its own
+  CHECK(anyLine("\"t\":\"p\"", "\"br\":128"));
+
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"br\":40}");
+  run(300);
+  for (int i = 0; i < 4; i++) CHECK_EQ(sim->panel(i).brightness, 40);
+  CHECK_EQ(hp(0).rep.brightness, 40);          // and each says so
+  sim->outClear();
+  run(2100);
+  CHECK(anyLine("\"t\":\"p\"", "\"br\":40,\"tb\":40"));
+
+  // One panel, by its number; its knobs and pattern stay where they were.
+  int two = -1, other = -1;
+  for (int i = 0; i < 4; i++) {
+    if (hp(i).id == 2) two = i;
+    else if (other < 0) other = i;
+  }
+  CHECK(two >= 0 && other >= 0);
+  const uint16_t k0 = val(two, 0);
+  const int pat = sim->panel(two).actual;
+  cmd("{\"c\":\"set\",\"to\":\"#2\",\"br\":230}");
+  run(300);
+  CHECK_EQ(sim->panel(two).brightness, 230);
+  CHECK_EQ(sim->panel(other).brightness, 40);
+  CHECK_EQ(val(two, 0), k0);
+  CHECK_EQ(sim->panel(two).actual, pat);
+
+  // Set at the panel itself: it stays, the hub's target is not forced back.
+  sim->panel(2).brightness = 99;
+  run(2000);
+  CHECK_EQ(sim->panel(2).brightness, 99);
+  CHECK_EQ(hp(2).rep.brightness, 99);
+  // A new value from the console reaches it again.
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"br\":70}");
+  run(300);
+  for (int i = 0; i < 4; i++) CHECK_EQ(sim->panel(i).brightness, 70);
+
+  // A panel the hub meets later takes what the console last gave everyone.
+  sim->power(3, false);
+  run(3500);
+  cmd("{\"c\":\"forget\",\"uid\":\"" + uidOf(3) + "\"}");
+  sim->panel(3).brightness = 180;
+  sim->power(3, true);
+  run(800);
+  CHECK_EQ(sim->panel(3).brightness, 70);
+
+  // A panel that restarts keeps its brightness and is not set again for nothing.
+  sim->power(0, false);
+  sim->power(0, true);
+  run(800);
+  CHECK_EQ(sim->panel(0).brightness, 70);
+
+  // Out of range is refused; brightness alone to one panel is acknowledged.
+  sim->outClear();
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"br\":3}");
+  CHECK(anyLine("\"t\":\"err\"", "br: 5 to 255"));
+  cmd("{\"c\":\"set\",\"to\":\"#1\",\"br\":255,\"r\":5}");
+  CHECK(anyLine("\"t\":\"ack\"", "\"r\":5"));
+  cmd("{\"c\":\"set\",\"to\":\"#1\"}");
+  CHECK(anyLine("\"t\":\"err\"", "nothing to set"));
+}
+
+// MIDI, the hub's side (pfe_midi.h): the ensemble as one Patternflow per
+// panel, channel = number; channel 16 the ensemble as a whole.
+static std::vector<std::vector<uint8_t>> g_midi;
+static int g_midiRoom = -1;       // how many more messages the port takes; -1: any number
+static bool midiCapture(void*, const uint8_t* m, size_t n) {
+  if (g_midiRoom == 0) return false;
+  if (g_midiRoom > 0) g_midiRoom--;
+  g_midi.emplace_back(m, m + n);
+  return true;
+}
+static int midiCount(uint8_t status, uint8_t d1) {
+  int count = 0;
+  for (const auto& m : g_midi) count += (m[0] == status && m[1] == d1) ? 1 : 0;
+  return count;
+}
+static int midiLast(uint8_t status, uint8_t d1) {
+  int last = -1;
+  for (const auto& m : g_midi)
+    if (m[0] == status && m[1] == d1 && m.size() > 2) last = m[2];
+  return last;
+}
+static bool sawMidi(uint8_t status, uint8_t d1, int d2 = -1) {
+  for (const auto& m : g_midi)
+    if (m[0] == status && m[1] == d1 && (d2 < 0 || (m.size() > 2 && m[2] == d2))) return true;
+  return false;
+}
+static int simById(int id) {
+  for (int i = 0; i < sim->count(); i++)
+    if (hub(i) >= 0 && hp(i).id == id) return i;
+  return -1;
+}
+static uint8_t v7(uint16_t v) { return (uint8_t)((v * 127 + 500) / 1000); }
+static bool midiIn(std::initializer_list<uint8_t> bytes, Midi& midi) {
+  const std::vector<uint8_t> m(bytes);
+  return midi.onMessage(m.data(), m.size());
+}
+
+static void testMidi() {
+  g_test = "midi";
+  static Midi midi;
+  fresh(4);
+  links("sync", "sync");
+  run(400);
+  midi = Midi();
+  midi.begin(&sim->conductor(), midiCapture, nullptr);
+  const int p1 = simById(1), p2 = simById(2), p3 = simById(3), p4 = simById(4);
+  CHECK(p1 >= 0 && p2 >= 0 && p3 >= 0 && p4 >= 0);
+
+  // Out: a hand on panel 2's K1 - every panel follows, each on its own channel,
+  // and the turned value on channel 16.
+  g_midi.clear();
+  sim->hand(p2, 0, 2);
+  run(300);
+  for (int id = 1; id <= 4; id++) CHECK(sawMidi((uint8_t)(0xB0 | (id - 1)), 24, v7(val(simById(id), 0))));
+  CHECK(sawMidi(0xBF, 24, v7(val(p2, 0))));
+  // A pattern change, by K4: Program Change on each panel's channel.
+  g_midi.clear();
+  sim->hand(p1, 3, 3);
+  run(400);
+  CHECK(sawMidi(0xC0, (uint8_t)sim->panel(p1).actual) && sawMidi(0xC3, (uint8_t)sim->panel(p4).actual));
+
+  // Out, as a wave: the far panel's channel speaks later.
+  links("ripple", "ripple");
+  cmd("{\"c\":\"cfg\",\"speed\":2}");
+  run(200);
+  g_midi.clear();
+  sim->hand(p1, 1, 4);
+  run(250);
+  CHECK(sawMidi(0xB0, 25));          // panel 1, at once
+  CHECK(!sawMidi(0xB3, 25));         // panel 4, three units away: not yet
+  run(1600);
+  CHECK(sawMidi(0xB3, 25, v7(val(p1, 1))));
+
+  // In: channel 16 is every panel; nothing goes back to the host.
+  g_midi.clear();
+  CHECK(midiIn({0xBF, 20, 127}, midi));
+  run(300);
+  CHECK(allValue(0, 1000));
+  bool echoed = false;
+  for (const auto& m : g_midi) echoed = echoed || (m[0] & 0xF0) == 0xB0;
+  CHECK(!echoed);
+  // Channel n is panel n: K2 of panel 2 only.
+  CHECK(midiIn({0xB1, 21, 0}, midi));
+  run(300);
+  CHECK_EQ(val(p2, 1), 0);
+  CHECK(val(p3, 1) != 0);
+  // Program Change on channel 3: panel 3's pattern, and it is said back.
+  g_midi.clear();
+  CHECK(midiIn({0xC2, 5}, midi));
+  run(400);
+  CHECK_EQ(sim->panel(p3).actual, 5);
+  CHECK(sawMidi(0xC2, 5));
+  // Relative: two detents up from where each one is.
+  const uint16_t before = val(p4, 2);
+  CHECK(midiIn({0xBF, 26, 66}, midi));
+  run(300);
+  CHECK_EQ(val(p4, 2), (uint16_t)(before + 2 * 1000 / 32));
+  // Brightness, the ensemble's own CC 28.
+  CHECK(midiIn({0xBF, 28, 127}, midi));
+  run(300);
+  for (int i = 0; i < 4; i++) CHECK_EQ(sim->panel(i).brightness, 255);
+  // A hand after the host: told again, even back to a value the host had set.
+  g_midi.clear();
+  sim->hand(p2, 0, -1);
+  run(300);
+  CHECK(sawMidi(0xB1, 24, v7(val(p2, 0))));
+  // Not ours: a channel with no panel, a note, a CC outside the map.
+  CHECK(!midiIn({0xB9, 20, 64}, midi));
+  CHECK(!midiIn({0x9F, 60, 100}, midi));
+  CHECK(!midiIn({0xBF, 7, 100}, midi));
+
+  // A port with room for a few messages at a time (USB-MIDI: sixteen) loses
+  // none of a burst: all four knobs of all four panels are twenty messages.
+  links("sync", "sync");
+  run(300);
+  g_midi.clear();
+  g_midiRoom = 6;
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"k\":[111,222,333,444]}");
+  run(100);
+  CHECK_EQ((int)g_midi.size(), 6);
+  CHECK(midi.pending() > 0);
+  for (int pass = 0; pass < 6 && midi.pending(); pass++) {
+    g_midiRoom = 6;
+    midi.flush();
+  }
+  CHECK_EQ(midi.pending(), 0);
+  for (int id = 1; id <= 4; id++)
+    for (int k = 0; k < 4; k++)
+      CHECK_EQ(midiLast((uint8_t)(0xB0 | (id - 1)), (uint8_t)(24 + k)), (int)v7((uint16_t)(111 * (k + 1))));
+  for (int k = 0; k < 4; k++) CHECK_EQ(midiLast(0xBF, (uint8_t)(24 + k)), (int)v7((uint16_t)(111 * (k + 1))));
+  CHECK_EQ((int)g_midi.size(), 20);        // each once
+  // A port nobody listens to: when somebody does, each knob is said once,
+  // where it is now.
+  g_midi.clear();
+  g_midiRoom = 0;
+  cmd("{\"c\":\"set\",\"to\":\"#1\",\"kn\":0,\"v\":300}");
+  run(100);
+  cmd("{\"c\":\"set\",\"to\":\"#1\",\"kn\":0,\"v\":600}");
+  run(100);
+  cmd("{\"c\":\"set\",\"to\":\"#1\",\"kn\":0,\"v\":900}");
+  run(100);
+  CHECK_EQ((int)g_midi.size(), 0);
+  g_midiRoom = -1;
+  midi.flush();
+  CHECK_EQ(midiCount(0xB0, 24), 1);
+  CHECK_EQ(midiLast(0xB0, 24), (int)v7(900));
+  CHECK_EQ(midi.pending(), 0);
+  // ... and back where the host last heard it: nothing to say.
+  g_midi.clear();
+  g_midiRoom = 0;
+  cmd("{\"c\":\"set\",\"to\":\"#1\",\"kn\":0,\"v\":100}");
+  run(100);
+  cmd("{\"c\":\"set\",\"to\":\"#1\",\"kn\":0,\"v\":900}");
+  run(100);
+  g_midiRoom = -1;
+  midi.flush();
+  CHECK_EQ(midiCount(0xB0, 24), 0);
 }
 
 static void testScenes() {
@@ -998,6 +1274,8 @@ int main() {
   testRipple();
   testSoloAndUnlinked();
   testConsoleSets();
+  testBrightness();
+  testMidi();
   testScenes();
   testLossyAir();
   testReordering();

@@ -332,11 +332,21 @@ class Console {
         if (kn < 0 || kn >= KNOBS) return "kn: 0 to 3";
         knob[kn] = v;
       }
+      int br = -1;
+      o.integer("br", &br);
+      if (br >= 0 && (br < BRIGHTNESS_MIN || br > 255)) return "br: 5 to 255";
+      bool values = pattern >= 0;
+      for (int j = 0; j < KNOBS; j++) values = values || knob[j] >= 0;
       if (o.is("to", "all")) {
-        c_.setAll(pattern, knob, o.is("mode", "ripple"), panelOf(o, "from"), glide);
+        if (br >= 0) c_.setAllBrightness(br);
+        if (values) c_.setAll(pattern, knob, o.is("mode", "ripple"), panelOf(o, "from"), glide);
         return nullptr;
       }
-      return c_.setPanel(panelOf(o, "to"), pattern, knob, glide) ? nullptr : "no such panel";
+      const int to = panelOf(o, "to");
+      // Brightness alone leaves the pattern and knob targets as they are.
+      if (br >= 0 && !c_.setBrightness(to, br)) return "no such panel";
+      if (!values) return br >= 0 ? nullptr : "nothing to set";
+      return c_.setPanel(to, pattern, knob, glide) ? nullptr : "no such panel";
     }
 
     if (is("scene")) {
