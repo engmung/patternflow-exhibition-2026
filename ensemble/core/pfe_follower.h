@@ -51,6 +51,7 @@ struct FrameIn {
   int8_t rssi = 0;
   uint8_t fps = 0;
   uint8_t brightness = 0;                // the panel's brightness now, 0 = unknown
+  bool solo = false;                     // another feature has the panel (a show is playing)
 };
 
 // What the frame should carry on to the pattern.
@@ -62,6 +63,7 @@ struct FrameOut {
   bool identify = false;
   uint8_t panelId = 0;
   uint8_t brightness = 0;    // set the panel's brightness to this now; 0 = leave it
+  uint8_t sleep = 0;         // SLEEP_SLEEP: go to sleep now; SLEEP_WAKE: wake now; 0 = neither
 };
 
 class Follower {
@@ -125,13 +127,30 @@ class Follower {
     fps_ = in.fps;
     running_ = in.running;
     chrome_ = in.chrome;
+    if (in.sleeping != sleeping_) dirty_ = true;   // asleep or awake: the hub hears it at once
     sleeping_ = in.sleeping;
     if (in.patternCount > 0) patternCount_ = in.patternCount > 255 ? 255 : (uint8_t)in.patternCount;
+
+    // Solo: a show is playing here, and for as long as it does this panel is
+    // not one of the ensemble. Its hands move nothing (the frame keeps their
+    // detents for whoever has the panel), the hub's values wait, and a
+    // pattern the show switches to is nobody's choice to pass on. A moment
+    // longer than the show says, because the last thing it asked for - a
+    // pattern - arrives a frame or two after it has ended. When it is over
+    // the panel takes what the ensemble shows now.
+    if (in.solo) {
+      soloUntilMs_ = in.nowMs + SOLO_TAIL_MS;
+      soloSeen_ = true;
+    } else if (soloSeen_ && (int32_t)(soloUntilMs_ - in.nowMs) <= 0) {
+      soloSeen_ = false;
+    }
+    if (soloSeen_ != solo_) dirty_ = true;         // the hub hears it at once
+    solo_ = soloSeen_;
 
     trackPattern(in);
 
     const bool k4Pattern = k4IsPattern();
-    const bool canDrive = in.running && !in.chrome && !in.sleeping;
+    const bool canDrive = in.running && !in.chrome && !in.sleeping && !solo_;
     const int knobCount = k4Pattern ? KNOBS - 1 : KNOBS;
 
     // The hand first: it outranks anything the hub said.
@@ -158,7 +177,7 @@ class Follower {
 
     // Then the hub, for whatever the hand has not just moved.
     if (have_) {
-      for (int k = 0; k < knobCount; k++) {
+      for (int k = 0; k < knobCount && !solo_; k++) {
         if (st_.ack[k] != touch_[k]) continue;        // sent before the hub knew the last turn
         if (st_.knob[k] == value_[k]) continue;
         value_[k] = st_.knob[k];
@@ -208,7 +227,7 @@ class Follower {
     // frame a knob's button goes down - patterns act on a press only while
     // the knob is not remote-driven, and here the lane IS the hand.
     for (int k = 0; k < knobCount; k++) {
-      out.laneActive[k] = !in.pressed[k];
+      out.laneActive[k] = !in.pressed[k] && !solo_;
       out.lane[k] = lane_[k];
     }
     out.lockMenus = have_ && (st_.flags & SF_LOCK_MENUS);
@@ -225,6 +244,15 @@ class Follower {
     if (have_ && st_.brightness >= BRIGHTNESS_MIN && st_.brightness != brightnessTaken_) {
       brightnessTaken_ = st_.brightness;
       if (st_.brightness != in.brightness) out.brightness = st_.brightness;
+    }
+    // Sleep is an order, carried out once when it is new, and not a state
+    // the hub holds a panel in: somebody who wakes a panel with its knob has
+    // it awake until the console says otherwise.
+    if (have_ && st_.sleep && st_.sleep != sleepTaken_) {
+      sleepTaken_ = st_.sleep;
+      const uint8_t want = (uint8_t)(st_.sleep & 3);
+      if (want == SLEEP_SLEEP && !in.sleeping) out.sleep = SLEEP_SLEEP;
+      else if (want == SLEEP_WAKE && in.sleeping) out.sleep = SLEEP_WAKE;
     }
   }
 
@@ -264,6 +292,7 @@ class Follower {
   bool everLinked() const { return everLinked_; }
   bool booting() const { return !everLinked_; }
   bool rebootRequested() const { return rebootRequested_; }
+  bool solo() const { return solo_; }
   bool k4IsPattern() const { return have_ ? (st_.flags & SF_K4_PATTERN) != 0 : cfg_.k4Pattern; }
   uint16_t value(int k) const { return value_[k]; }
   float lane(int k) const { return lane_[k]; }
@@ -281,7 +310,8 @@ class Follower {
   Report makeReport(uint32_t nowMs) {
     Report r;
     r.flags = (uint8_t)((booting() ? RF_BOOT : 0) | (sleeping_ ? RF_SLEEPING : 0) |
-                        (chrome_ ? RF_CHROME : 0) | (running_ ? 0 : RF_NOT_RUNNING));
+                        (chrome_ ? RF_CHROME : 0) | (running_ ? 0 : RF_NOT_RUNNING) |
+                        (solo_ ? RF_SOLO : 0));
     copyBytes(r.uid, uid_, 6);
     r.seq = ++reportSeq_;
     r.ack = have_ ? st_.seq : 0;
@@ -321,6 +351,7 @@ class Follower {
   static constexpr uint32_t STATE_STALE_MS = 1500;
   static constexpr uint32_t PATTERN_RETRY_MS = 1000;
   static constexpr int PATTERN_TRIES = 5;
+  static constexpr uint32_t SOLO_TAIL_MS = 400;
 
   int detentOf(uint16_t v) const {
     return (int)(((uint32_t)v * cfg_.detents + KNOB_MAX / 2) / KNOB_MAX);
@@ -340,6 +371,8 @@ class Follower {
       actual_ = in.pattern;
       if (mine) {
         tries_ = 0;
+      } else if (solo_) {
+        // The show's pattern: this panel's for now, and nobody's choice.
       } else if (!first && in.pattern >= 0) {
         // The device's own browser, its web console, another feature: a
         // person picked it. It becomes this panel's pattern, and the hub is
@@ -440,9 +473,13 @@ class Follower {
   uint8_t fps_ = 0;
   uint8_t brightness_ = 0;         // the panel's, as the last frame said
   uint8_t brightnessTaken_ = 0;    // the last hub target applied (0 = none since boot)
+  uint8_t sleepTaken_ = 0;         // the last order to sleep or wake carried out (0 = none since boot)
   bool running_ = true;
   bool chrome_ = false;
   bool sleeping_ = false;
+  bool solo_ = false;               // standing outside the ensemble (see frame())
+  bool soloSeen_ = false;
+  uint32_t soloUntilMs_ = 0;
   uint32_t handMoves_ = 0;
   uint32_t patternRefusals_ = 0;
 };

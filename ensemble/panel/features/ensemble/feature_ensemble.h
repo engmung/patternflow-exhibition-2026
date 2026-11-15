@@ -28,7 +28,7 @@ inline const PFFeature descriptor = {
     PatternflowEnsemble::claimsPattern,   // true only while handing over the hub's pattern
     PatternflowEnsemble::takePattern,
     nullptr,       // onSleep
-    nullptr,       // requestSleep
+    PatternflowEnsemble::requestSleep,    // the console's "sleep" and "wake"
     nullptr,       // shortName - not listed on the NETWORK screen
     nullptr,       // isRuntimeEnabled
     nullptr,       // setRuntimeEnabled

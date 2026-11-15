@@ -75,6 +75,7 @@ Sent when its content changes (at most every 30 ms), again after 200 ms while th
 | 26 | 2 | `glideMs` | time to ease into a new target, 0 for at once |
 | 28 | 4 | `hubMs` | the hub's clock, for logs |
 | 32 | 1 | `brightness` | target, 5 to 255; `0` leaves the panel's own. Appended 2026-11-14: a hub from before sends 32 bytes, read as `0` |
+| 33 | 1 | `sleep` | an order to sleep or to wake; `0` none. Low two bits: `1` wake, `2` sleep; the rest count the orders, so the same order given again is a new one. Appended 2026-11-15: a hub from before sends 33 bytes, read as `0` |
 
 ### CMD, hub to panel, type `0x11`, 8 bytes
 
@@ -98,6 +99,8 @@ Sent when its content changes (at most every 30 ms), again after 200 ms while th
 
 **Brightness is set, not held.** It is not a channel: it does not travel as a wave, and a hand at a panel does not send it on. A panel takes a `brightness` target when it differs from the last one it took since it started, the way `GET /api/display?brightness=` sets it (the device stores it once it has been still). A brightness set at the panel afterwards (K1's long press) stays until the console sends a new one. The hub holds targets in RAM only; a panel it meets for the first time since it started takes the brightness the console last gave every panel, if any.
 
+**Sleep is an order, not a state.** A panel carries an order out once, when its `sleep` byte differs from the last one it acted on. A hand on a knob wakes a sleeping panel (the panel's own rule), and the hub does not put it back: it stays awake until the console orders sleep again. A panel that joins while the console's last order to everyone was sleep is given that order. The panel says whether it is asleep in its report's flags (`RF_SLEEPING`), at once when it changes.
+
 ## The console link
 
 One JSON object per line, UTF-8, `\n` at the end. The same lines go over the hub's USB serial port, its UART (115200), and its WebSocket at `/ws`. On a serial port the hub sends lines only while a console is there: one that sent a JSON line in the last 10 s. A line that does not start with `{` is not protocol (the UART also carries the boot log).
@@ -112,14 +115,35 @@ Every command has `"c"`. An optional `"r"` (integer) comes back in the reply. Pa
 | `get` | | Everything again: cfg, names, scenes, every panel |
 | `ping` | | Keeps a serial port listed as a console. No reply |
 | `cfg` | `link` (four of `"solo"`, `"sync"`, `"ripple"`, or `null` to keep), `plink`, `speed` (units per second), `glide` (ms), `k4` (true: K4 steps patterns), `lock`, `pmin`, `pmax` (255: to the last), `k4s` | Any subset |
-| `panel` | `uid`, and any of `x`, `y`, `id` (1 to 250), `name`, `linked` | Two panels never share a number: the other one takes this panel's old one |
+| `panel` | `uid`, and any of `x`, `y`, `z`, `rx`, `ry`, `rz`, `id` (1 to 250), `name`, `linked` | Two panels never share a number: the other one takes this panel's old one |
 | `forget` | `uid` | Drops a panel from the table |
-| `set` | `to` (a panel or `"all"`), and any of `pat`, `k` (four numbers or `null`), `kn` + `v` (one knob), `glide`, `br` (brightness, 5 to 255). With `to: "all"`: `mode: "ripple"` and `from` (a panel) make it a wave | To one panel it stays on that panel. This is how each panel gets a pattern of its own. `br` alone leaves the pattern and knobs as they are; to `"all"` it is also given to panels that join later |
+| `set` | `to` (a panel or `"all"`), and any of `pat`, `k` (four numbers or `null`), `kn` + `v` (one knob), `glide`, `br` (brightness, 5 to 255), `sleep` (`true`: go to sleep, `false`: wake). With `to: "all"`: `mode: "ripple"` and `from` (a panel) make it a wave | To one panel it stays on that panel. This is how each panel gets a pattern of its own. `br` alone leaves the pattern and knobs as they are; to `"all"` it is also given to panels that join later |
 | `scene` | `op` (`save`, `recall`, `clear`), `slot` (0 to 7), and for recall `mode`, `from`, `glide` | A scene is every panel's pattern and knobs |
 | `identify` | `uid` (or `"all"`), `on` | The panel shows its mark: a big shape in a colour on black, both from its number (`identifyMark` in `core/pfe_proto.h`: circle, square, triangle and red, green, blue, yellow, stepping together, twelve marks). One panel switches itself off after 30 s. `"all"` stays on until it is switched off, or for 30 minutes, and a panel that joins meanwhile shows its mark too |
 | `reboot` | `uid` (a panel, or `"hub"`) | |
+| `names` | `at` + `n` (names for the patterns from that number on), and/or `clear: true` with `from` | What the console knows after giving the panels another set of patterns. `clear` forgets the names from `from` on |
+| `http` | `id`, `to` (a panel), `m` (`GET`, `POST`, `PUT`, `DELETE`), `path`, `h` (headers), `len` (bytes of body), `tmo` (ms, 1000 to 120000) | A request to that panel's own web server, passed on by the hub. See below. No `ack` |
+| `hb` | `id`, `d` | The next piece of that request's body: base64 of up to 1080 bytes (720 over the WebSocket, where a line has to fit one packet) |
 
 Replies: `{"t":"ack","c":"cfg","r":12}` or `{"t":"err","c":"set","m":"no such panel"}`.
+
+A panel's `fl` in its `p` line is the flags of its last report: 1 no STATE applied yet, 2 asleep, 4 one of its own screens has the knobs, 8 not in RUNNING mode, **16 solo** - another feature has the panel (a show is playing, `features/show`), and for that long it is not one of the ensemble: its hands are not counted, the hub's knob values and pattern wait, and a pattern the show switches to is not passed on. The hub needs to do nothing for this; a panel that is solo takes what the ensemble shows 0.4 s after the show ends.
+
+### A panel's web server, through the hub
+
+A panel has a web server (its patterns, its status), and a console on the USB cable is not on the panels' network. So the hub passes HTTP along (`core/pfe_relay.h`):
+
+```
+-> {"c":"http","id":7,"to":"<uid>","m":"PUT","path":"/api/patterns","h":{"X-PF-Name":"a.pfm","X-PF-Last":"0"},"len":2500}
+-> {"c":"hb","id":7,"d":"<base64>"}        the first piece
+<- {"t":"hk","id":7,"n":1080}              it went: send the next
+   ...
+<- {"t":"http","id":7,"s":200,"len":11}
+<- {"t":"hb","id":7,"d":"<base64>"}
+<- {"t":"he","id":7,"n":11}
+```
+
+One piece at a time: the next `hb` after its `hk`. A request ends with `he`, with `err` if it failed anywhere (`timeout`, `the panel does not answer`, `busy with another request`, ...). The hub carries four requests at once, so four panels can be worked on together; a request to an offline panel is refused at once. The hub closes the connection as soon as the panel's answer is whole, because a panel serves one connection at a time.
 
 ### Hub to console
 
@@ -127,25 +151,30 @@ Replies: `{"t":"ack","c":"cfg","r":12}` or `{"t":"err","c":"set","m":"no such pa
 |---|---|---|
 | `hello` | answer to `hello` | `proto`, `port`, `fw`, `hub`, `mode` (`hotspot` or `router`), `ssid` |
 | `cfg` | on change | `link`, `plink`, `speed`, `glide`, `k4`, `lock`, `pmin`, `pmax`, `k4s`, `maxPanels`, `scenes` |
-| `names` | on change | `n`: pattern names by index, `""` where unknown |
+| `names` | on change | `n`: pattern names by index, `""` where unknown. In pieces of 24: `at` is the index of this line's first name, `of` how many there are in all; `at: 0` starts the list afresh |
 | `scenes` | on change | `u`: panels stored in each slot, 0 for an empty one |
 | `p` | a panel changed (at most every 100 ms; 500 ms when the UART is the only console), and every 2 s | below |
-| `w` | a value started travelling | `q` sequence, `c` channel (0 to 3 knobs, 4 pattern, 5 scene), `o` panel index it started at (-1 for the console), `x`, `y`, `v` value, `now` (1: everywhere at once), `d` ms until it has landed everywhere |
+| `w` | a value started travelling | `q` sequence, `c` channel (0 to 3 knobs, 4 pattern, 5 scene), `o` panel index it started at (-1 for the console), `x`, `y`, `z`, `v` value, `now` (1: everywhere at once), `d` ms until it has landed everywhere |
 | `hub` | every second | `ms` uptime, `proto`, `panels`, `online`, `rx`, `tx`, `bad`, `ev` values emitted, `fly` values in flight, `drop`, `full`, `stale` |
 | `gone` | a panel was forgotten | `i` |
 | `log` | something happened | `ms`, `m` |
+| `hk` | a piece of a request's body went to the panel | `id`, `n` bytes passed on so far |
+| `http` | the panel answered | `id`, `s` status, `len` its Content-Length (-1: not said) |
+| `hb` | the answer's body, in order | `id`, `d` base64 of up to 360 bytes |
+| `he` | the request is over | `id`, and `n` (bytes of body in all) or `err` |
 
 A `p` line:
 
 | Field | |
 |---|---|
 | `i` | the hub's index for this panel; `p`, `w` and `gone` use it |
-| `uid`, `id`, `n`, `x`, `y`, `l` | identity, number, name, place, linked |
+| `uid`, `id`, `n`, `x`, `y`, `z`, `r`, `l` | identity, number, name, place, turn, linked. `r` is `[rx, ry, rz]`, how the panel is turned in degrees about the 3D view's X, Y and Z in that order (Blender's XYZ Euler); the hub only keeps it for whoever draws the room, a wave does not care which way a panel faces. The place is in map units, seen from the front of the wall: `x` across, `y` down, `z` depth away from the viewer (0 on a flat wall). A wave travels the straight line between two places. The console's 3D view shows the point as Blender would, (x, z, -y) with Z up |
 | `on`, `age`, `ip` | online, ms since the last report, address |
 | `rssi`, `fps`, `up`, `fl` | from the last report: dBm, fps, uptime in seconds, flags |
 | `pat`, `pn`, `pc` | reported pattern, its name, how many patterns the panel has |
 | `k`, `tp`, `tk` | reported knobs, target pattern, target knobs |
 | `br`, `tb` | reported brightness (`0`: the panel does not say), target brightness (`0`: none) |
+| `sl` | `1` while the panel is asleep |
 | `ok` | 1 when the panel reports what the hub wants |
 | `idf` | 1 while identify is on |
 | `fw`, `var` | firmware and variant |

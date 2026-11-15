@@ -126,6 +126,18 @@ def main():
     if tool.returncode != 0 and out:
         print("\n".join("  " + line for line in out.splitlines()[:-1]))
     ok &= tool.returncode == 0
+    # The console's recorder (console/pfs.js), where there is a Node to run it.
+    node = shutil.which("node")
+    if node:
+        args = [node, str(ROOT / "tests" / "test_pfs.js")] + ([str(checkout)] if checkout else [])
+        pfs = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        out = (pfs.stdout + pfs.stderr).strip()
+        print("pfs: " + (out.splitlines()[-1] if out else "no output"))
+        if pfs.returncode != 0 and out:
+            print("\n".join("  " + line for line in out.splitlines()[:-1]))
+        ok &= pfs.returncode == 0
+    else:
+        print("pfs: skipped (no node on the PATH; tests/test_pfs.js covers console/pfs.js)")
     console = subprocess.run([sys.executable, str(ROOT / "tools" / "build_console.py"), "--check"],
                              capture_output=True, text=True, encoding="utf-8", errors="replace")
     print("console: " + (console.stdout + console.stderr).strip())

@@ -230,7 +230,6 @@ class Console {
     return res;
   }
 
- private:
   // Which panel a "uid" / "to" / "from" names: its uid, or  #<number>.
   int panelOf(const JObject& o, const char* field) const {
     const JVal* v = o.get(field);
@@ -245,6 +244,7 @@ class Console {
     return c_.findPanel(uid);
   }
 
+ private:
   const char* run(const JObject& o, const JVal& cmd, ConsoleResult* res) {
     auto is = [&](const char* name) { return textEquals(cmd.p, cmd.n, name); };
 
@@ -294,7 +294,8 @@ class Console {
       float x = 0, y = 0;
       int id = 0;
       bool linked = true;
-      const bool hx = o.number("x", &x), hy = o.number("y", &y);
+      float z = 0;
+      const bool hx = o.number("x", &x), hy = o.number("y", &y), hz = o.number("z", &z);
       const bool hid = o.integer("id", &id);
       const bool hl = o.boolean("linked", &linked);
       const int linkedInt = linked ? 1 : 0;
@@ -303,7 +304,10 @@ class Console {
       if (nv && nv->type == 's') unescape(*nv, name, sizeof(name));
       if (hid && (id < 1 || id > 250)) return "id: 1 to 250";
       c_.editPanel(i, hx ? &x : nullptr, hy ? &y : nullptr, hid ? &id : nullptr,
-                   nv && nv->type == 's' ? name : nullptr, hl ? &linkedInt : nullptr);
+                   nv && nv->type == 's' ? name : nullptr, hl ? &linkedInt : nullptr, hz ? &z : nullptr);
+      float rx = 0, ry = 0, rz = 0;
+      const bool hrx = o.number("rx", &rx), hry = o.number("ry", &ry), hrz = o.number("rz", &rz);
+      if (hrx || hry || hrz) c_.turnPanel(i, hrx ? &rx : nullptr, hry ? &ry : nullptr, hrz ? &rz : nullptr);
       return nullptr;
     }
 
@@ -335,18 +339,46 @@ class Console {
       int br = -1;
       o.integer("br", &br);
       if (br >= 0 && (br < BRIGHTNESS_MIN || br > 255)) return "br: 5 to 255";
+      bool asleep = false;
+      const bool sleepOrder = o.boolean("sleep", &asleep);
       bool values = pattern >= 0;
       for (int j = 0; j < KNOBS; j++) values = values || knob[j] >= 0;
       if (o.is("to", "all")) {
         if (br >= 0) c_.setAllBrightness(br);
+        if (sleepOrder) c_.setAllSleep(asleep);
         if (values) c_.setAll(pattern, knob, o.is("mode", "ripple"), panelOf(o, "from"), glide);
         return nullptr;
       }
       const int to = panelOf(o, "to");
       // Brightness alone leaves the pattern and knob targets as they are.
       if (br >= 0 && !c_.setBrightness(to, br)) return "no such panel";
-      if (!values) return br >= 0 ? nullptr : "nothing to set";
+      if (sleepOrder && !c_.setSleep(to, asleep)) return "no such panel";
+      if (!values) return br >= 0 || sleepOrder ? nullptr : "nothing to set";
       return c_.setPanel(to, pattern, knob, glide) ? nullptr : "no such panel";
+    }
+
+    if (is("names")) {
+      bool clear = false;
+      if (o.boolean("clear", &clear) && clear) {
+        int from = 0;
+        o.integer("from", &from);
+        c_.forgetPatternNames(from);
+      }
+      const JVal* list = o.get("n");
+      int at = -1;
+      if (list && list->type == 'a' && o.integer("at", &at) && at >= 0) {
+        size_t i = 0;
+        JVal v;
+        for (int idx = at; idx < MAX_NAMES && nextElement(*list, &i, &v); idx++) {
+          if (v.type != 's') continue;
+          char name[NAME_LEN * 3];
+          unescape(v, name, sizeof(name));
+          c_.setPatternName(idx, name);
+        }
+      } else if (!clear) {
+        return "at and n, or clear";
+      }
+      return nullptr;
     }
 
     if (is("scene")) {

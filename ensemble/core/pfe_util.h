@@ -88,6 +88,11 @@ struct Out {
     if (s) while (*s) ch(*s++);
     return *this;
   }
+  // Bytes as they are, none or all of them.
+  Out& raw(const char* s, size_t n) {
+    if (len + n < cap) { copyBytes(buf + len, s, n); len += n; buf[len] = 0; } else overflow = true;
+    return *this;
+  }
   Out& u32(uint32_t v) {
     char tmp[10];
     int n = 0;

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pack the console into one file, for the places that need it that way.
 
-The console is three files in ensemble/console/ (index.html, app.js and the
-generated pfe_sim.wasm.js) and opens straight from disk. Two readers want a
+The console is four files in ensemble/console/ (index.html, app.js, pfs.js and
+the generated pfe_sim.wasm.js) and opens straight from disk. Two readers want a
 single file instead:
 
   the hub      serves the page from its own flash at http://192.168.66.1/ :
@@ -36,8 +36,8 @@ def single_page(hub: bool) -> str:
         return "<script>\n" + code.replace("</script", "<\\/script") + "</script>"
 
     html, count = SCRIPT.subn(inline, html)
-    if count != 2:
-        raise SystemExit(f"expected two <script src> tags in index.html, found {count}")
+    if count != 3:
+        raise SystemExit(f"expected three <script src> tags in index.html, found {count}")
     if hub:
         # The page looks for this to know the hub itself is serving it, and
         # then opens the hub's WebSocket instead of starting the demo.

@@ -87,6 +87,12 @@ inline bool hubKnown = false;
 inline bool hubFixed = false;        // PF_ENSEMBLE_HOST names it
 inline uint32_t hubHeardMs = 0;
 inline bool claimNow = false;        // the pattern handed over this frame was the hub's
+// Whether another feature has the panel to itself right now - a show is
+// playing. While it does, this panel is not one of the ensemble: its hands
+// and the hub's values wait (pfe_follower.h, "solo"). The bundle that
+// carries such a feature says how to ask (features_local.h); with none,
+// nobody ever does.
+inline bool (*soloNow)() = nullptr;
 inline bool rebootArmed = false;
 inline uint32_t rebootAtMs = 0;
 inline int8_t rssi = 0;
@@ -277,6 +283,16 @@ inline void lockMenus() {
 
 // The frame holds the physical encoders and nothing else when it gets here
 // (this feature goes first in PF_FEATURE_LIST for that reason).
+inline int8_t sleepOrder = -1;   // 1: go to sleep, 0: wake, -1: nothing asked
+
+// "Put the device to sleep / wake it, please" - once for each order.
+inline bool requestSleep(bool* sleeping) {
+  if (sleepOrder < 0) return false;
+  *sleeping = sleepOrder == 1;
+  sleepOrder = -1;
+  return true;
+}
+
 inline void fillInput(InputFrame& input) {
   frameIn.nowMs = input.now;
   for (int k = 0; k < pfe::KNOBS; k++) {
@@ -287,7 +303,12 @@ inline void fillInput(InputFrame& input) {
   frameIn.rssi = rssi;
   frameIn.fps = fps;
   frameIn.brightness = currentBrightness;
+  frameIn.solo = soloNow && soloNow();
   engine.frame(frameIn, frameOut);
+
+  // The console's order to sleep or to wake, for the sketch to carry out
+  // (requestSleep below): stopping the display is its job, not a feature's.
+  if (frameOut.sleep) sleepOrder = frameOut.sleep == pfe::SLEEP_SLEEP ? 1 : 0;
 
   if (frameOut.brightness) {   // the console asked for a new brightness
     currentBrightness = frameOut.brightness;

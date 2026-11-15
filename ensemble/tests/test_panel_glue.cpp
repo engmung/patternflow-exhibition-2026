@@ -99,7 +99,7 @@ int main() {
   CHECK(std::string(F.name) == "ensemble" && std::string(F.cap) == "ensemble");
   CHECK(F.setup && F.onNetwork && F.loop && F.fillInput && F.takePattern && F.claimsPattern);
   CHECK(F.appendStatus && F.drawOverlay);
-  CHECK(!F.observeFrame && !F.onUserInput && !F.onSleep && !F.requestSleep && !F.shortName);
+  CHECK(!F.observeFrame && !F.onUserInput && !F.onSleep && F.requestSleep && !F.shortName);
   CHECK(!F.composeFrame && !F.handleSelectInput && !F.drawSelect && !F.decorateSelect);
 
   F.setup();
@@ -266,6 +266,54 @@ int main() {
 
   // "Which panel is this?"
   stub::drawn.clear();
+  // The console's order to sleep reaches the sketch once, and so does the
+  // one to wake; a second asking finds nothing.
+  bool wantSleep = false;
+  CHECK(!F.requestSleep(&wantSleep));
+  hub.setSleep(me, true);
+  frames(6);
+  CHECK(F.requestSleep(&wantSleep) && wantSleep);
+  CHECK(!F.requestSleep(&wantSleep));
+  stub::sleeping = true;                     // the sketch did it
+  frames(6);
+  CHECK(!F.requestSleep(&wantSleep));         // and is not asked again while it sleeps
+  hub.setSleep(me, false);
+  frames(6);
+  CHECK(F.requestSleep(&wantSleep) && !wantSleep);
+  stub::sleeping = false;
+  frames(3);
+
+  // Another feature has the panel (a show is playing): the feature stands
+  // back. The hand's detents stay in the frame, no lane is laid over the
+  // pattern, a pattern that feature switches to is not taken back, and the
+  // hub hears it. Afterwards the panel is the ensemble's again.
+  {
+    static bool showPlaying = false;
+    PatternflowEnsemble::soloNow = [] { return showPlaying; };
+    frames(10);
+    frame(0, 2);
+    CHECK(input.knobDeltas[0] == 0 && input.knobAudioActive[0]);      // the ensemble's knob, as before
+    const int hubPattern = pattern;
+    showPlaying = true;
+    frames(3);
+    frame(0, 2);
+    CHECK(input.knobDeltas[0] == 2);
+    CHECK(!input.knobAudioActive[0]);
+    pattern = (hubPattern + 1) % NUM_PATTERNS;                        // the show's pattern
+    frames(120);
+    CHECK(pattern == (hubPattern + 1) % NUM_PATTERNS);
+    CHECK(hub.panel(me).rep.flags & pfe::RF_SOLO);
+    showPlaying = false;
+    frames(120);
+    CHECK(pattern == hubPattern);
+    CHECK(!(hub.panel(me).rep.flags & pfe::RF_SOLO));
+    frame(0, 1);
+    CHECK(input.knobDeltas[0] == 0 && input.knobAudioActive[0]);
+    frame(0, -3);                                                     // the knob back where this began
+    frames(10);
+    PatternflowEnsemble::soloNow = nullptr;
+  }
+
   // The sketch starts its countdown to show the new pattern's name; the
   // feature has it back at zero before the name would be drawn.
   contentNoticeTimer = 1.0f;

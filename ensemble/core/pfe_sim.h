@@ -36,6 +36,8 @@ struct SimPanel {
   bool powered = false;
   int actual = 0;                 // the pattern its LEDs show
   uint8_t brightness = 128;       // kept like the device's NVS: a power cut does not reset it
+  bool sleeping = false;          // asleep: dark, until a hand on a knob or the console wakes it
+  bool solo = false;              // a show is playing on it (the tests switch this, and its pattern, by hand)
   int delta[KNOBS] = {0, 0, 0, 0};
   bool press[KNOBS] = {false, false, false, false};
   uint32_t nextFrameMs = 0;
@@ -96,6 +98,7 @@ class Sim {
   void hand(int i, int knob, int detents) {
     if (i < 0 || i >= count_ || knob < 0 || knob >= KNOBS) return;
     panels_[i].delta[knob] += detents;
+    panels_[i].sleeping = false;       // a hand on a knob wakes the panel, as on the device
   }
   void press(int i, int knob) {
     if (i < 0 || i >= count_ || knob < 0 || knob >= KNOBS) return;
@@ -236,9 +239,12 @@ class Sim {
     in.rssi = (int8_t)(-45 - (i * 7) % 30);
     in.fps = 60;
     in.brightness = p.brightness;
+    in.sleeping = p.sleeping;
+    in.solo = p.solo;
     p.out = FrameOut();
     p.f.frame(in, p.out);
     if (p.out.brightness) p.brightness = p.out.brightness;
+    if (p.out.sleep) p.sleeping = p.out.sleep == SLEEP_SLEEP;
     int idx;
     bool fromHub;
     if (p.f.takePattern(&idx, &fromHub) && idx >= 0 && idx < SIM_PATTERNS) p.actual = idx;

@@ -35,9 +35,10 @@ constexpr int CHANNELS = 5;          // 0..3 = K1..K4, 4 = the pattern
 constexpr int CH_PATTERN = 4;
 constexpr int MAX_EVENTS = 384;      // values in flight
 constexpr int SCENES = 8;
-constexpr int MAX_NAMES = 48;        // pattern names learned from the panels
+constexpr int MAX_NAMES = 96;        // pattern names, learned from the panels or told by the console
 constexpr size_t NAME_LEN = 24;
-constexpr size_t SAVE_MAX = 4096;    // the most save() writes
+constexpr int NAMES_A_LINE = 24;     // names in one "names" line to the console
+constexpr size_t SAVE_MAX = 4352;    // the most save() writes
 
 constexpr uint32_t PANEL_TIMEOUT_MS = 3000;    // six missed heartbeats
 constexpr uint32_t MAX_DELAY_MS = 30000;       // no wave takes longer than this to cross
@@ -87,7 +88,12 @@ struct Panel {
   bool used = false;
   uint8_t uid[6] = {0, 0, 0, 0, 0, 0};
   uint8_t id = 0;            // the number on the map and on the panel's identify screen
-  float x = 0, y = 0;
+  float x = 0, y = 0;        // on the wall as seen from the front: across, and down
+  float z = 0;               // depth, away from whoever stands in front; 0 on a flat wall
+  // How it is turned, in degrees, for whoever draws the room (the console's
+  // 3D view: about its X, Y and Z in that order, as Blender has them). The
+  // hub only keeps it; a wave goes by where a panel is, not which way it faces.
+  float rot[3] = {0, 0, 0};
   char name[NAME_LEN] = {0};
   bool linked = true;        // takes part in sync and ripple
 
@@ -102,6 +108,7 @@ struct Panel {
   uint16_t tKnob[KNOBS] = {500, 500, 500, 500};
   uint16_t tGlide = 0;
   uint8_t tBright = 0;       // brightness to set, 5..255; 0 = the panel keeps its own
+  uint8_t tSleep = 0;        // the last order to sleep or wake, as State::sleep carries it; 0 = none
   uint32_t applied[CHANNELS] = {0, 0, 0, 0, 0};   // the event each channel's target came from
   uint16_t stateSeq = 0;
   uint8_t sent[STATE_LEN] = {0};   // the last STATE sent, to tell a change from a refresh
@@ -132,7 +139,7 @@ struct Event {
   uint32_t seq = 0;
   uint32_t tMs = 0;
   uint32_t maxDelayMs = 0;   // after this it has arrived everywhere
-  float x = 0, y = 0;        // where it started
+  float x = 0, y = 0, z = 0; // where it started
   uint16_t value = 0;        // the value, or the scene's slot
   uint16_t glideMs = 0;
   uint8_t mask = 0;          // channels it sets
@@ -282,11 +289,12 @@ class Conductor {
   // Where a panel sits on the map, what it is called, whether it follows.
   // A field left at its "keep" value is not changed.
   bool editPanel(int i, const float* x, const float* y, const int* id, const char* name,
-                 const int* linked) {
+                 const int* linked, const float* z = nullptr) {
     if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
     Panel& p = panels_[i];
     if (x) p.x = clampTo<float>(*x, -1000.0f, 1000.0f);
     if (y) p.y = clampTo<float>(*y, -1000.0f, 1000.0f);
+    if (z) p.z = clampTo<float>(*z, -1000.0f, 1000.0f);
     if (id && *id >= 1 && *id <= 250 && *id != p.id) {
       // Two panels never show the same number: the other one takes this one's.
       const int other = findPanelById(*id);
@@ -341,6 +349,23 @@ class Conductor {
     panels_[i].tBright = (uint8_t)clampTo<int>(b, BRIGHTNESS_MIN, 255);
     panels_[i].uiDirty = true;
     return true;
+  }
+
+  // An order to sleep or to wake: once to each panel, and what one of them
+  // does with its own knob afterwards is its own business.
+  bool setSleep(int i, bool asleep) {
+    if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
+    Panel& p = panels_[i];
+    uint8_t count = (uint8_t)(((p.tSleep >> 2) + 1) & 0x3F);
+    if (!count) count = 1;
+    p.tSleep = (uint8_t)((count << 2) | (asleep ? SLEEP_SLEEP : SLEEP_WAKE));
+    p.uiDirty = true;
+    return true;
+  }
+  void setAllSleep(bool asleep) {
+    allAsleep_ = asleep;         // a panel that joins a sleeping ensemble goes to sleep with it
+    for (int i = 0; i < MAX_PANELS; i++)
+      if (panels_[i].used) setSleep(i, asleep);
   }
 
   void setAllBrightness(int b) {
@@ -475,6 +500,23 @@ class Conductor {
 
   // ── Keeping the setup across a power cut ──────────────────────────────
   // Config, the panel table (uid, number, place, name, linked) and the
+  // How a panel is turned; an axis left null keeps what it has.
+  bool turnPanel(int i, const float* rx, const float* ry, const float* rz) {
+    if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
+    Panel& p = panels_[i];
+    const float* in[3] = {rx, ry, rz};
+    for (int a = 0; a < 3; a++) {
+      if (!in[a]) continue;
+      float d = clampTo<float>(*in[a], -3600.0f, 3600.0f);
+      while (d > 180.0f) d -= 360.0f;
+      while (d <= -180.0f) d += 360.0f;
+      p.rot[a] = d;
+    }
+    p.uiDirty = true;
+    touchPersist();
+    return true;
+  }
+
   // scenes. Live targets are not kept: after a restart the panels say where
   // they are and the hub takes that.
   bool persistDirty() const { return persistDirty_; }
@@ -499,6 +541,8 @@ class Conductor {
       b[n++] = p.linked ? 1 : 0;
       putU32(b + n, (uint32_t)(int32_t)roundToLong(p.x * 1000.0f)); n += 4;
       putU32(b + n, (uint32_t)(int32_t)roundToLong(p.y * 1000.0f)); n += 4;
+      putU32(b + n, (uint32_t)(int32_t)roundToLong(p.z * 1000.0f)); n += 4;
+      for (int a = 0; a < 3; a++) { putU16(b + n, (uint16_t)(int16_t)roundToLong(p.rot[a] * 10.0f)); n += 2; }
       copyBytes(b + n, p.name, NAME_LEN); n += NAME_LEN;
     }
     for (int s = 0; s < SCENES; s++) {
@@ -529,9 +573,23 @@ class Conductor {
   const char* patternNameAt(int idx) const {
     return idx >= 0 && idx < MAX_NAMES ? names_[idx] : "";
   }
+  // A console that has just given the panels another set of patterns knows
+  // what each number is now; the names learned before are of the old set.
+  void setPatternName(int idx, const char* name) {
+    if (idx < 0 || idx >= MAX_NAMES) return;
+    char fresh[NAME_LEN];
+    setTextUtf8(fresh, NAME_LEN, name);
+    if (sameBytes(names_[idx], fresh, NAME_LEN)) return;
+    copyBytes(names_[idx], fresh, NAME_LEN);
+    namesDirty_ = true;
+  }
+  void forgetPatternNames(int from) {
+    for (int n = from < 0 ? 0 : from; n < MAX_NAMES; n++) zeroBytes(names_[n], NAME_LEN);
+    namesDirty_ = true;
+  }
 
  private:
-  static constexpr uint8_t SAVE_VERSION = 1;
+  static constexpr uint8_t SAVE_VERSION = 3;       // 1: a place was x and y; 2: and z; 3: and how it is turned. All load.
   static constexpr uint32_t WAVE_TICK_MS = 5;
   static constexpr uint32_t SEND_MIN_MS = 30;      // a changing target: 33 STATEs a second at most
   static constexpr uint32_t RESEND_MS = 200;       // not acknowledged: again, five times a second
@@ -540,8 +598,10 @@ class Conductor {
   bool parse(const uint8_t* b, size_t len, bool store) {
     size_t n = 0;
     auto need = [&](size_t k) { return n + k <= len; };
-    if (!need(5) || b[0] != 'P' || b[1] != 'F' || b[2] != 'E' || b[3] != 'c' || b[4] != SAVE_VERSION)
+    if (!need(5) || b[0] != 'P' || b[1] != 'F' || b[2] != 'E' || b[3] != 'c' || (b[4] < 1 || b[4] > SAVE_VERSION))
       return false;
+    // A setup saved before there was depth lies flat; one from before panels could be turned faces front.
+    const size_t placeBytes = b[4] == 1 ? 8 : b[4] == 2 ? 12 : 18;
     n = 5;
     if (!need(CHANNELS + 4 + 2 + 4 + 1)) return false;
     Config cfg;
@@ -565,7 +625,7 @@ class Conductor {
       for (int i = 0; i < MAX_PANELS; i++) panels_[i] = Panel();
     }
     for (int i = 0; i < count; i++) {
-      if (!need(6 + 2 + 8 + NAME_LEN)) return false;
+      if (!need(6 + 2 + placeBytes + NAME_LEN)) return false;
       if (store) {
         Panel& p = panels_[i];
         p.used = true;
@@ -574,10 +634,13 @@ class Conductor {
         p.linked = b[n + 7] != 0;
         p.x = (float)(int32_t)getU32(b + n + 8) / 1000.0f;
         p.y = (float)(int32_t)getU32(b + n + 12) / 1000.0f;
-        copyBytes(p.name, b + n + 16, NAME_LEN);
+        p.z = placeBytes >= 12 ? (float)(int32_t)getU32(b + n + 16) / 1000.0f : 0.0f;
+        for (int a = 0; a < 3; a++)
+          p.rot[a] = placeBytes >= 18 ? (float)(int16_t)getU16(b + n + 20 + 2 * a) / 10.0f : 0.0f;
+        copyBytes(p.name, b + n + 8 + placeBytes, NAME_LEN);
         p.name[NAME_LEN - 1] = 0;
       }
-      n += 6 + 2 + 8 + NAME_LEN;
+      n += 6 + 2 + placeBytes + NAME_LEN;
     }
     for (int s = 0; s < SCENES; s++) {
       if (!need(1)) return false;
@@ -724,6 +787,7 @@ class Conductor {
     }
     p.tGlide = 0;
     if (allBright_ && !p.tBright) p.tBright = allBright_;   // the brightness the console last gave everyone
+    if (allAsleep_ && !p.tSleep) p.tSleep = (uint8_t)((1 << 2) | SLEEP_SLEEP);
     // Placing the panels with all of them showing their colours: one that
     // joins meanwhile shows its colour too.
     if (identifyAllOn_ && since(nowMs_, identifyAllAtMs_) < IDENTIFY_ALL_MS) {
@@ -800,7 +864,7 @@ class Conductor {
     e.instant = instant || origin < 0;
     e.linkedOnly = linkedOnly;
     e.origin = (int8_t)origin;
-    if (origin >= 0) { e.x = panels_[origin].x; e.y = panels_[origin].y; }
+    if (origin >= 0) { e.x = panels_[origin].x; e.y = panels_[origin].y; e.z = panels_[origin].z; }
     e.maxDelayMs = 0;
     if (!e.instant) {
       for (int i = 0; i < MAX_PANELS; i++) {
@@ -821,8 +885,8 @@ class Conductor {
 
   uint32_t delayMs(const Panel& p, const Event& e) const {
     if (e.instant || cfg_.speed <= 0.0f) return 0;
-    const float dx = p.x - e.x, dy = p.y - e.y;
-    const float ms = sqrtF(dx * dx + dy * dy) / cfg_.speed * 1000.0f;
+    const float dx = p.x - e.x, dy = p.y - e.y, dz = p.z - e.z;
+    const float ms = sqrtF(dx * dx + dy * dy + dz * dz) / cfg_.speed * 1000.0f;
     return ms >= (float)MAX_DELAY_MS ? MAX_DELAY_MS : (uint32_t)ms;
   }
 
@@ -898,6 +962,7 @@ class Conductor {
     s->glideMs = p.tGlide;
     s->hubMs = 0;
     s->brightness = p.tBright;
+    s->sleep = p.tSleep;
   }
 
   void sendStates() {
@@ -954,7 +1019,7 @@ class Conductor {
     while (ch < CHANNELS && !(e.mask & (1u << ch))) ch++;
     Out o(line_, sizeof(line_));
     o.str("{\"t\":\"w\",\"q\":").u32(e.seq).str(",\"c\":").i32(e.kind == EV_SCENE ? 5 : ch);
-    o.str(",\"o\":").i32(e.origin).str(",\"x\":").num(e.x).str(",\"y\":").num(e.y);
+    o.str(",\"o\":").i32(e.origin).str(",\"x\":").num(e.x).str(",\"y\":").num(e.y).str(",\"z\":").num(e.z);
     o.str(",\"v\":").u32(e.value).str(",\"now\":").u32(e.instant ? 1 : 0);
     o.str(",\"d\":").u32(e.maxDelayMs).ch('}');
     flush(o);
@@ -975,7 +1040,9 @@ class Conductor {
     o.str("{\"t\":\"p\",\"i\":").i32(i).str(",\"uid\":\"");
     for (int b = 0; b < 6; b++) o.hex8(p.uid[b]);
     o.str("\",\"id\":").u32(p.id).str(",\"n\":").json(p.name, NAME_LEN);
-    o.str(",\"x\":").num(p.x).str(",\"y\":").num(p.y).str(",\"l\":").u32(p.linked ? 1 : 0);
+    o.str(",\"x\":").num(p.x).str(",\"y\":").num(p.y).str(",\"z\":").num(p.z);
+    o.str(",\"r\":[").num(p.rot[0]).ch(',').num(p.rot[1]).ch(',').num(p.rot[2]).ch(']');
+    o.str(",\"l\":").u32(p.linked ? 1 : 0);
     o.str(",\"on\":").u32(p.online ? 1 : 0);
     o.str(",\"age\":").u32(p.everSeen ? since(nowMs_, p.lastSeenMs) : 0);
     o.str(",\"ip\":\"").u32(p.ep.ip >> 24).ch('.').u32((p.ep.ip >> 16) & 255).ch('.')
@@ -988,6 +1055,7 @@ class Conductor {
     o.str("],\"tp\":").i32(p.haveTarget && p.tPattern != NO_PATTERN ? p.tPattern : -1).str(",\"tk\":[");
     for (int k = 0; k < KNOBS; k++) { if (k) o.ch(','); o.u32(p.tKnob[k]); }
     o.str("],\"br\":").u32(p.rep.brightness).str(",\"tb\":").u32(p.tBright);
+    o.str(",\"sl\":").u32(p.rep.flags & RF_SLEEPING ? 1 : 0);
     o.str(",\"ok\":").u32(settled(p) ? 1 : 0).str(",\"idf\":").u32(p.identify ? 1 : 0);
     o.str(",\"fw\":").json(p.fw, 16).str(",\"var\":").json(p.variant, 16);
     o.str(",\"rst\":").u32(p.restarts).str(",\"lost\":").u32(p.lost).str(",\"hands\":").u32(p.hands);
@@ -1014,11 +1082,16 @@ class Conductor {
       namesDirty_ = false;
       int last = -1;
       for (int n = 0; n < MAX_NAMES; n++) if (names_[n][0]) last = n;
-      Out o(line_, sizeof(line_));
-      o.str("{\"t\":\"names\",\"n\":[");
-      for (int n = 0; n <= last; n++) { if (n) o.ch(','); o.json(names_[n], NAME_LEN); }
-      o.str("]}");
-      flush(o);
+      // In pieces, so that a long list of long names still fits a line.
+      int at = 0;
+      do {
+        Out o(line_, sizeof(line_));
+        o.str("{\"t\":\"names\",\"at\":").u32((uint32_t)at).str(",\"of\":").u32((uint32_t)(last + 1)).str(",\"n\":[");
+        for (int n = at; n <= last && n < at + NAMES_A_LINE; n++) { if (n > at) o.ch(','); o.json(names_[n], NAME_LEN); }
+        o.str("]}");
+        flush(o);
+        at += NAMES_A_LINE;
+      } while (at <= last);
     }
     if (scenesDirty_) {
       scenesDirty_ = false;
@@ -1060,6 +1133,7 @@ class Conductor {
   int count_ = 0;
   uint32_t eventSeq_ = 0;
   uint8_t allBright_ = 0;    // the brightness the console last gave every panel; 0 = none yet
+  bool allAsleep_ = false;   // the console's last order to every panel was to sleep
   bool identifyAllOn_ = false;
   uint32_t identifyAllAtMs_ = 0;
   Shared shared_[CHANNELS];

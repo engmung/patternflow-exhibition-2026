@@ -97,6 +97,15 @@ void PFE_EXPORT(pfe_out_clear)() {
 void PFE_EXPORT(pfe_hand)(int panel, int knob, int detents) {
   if (g_sim) g_sim->hand(panel, knob, detents);
 }
+
+// A show on a panel: the demo's stand-in for the panel's own player. It has
+// the panel to itself (solo), and switches its pattern as its cues would.
+void PFE_EXPORT(pfe_solo)(int panel, int on) {
+  if (ok(panel)) g_sim->panel(panel).solo = on != 0;
+}
+void PFE_EXPORT(pfe_show_pattern)(int panel, int pattern) {
+  if (ok(panel) && pattern >= 0 && pattern < pfe::SIM_PATTERNS) g_sim->panel(panel).actual = pattern;
+}
 void PFE_EXPORT(pfe_pick)(int panel, int pattern) {
   if (g_sim) g_sim->pick(panel, pattern);
 }

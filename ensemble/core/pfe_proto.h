@@ -44,6 +44,7 @@ constexpr uint8_t RF_BOOT = 0x01;      // no STATE applied yet since this panel 
 constexpr uint8_t RF_SLEEPING = 0x02;  // the panel is asleep
 constexpr uint8_t RF_CHROME = 0x04;    // one of the device's own screens has the knobs
 constexpr uint8_t RF_NOT_RUNNING = 0x08;  // not in RUNNING mode (the pattern browser is open)
+constexpr uint8_t RF_SOLO = 0x10;     // playing on its own (a show): for now not one of the ensemble
 
 // STATE.flags
 constexpr uint8_t SF_K4_PATTERN = 0x01;  // K4 steps through patterns instead of being a knob
@@ -56,7 +57,7 @@ constexpr uint8_t CMD_REBOOT = 0x01;
 constexpr size_t HEADER_LEN = 5;
 constexpr size_t REPORT_LEN = 37;        // what this version writes
 constexpr size_t INFO_LEN = 72;
-constexpr size_t STATE_LEN = 33;
+constexpr size_t STATE_LEN = 34;
 constexpr size_t CMD_LEN = 8;
 constexpr size_t MAX_PACKET = 96;
 // The shortest of each a reader takes: the first version's, before brightness
@@ -134,7 +135,14 @@ struct State {
   uint16_t glideMs = 0;      // time to reach a new target; 0 = at once
   uint32_t hubMs = 0;        // the hub's clock, for the panel's log only
   uint8_t brightness = 0;    // target, 5..255; 0 = leave the panel's own
+  // An order to sleep or to wake; 0 = none. The low two bits say which
+  // (SLEEP_WAKE, SLEEP_SLEEP), the rest count the orders, so that the same
+  // order given again is a new one. A panel carries an order out once: a
+  // hand that wakes a sleeping panel keeps it awake.
+  uint8_t sleep = 0;
 };
+constexpr uint8_t SLEEP_WAKE = 1;
+constexpr uint8_t SLEEP_SLEEP = 2;
 
 struct Cmd {
   uint8_t cmd = 0;
@@ -244,6 +252,7 @@ inline size_t encode(const State& s, uint8_t* p) {
   putU16(p + 26, s.glideMs);
   putU32(p + 28, s.hubMs);
   p[32] = s.brightness;
+  p[33] = s.sleep;
   return STATE_LEN;
 }
 
@@ -265,6 +274,7 @@ inline bool decode(const uint8_t* p, size_t len, State* s) {
   s->glideMs = getU16(p + 26);
   s->hubMs = getU32(p + 28);
   s->brightness = len > 32 ? p[32] : 0;
+  s->sleep = len > 33 ? p[33] : 0;
   return true;
 }
 

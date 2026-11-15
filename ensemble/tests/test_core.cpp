@@ -9,6 +9,7 @@
 // License: MIT
 #include "../core/pfe_sim.h"
 #include "../core/pfe_midi.h"
+#include "../core/pfe_relay.h"
 
 #include <cmath>
 #include <cstdio>
@@ -861,6 +862,47 @@ static bool midiIn(std::initializer_list<uint8_t> bytes, Midi& midi) {
   return midi.onMessage(m.data(), m.size());
 }
 
+// The console puts panels to sleep and wakes them: an order, carried out
+// once. Somebody who wakes a panel with its knob keeps it awake.
+static void testSleep() {
+  g_test = "sleep";
+  fresh(3);
+  links("sync", "sync");
+  run(400);
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"sleep\":true}");
+  run(300);
+  for (int i = 0; i < 3; i++) CHECK(sim->panel(i).sleeping);
+  sim->outClear();
+  cmd("{\"c\":\"get\"}");
+  CHECK(anyLine("\"t\":\"p\"", "\"sl\":1"));
+  // A hand on panel 1 wakes that one, and the hub does not put it back.
+  sim->hand(1, 0, 1);
+  run(1500);
+  CHECK(!sim->panel(1).sleeping && sim->panel(0).sleeping && sim->panel(2).sleeping);
+  // The same order again is a new order: panel 1 sleeps again.
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"sleep\":true}");
+  run(300);
+  CHECK(sim->panel(1).sleeping);
+  // One panel woken by name, then all.
+  cmd("{\"c\":\"set\",\"to\":\"" + uidOf(2) + "\",\"sleep\":false}");
+  run(300);
+  CHECK(!sim->panel(2).sleeping && sim->panel(0).sleeping);
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"sleep\":false}");
+  run(300);
+  for (int i = 0; i < 3; i++) CHECK(!sim->panel(i).sleeping);
+  sim->outClear();
+  cmd("{\"c\":\"get\"}");
+  CHECK(!anyLine("\"t\":\"p\"", "\"sl\":1"));
+  // A STATE of the length before sleep was added says nothing about it.
+  State s;
+  s.sleep = (uint8_t)((5 << 2) | SLEEP_SLEEP);
+  uint8_t b[MAX_PACKET];
+  CHECK_EQ(encode(s, b), STATE_LEN);
+  State back;
+  CHECK(decode(b, STATE_LEN, &back) && back.sleep == s.sleep);
+  CHECK(decode(b, STATE_LEN - 1, &back) && back.sleep == 0);
+}
+
 static void testMidi() {
   g_test = "midi";
   static Midi midi;
@@ -1216,6 +1258,88 @@ static void testHubRestart() {
   CHECK(allValue(0, 625));             // still an ensemble
 }
 
+// The map has a third axis. A wave takes the straight line through the room,
+// and a setup saved before there was depth still loads, flat.
+static void testDepth() {
+  g_test = "depth";
+  fresh(3);
+  links("ripple", "ripple");
+  cmd("{\"c\":\"cfg\",\"speed\":2,\"glide\":0}");
+  // Panel 1 straight behind panel 0, three units back; panel 2 three across and four back: five away.
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(0) + "\",\"x\":0,\"y\":0,\"z\":0}");
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(1) + "\",\"x\":0,\"y\":0,\"z\":3}");
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(2) + "\",\"x\":3,\"y\":0,\"z\":4}");
+  run(500);
+  CHECK(std::fabs(hp(1).z - 3.0f) < 1e-6f && std::fabs(hp(2).z - 4.0f) < 1e-6f);
+  CHECK(std::fabs(hp(1).x) < 1e-6f);                 // a place given whole changes only what it names
+  sim->outClear();
+  cmd("{\"c\":\"get\"}");
+  CHECK(anyLine("\"t\":\"p\"", "\"z\":3"));
+  sim->hand(0, 1, 4);
+  const uint32_t t0 = T;
+  uint32_t arrived[3] = {0, 0, 0};
+  for (int step = 0; step < 320; step++) {
+    run(10);
+    for (int i = 0; i < 3; i++)
+      if (!arrived[i] && val(i, 1) == 625) arrived[i] = T - t0;
+  }
+  CHECK((int)arrived[1] >= 1495 && (int)arrived[1] <= 1590);    // 3 units at 2 a second
+  CHECK((int)arrived[2] >= 2495 && (int)arrived[2] <= 2590);    // 5 units
+  CHECK(anyLine("\"t\":\"w\"", "\"z\":0"));
+  // Depth alone, leaving across and down where they are.
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(2) + "\",\"z\":-1.5}");
+  CHECK(std::fabs(hp(2).z + 1.5f) < 1e-6f && std::fabs(hp(2).x - 3.0f) < 1e-6f);
+
+  // Turned: the hub keeps the three angles, each on its own, wrapped to half a turn either way.
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(1) + "\",\"rx\":12.5,\"rz\":-90}");
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(1) + "\",\"ry\":270}");
+  CHECK(std::fabs(hp(1).rot[0] - 12.5f) < 1e-4f && std::fabs(hp(1).rot[1] + 90.0f) < 1e-4f && std::fabs(hp(1).rot[2] + 90.0f) < 1e-4f);
+  CHECK(std::fabs(hp(1).z - 3.0f) < 1e-6f);          // and its place is where it was
+  sim->outClear();
+  cmd("{\"c\":\"get\"}");
+  CHECK(anyLine("\"t\":\"p\"", "\"r\":[12.5,-90,-90]"));
+
+  // Saved and loaded, the depth and the turn are there.
+  static uint8_t blob[SAVE_MAX];
+  const size_t n = sim->conductor().save(blob, sizeof(blob));
+  CHECK(n > 0 && n <= SAVE_MAX && blob[4] == 3);
+  static Conductor other;
+  other.reset();
+  CHECK(other.load(blob, n));
+  const int j = other.findPanel(sim->panel(1).uid);
+  CHECK(j >= 0 && std::fabs(other.panel(j).z - 3.0f) < 1e-6f);
+  CHECK(std::fabs(other.panel(j).rot[0] - 12.5f) < 1e-4f && std::fabs(other.panel(j).rot[2] + 90.0f) < 1e-4f);
+
+  // Setups from before: the same bytes without the turn (version 2), and without the depth either (version 1).
+  for (int version = 1; version <= 2; version++) {
+    static uint8_t old[SAVE_MAX];
+    const size_t keep = version == 1 ? 8 : 12;                               // bytes of place that version had
+    size_t at = 5 + CHANNELS + 4 + 2 + 1 + 3 + 1, to = at;
+    std::memcpy(old, blob, at);
+    old[4] = (uint8_t)version;
+    const int count = blob[at - 1];
+    for (int i = 0; i < count; i++) {
+      std::memcpy(old + to, blob + at, 6 + 2 + keep);                        // uid, number, linked, place
+      std::memcpy(old + to + 8 + keep, blob + at + 8 + 18, NAME_LEN);        // the name, past what came later
+      at += 6 + 2 + 18 + NAME_LEN;
+      to += 6 + 2 + keep + NAME_LEN;
+    }
+    std::memcpy(old + to, blob + at, n - at);                                // the scenes
+    const size_t oldLen = to + (n - at);
+    static Conductor before;
+    before.reset();
+    CHECK(before.load(old, oldLen));
+    CHECK_EQ(before.panelCount(), 3);
+    const int k = before.findPanel(sim->panel(1).uid);
+    CHECK(k >= 0 && std::fabs(before.panel(k).x) < 1e-6f && before.panel(k).rot[0] == 0.0f && before.panel(k).rot[2] == 0.0f);
+    CHECK(std::fabs(before.panel(k).z - (version == 1 ? 0.0f : 3.0f)) < 1e-6f);
+    CHECK(std::strcmp(before.panel(k).name, hp(1).name) == 0);
+    CHECK(!before.load(old, oldLen - 2));
+  }
+  // The full house still fits.
+  CHECK(5 + CHANNELS + 11 + MAX_PANELS * (6 + 2 + 18 + NAME_LEN) + SCENES * (1 + MAX_PANELS * 15) <= SAVE_MAX);
+}
+
 static void testK4AsKnob() {
   g_test = "k4 knob";
   fresh(3);
@@ -1266,6 +1390,356 @@ static void testManyPanels() {
   CHECK_EQ(sim->conductor().inFlight(), 0);
 }
 
+// ── 20. The console's requests to a panel's web server ──────────────────
+struct FakeSocket : RelaySocket {
+  bool reachable = true, open = false;
+  std::string sent, toRead;
+  size_t writeLimit = (size_t)-1;      // bytes it takes before it "closes"
+  bool connect(uint32_t, uint16_t, uint32_t) override {
+    open = reachable;
+    sent.clear();
+    return open;
+  }
+  size_t write(const uint8_t* d, size_t n) override {
+    if (!open || sent.size() + n > writeLimit) return 0;
+    sent.append((const char*)d, n);
+    return n;
+  }
+  int available() override { return (int)toRead.size(); }
+  int read(uint8_t* out, size_t cap) override {
+    const size_t n = toRead.size() < cap ? toRead.size() : cap;
+    std::memcpy(out, toRead.data(), n);
+    toRead.erase(0, n);
+    return (int)n;
+  }
+  bool connected() override { return open || !toRead.empty(); }
+  void stop() override { open = false; toRead.clear(); }
+};
+
+static std::vector<std::string> g_relayLines;
+static size_t g_relayRoom = 100000;
+
+static std::string b64(const std::string& bytes) {
+  std::string out((bytes.size() + 2) / 3 * 4, 0);
+  out.resize(base64Encode((const uint8_t*)bytes.data(), bytes.size(), &out[0]));
+  return out;
+}
+static std::string unb64(const std::string& text) {
+  std::string out(text.size(), 0);
+  const long n = base64Decode(text.data(), text.size(), (uint8_t*)&out[0], out.size());
+  out.resize(n < 0 ? 0 : (size_t)n);
+  return out;
+}
+static bool relayLine(const char* a, const char* b = nullptr) {
+  for (const auto& l : g_relayLines)
+    if (l.find(a) != std::string::npos && (!b || l.find(b) != std::string::npos)) return true;
+  return false;
+}
+// The answer's body, from the "hb" lines in the order they came.
+static std::string relayBody() {
+  std::string out;
+  for (const auto& l : g_relayLines) {
+    const size_t at = l.find("\"t\":\"hb\"");
+    if (at == std::string::npos) continue;
+    const size_t d = l.find("\"d\":\"") + 5;
+    out += unb64(l.substr(d, l.find('"', d) - d));
+  }
+  return out;
+}
+
+static void testRelay() {
+  g_test = "relay";
+  // base64, both ways, every remainder.
+  for (int n = 0; n < 40; n++) {
+    std::string bytes;
+    for (int i = 0; i < n; i++) bytes.push_back((char)(i * 37 + n));
+    CHECK(unb64(b64(bytes)) == bytes);
+  }
+  CHECK(b64("Man") == "TWFu" && b64("Ma") == "TWE=" && b64("M") == "TQ==");
+  uint8_t tmp[8];
+  CHECK_EQ(base64Decode("TWFu!", 5, tmp, sizeof(tmp)), -1);
+  CHECK_EQ(base64Decode("T=Fu", 4, tmp, sizeof(tmp)), -1);
+  CHECK_EQ(base64Decode("TQ==TWFu", 8, tmp, sizeof(tmp)), -1);   // padding only at the end
+  CHECK_EQ(base64Decode("TWFuTWFu", 8, tmp, 5), -1);             // does not fit
+
+  FakeSocket sock;
+  Relay relay;
+  RelayIo io;
+  io.line = [](void*, const char* text, size_t len) { g_relayLines.emplace_back(text, len); };
+  io.room = [](void*) { return g_relayRoom; };
+  relay.begin(&sock, io);
+  auto ask = [&](const std::string& line, uint32_t ip = 0xC0A84202u) {
+    JObject o;
+    CHECK(o.parse(line.data(), line.size()));
+    if (o.is("c", "hb")) relay.body(o, T);
+    else relay.request(o, ip, T);
+  };
+  auto spin = [&](int passes = 50) {
+    for (int i = 0; i < passes; i++) { T += 2; relay.tick(T); }
+  };
+  T = 500000;
+
+  // A GET: the head goes out whole, the answer comes back as lines.
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":3,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/api/status\"}");
+  CHECK(relay.busy());
+  CHECK(sock.sent.find("GET /api/status HTTP/1.1\r\n") == 0);
+  CHECK(sock.sent.find("Connection: close\r\n") != std::string::npos);
+  CHECK(sock.sent.find("Content-Length: 0\r\n") != std::string::npos);
+  CHECK(sock.sent.size() > 4 && sock.sent.substr(sock.sent.size() - 4) == "\r\n\r\n");
+  spin(5);
+  CHECK(g_relayLines.empty());                     // nothing yet from the panel
+  sock.toRead = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-";
+  spin(3);
+  CHECK(g_relayLines.empty());                     // half a head is no head
+  sock.toRead = "Length: 17\r\n\r\n{\"heapLargest\":1}";
+  spin();
+  CHECK(relayLine("\"t\":\"http\",\"id\":3,\"s\":200,\"len\":17"));
+  CHECK(relayBody() == "{\"heapLargest\":1}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":3,\"n\":17"));
+  CHECK(!relay.busy());
+  CHECK(!sock.open);                               // closed as soon as the length was in: the panel serves one at a time
+
+  // A PUT with a body: each piece is acknowledged, then the answer.
+  g_relayLines.clear();
+  std::string file;
+  for (int i = 0; i < 2500; i++) file.push_back((char)(i * 7));
+  ask("{\"c\":\"http\",\"id\":4,\"to\":\"#1\",\"m\":\"PUT\",\"path\":\"/api/patterns\","
+      "\"h\":{\"X-PF-Name\":\"a b.pfm\",\"X-PF-Last\":\"0\",\"Bad\":\"x\\r\\ny\",\"Content-Type\":\"application/octet-stream\"},\"len\":2500}");
+  CHECK(sock.sent.find("PUT /api/patterns HTTP/1.1\r\n") == 0);
+  CHECK(sock.sent.find("X-PF-Name: a b.pfm\r\n") != std::string::npos);
+  CHECK(sock.sent.find("X-PF-Last: 0\r\n") != std::string::npos);
+  CHECK(sock.sent.find("Bad") == std::string::npos);            // a value with a line end in it is left out
+  CHECK(sock.sent.find("Content-Length: 2500\r\n") != std::string::npos);
+  const size_t headLen = sock.sent.size();
+  sock.toRead = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK";    // an early answer waits for the body
+  spin(3);
+  CHECK(!relayLine("\"t\":\"http\""));
+  sock.toRead.clear();
+  for (size_t at = 0; at < file.size(); at += RELAY_CHUNK_IN) {
+    ask("{\"c\":\"hb\",\"id\":4,\"d\":\"" + b64(file.substr(at, RELAY_CHUNK_IN)) + "\"}");
+    T += 3;
+  }
+  CHECK(relayLine("\"t\":\"hk\",\"id\":4,\"n\":1080"));
+  CHECK(relayLine("\"t\":\"hk\",\"id\":4,\"n\":2500"));
+  CHECK(sock.sent.substr(headLen) == file);
+  sock.toRead = "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{\"ok\":true}";
+  spin();
+  CHECK(relayLine("\"t\":\"http\",\"id\":4,\"s\":200,\"len\":11"));
+  CHECK(relayBody() == "{\"ok\":true}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":4,\"n\":11"));
+  CHECK(!relay.busy());
+
+  // A long answer, with no length: until the panel closes, in order, and
+  // only as fast as the console takes it.
+  g_relayLines.clear();
+  std::string list;
+  for (int i = 0; i < 3000; i++) list.push_back((char)('a' + i % 23));
+  ask("{\"c\":\"http\",\"id\":5,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/api/patterns\"}");
+  sock.toRead = "HTTP/1.1 200 OK\r\n\r\n" + list.substr(0, 1000);
+  g_relayRoom = 100;                               // the console is behind
+  spin(10);
+  CHECK(relayLine("\"t\":\"http\",\"id\":5,\"s\":200,\"len\":-1"));
+  CHECK(relayBody().empty());
+  g_relayRoom = 100000;
+  spin();
+  CHECK(relayBody() == list.substr(0, 1000));
+  CHECK(relay.busy());
+  sock.toRead = list.substr(1000);
+  sock.open = false;                               // the panel has said it all
+  spin(100);
+  CHECK(relayBody() == list);
+  CHECK(relayLine("\"t\":\"he\",\"id\":5,\"n\":3000"));
+  CHECK(!relay.busy());
+
+  // An error status still comes back whole.
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":6,\"to\":\"#1\",\"m\":\"POST\",\"path\":\"/api/patterns/delete\",\"len\":1}");
+  ask("{\"c\":\"hb\",\"id\":6,\"d\":\"Kg==\"}");
+  CHECK(sock.sent.size() > 1 && sock.sent.back() == '*');
+  sock.toRead = "HTTP/1.1 503 Service Unavailable\r\ncontent-length: 5\r\n\r\nretryEXTRA";
+  spin();
+  CHECK(relayLine("\"t\":\"http\",\"id\":6,\"s\":503,\"len\":5"));
+  CHECK(relayBody() == "retry");                   // not past the length it gave
+
+  // What cannot be asked.
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":7,\"to\":\"#9\",\"m\":\"GET\",\"path\":\"/api/status\"}", 0);
+  CHECK(relayLine("\"t\":\"he\",\"id\":7,\"err\":\"no such panel"));
+  ask("{\"c\":\"http\",\"id\":8,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"api/status\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":8,\"err\":\"path"));
+  ask("{\"c\":\"http\",\"id\":9,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/a b\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":9,\"err\":\"path"));
+  ask("{\"c\":\"http\",\"id\":10,\"to\":\"#1\",\"m\":\"G T\",\"path\":\"/\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":10,\"err\":\"m:"));
+  ask("{\"c\":\"http\",\"id\":11,\"to\":\"#1\",\"m\":\"PUT\",\"path\":\"/\",\"len\":99999999}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":11,\"err\":\"len"));
+  CHECK(!relay.busy());
+  sock.reachable = false;
+  ask("{\"c\":\"http\",\"id\":12,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":12,\"err\":\"the panel does not answer"));
+  CHECK(!relay.busy());
+  sock.reachable = true;
+
+  // One at a time, and the one under way is not disturbed.
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":20,\"to\":\"#1\",\"m\":\"PUT\",\"path\":\"/api/patterns\",\"len\":4}");
+  ask("{\"c\":\"http\",\"id\":21,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":21,\"err\":\"busy"));
+  CHECK(relay.busy() && relay.id() == 20);
+  ask("{\"c\":\"hb\",\"id\":21,\"d\":\"AAAA\"}");                  // another request's body: not this one's
+  CHECK(!relayLine("\"t\":\"hk\""));
+  // More than was promised ends it.
+  ask("{\"c\":\"hb\",\"id\":20,\"d\":\"AAAAAAAA\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":20,\"err\":\"d:"));
+  CHECK(!relay.busy());
+
+  // A body that never comes, a panel that never answers: the request ends.
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":30,\"to\":\"#1\",\"m\":\"PUT\",\"path\":\"/api/patterns\",\"len\":4,\"tmo\":2000}");
+  spin(900);
+  CHECK(relay.busy());
+  spin(200);
+  CHECK(relayLine("\"t\":\"he\",\"id\":30,\"err\":\"timeout"));
+  CHECK(!relay.busy() && !sock.open);
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":31,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/\"}");
+  T += RELAY_TIMEOUT_MS + 10;
+  relay.tick(T);
+  CHECK(relayLine("\"t\":\"he\",\"id\":31,\"err\":\"timeout"));
+
+  // The panel goes away in the middle of the body, or says nothing and closes.
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":40,\"to\":\"#1\",\"m\":\"PUT\",\"path\":\"/api/patterns\",\"len\":6}");
+  sock.writeLimit = sock.sent.size() + 2;
+  ask("{\"c\":\"hb\",\"id\":40,\"d\":\"AAAA\"}");
+  CHECK(relayLine("\"t\":\"he\",\"id\":40,\"err\":\"the panel closed"));
+  CHECK(!relay.busy());
+  sock.writeLimit = (size_t)-1;
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":41,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/\"}");
+  sock.open = false;
+  spin(3);
+  CHECK(relayLine("\"t\":\"he\",\"id\":41,\"err\":\"the panel closed the connection without answering"));
+  g_relayLines.clear();
+  ask("{\"c\":\"http\",\"id\":42,\"to\":\"#1\",\"m\":\"GET\",\"path\":\"/\"}");
+  sock.toRead = "SSH-2.0-nope\r\n\r\n";
+  spin(3);
+  CHECK(relayLine("\"t\":\"he\",\"id\":42,\"err\":\"not an HTTP answer"));
+  CHECK(!relay.busy());
+}
+
+// ── 21. Pattern names from the console ──────────────────────────────────
+static void testNames() {
+  g_test = "names";
+  fresh(2);
+  run(3000);
+  CHECK(anyLine("\"t\":\"names\",\"at\":0", "Origin"));
+  // A new set on the panels: the names from 2 on are forgotten, and told.
+  sim->outClear();
+  cmd("{\"c\":\"names\",\"clear\":true,\"from\":2}");
+  cmd("{\"c\":\"names\",\"at\":2,\"n\":[\"Patchbay\",\"\\uD55C\\uAE00 \\uD328\\uD134\",\"a name far too long to be kept whole\"]}");
+  run(300);
+  CHECK(std::string(sim->conductor().patternNameAt(2)) == "Patchbay");
+  CHECK(std::string(sim->conductor().patternNameAt(3)) == "\xED\x95\x9C\xEA\xB8\x80 \xED\x8C\xA8\xED\x84\xB4");
+  CHECK_EQ(std::strlen(sim->conductor().patternNameAt(4)), NAME_LEN - 1);
+  CHECK(anyLine("\"t\":\"names\"", "Patchbay"));
+  CHECK(anyLine("\"t\":\"ack\",\"c\":\"names\""));
+  CHECK(std::string(sim->conductor().patternNameAt(0)) == "Origin");      // below `from`: kept
+  // Many names leave in several lines, each saying where it starts.
+  sim->outClear();
+  for (int at = 0; at < 60; at += 6) {
+    std::string line = "{\"c\":\"names\",\"at\":" + std::to_string(at) + ",\"n\":[";
+    for (int i = 0; i < 6; i++) line += std::string(i ? "," : "") + "\"pattern number " + std::to_string(at + i) + "\"";
+    cmd(line + "]}");
+  }
+  run(300);
+  CHECK(anyLine("\"t\":\"names\",\"at\":0,\"of\":60", "pattern number 23"));
+  CHECK(anyLine("\"t\":\"names\",\"at\":24,\"of\":60", "pattern number 47"));
+  CHECK(anyLine("\"t\":\"names\",\"at\":48,\"of\":60", "pattern number 59"));
+  // Past the table, and nonsense: refused or ignored, nothing written.
+  cmd("{\"c\":\"names\",\"at\":95,\"n\":[\"last\",\"beyond\"]}");
+  CHECK(std::string(sim->conductor().patternNameAt(95)) == "last");
+  sim->outClear();
+  cmd("{\"c\":\"names\"}");
+  CHECK(anyLine("\"t\":\"err\",\"c\":\"names\""));
+  cmd("{\"c\":\"names\",\"clear\":true}");
+  CHECK(std::string(sim->conductor().patternNameAt(0)).empty());
+}
+
+// ── 22. A panel playing its own show ────────────────────────────────────
+static void testSolo() {
+  g_test = "solo";
+  fresh(3);
+  links("sync", "sync");
+  run(600);
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"pat\":2,\"k\":[300,300,300,300]}");
+  run(600);
+  CHECK(allPattern(2) && allValue(0, 300));
+
+  // Panel 1 starts a show: the show switches its pattern and moves its look.
+  sim->panel(1).solo = true;
+  run(100);
+  sim->panel(1).actual = 5;
+  run(600);
+  CHECK(sim->panel(1).f.solo());
+  CHECK_EQ(sim->panel(1).actual, 5);              // not taken back
+  CHECK_EQ(sim->panel(0).actual, 2);              // and not passed on
+  CHECK_EQ(sim->panel(2).actual, 2);
+  CHECK(!sim->panel(1).out.laneActive[0]);        // the pattern reads the show, not the ensemble's position
+  CHECK(!sim->panel(1).out.ownKnob[0]);           // and a hand's detents stay in the frame
+  sim->outClear();
+  cmd("{\"c\":\"get\"}");
+  CHECK(anyLine(("\"uid\":\"" + uidOf(1) + "\"").c_str(), "\"fl\":16"));
+
+  // A hand on the playing panel moves nobody, itself included.
+  const uint8_t touchBefore = sim->panel(1).f.touch(0);
+  sim->hand(1, 0, 4);
+  run(600);
+  CHECK_EQ(sim->panel(1).f.touch(0), touchBefore);
+  CHECK(val(0, 0) == 300 && val(2, 0) == 300 && val(1, 0) == 300);
+
+  // The others go on as an ensemble, and what they do waits for the panel.
+  sim->hand(0, 1, 3);
+  run(800);
+  const uint16_t moved = val(0, 1);
+  CHECK(moved != 300);
+  CHECK_EQ(val(2, 1), moved);
+  CHECK_EQ(val(1, 1), 300);
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"pat\":4}");
+  run(800);
+  CHECK(sim->panel(0).actual == 4 && sim->panel(2).actual == 4);
+  CHECK_EQ(sim->panel(1).actual, 5);
+  // The show goes to another pattern: still nobody's business.
+  sim->panel(1).actual = 6;
+  run(600);
+  CHECK(sim->panel(0).actual == 4 && sim->panel(2).actual == 4);
+
+  // Brightness, sleep and the identify mark still reach it.
+  cmd("{\"c\":\"set\",\"to\":\"all\",\"br\":77}");
+  run(600);
+  CHECK_EQ(sim->panel(1).brightness, 77);
+
+  // The show ends, its last pattern landing a frame late: the panel is back
+  // in the ensemble, with what the ensemble shows now.
+  sim->panel(1).solo = false;
+  run(50);
+  sim->panel(1).actual = 7;
+  run(1500);
+  CHECK(!sim->panel(1).f.solo());
+  CHECK_EQ(sim->panel(1).actual, 4);
+  CHECK_EQ(val(1, 1), moved);
+  CHECK(sim->panel(0).actual == 4 && sim->panel(2).actual == 4);   // the late pattern went nowhere
+  sim->outClear();
+  cmd("{\"c\":\"get\"}");
+  CHECK(anyLine(("\"uid\":\"" + uidOf(1) + "\"").c_str(), "\"fl\":0"));
+  // And a hand on it counts again.
+  sim->hand(1, 0, 2);
+  run(800);
+  CHECK(val(1, 0) != 300);
+  CHECK_EQ(val(0, 0), val(1, 0));
+}
+
 int main() {
   testCodec();
   testFollower();
@@ -1275,6 +1749,7 @@ int main() {
   testSoloAndUnlinked();
   testConsoleSets();
   testBrightness();
+  testSleep();
   testMidi();
   testScenes();
   testLossyAir();
@@ -1282,8 +1757,12 @@ int main() {
   testDropout();
   testPowerCycle();
   testHubRestart();
+  testDepth();
   testK4AsKnob();
   testManyPanels();
+  testRelay();
+  testNames();
+  testSolo();
   std::printf("%s  %d checks, %d failed\n", g_failed ? "FAIL" : "PASS", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }
