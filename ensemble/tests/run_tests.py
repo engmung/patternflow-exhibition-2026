@@ -136,8 +136,15 @@ def main():
         if pfs.returncode != 0 and out:
             print("\n".join("  " + line for line in out.splitlines()[:-1]))
         ok &= pfs.returncode == 0
+        # The node graph: compiled by console/graph.js, run by the hub's code in the demo module.
+        gr = subprocess.run([node, str(ROOT / "tests" / "test_graph.js")], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        out = (gr.stdout + gr.stderr).strip()
+        print("graph: " + (out.splitlines()[-1] if out else "no output"))
+        if gr.returncode != 0 and out:
+            print("\n".join("  " + line for line in out.splitlines()[:-1]))
+        ok &= gr.returncode == 0
     else:
-        print("pfs: skipped (no node on the PATH; tests/test_pfs.js covers console/pfs.js)")
+        print("pfs, graph: skipped (no node on the PATH; tests/test_pfs.js and tests/test_graph.js cover console/pfs.js and console/graph.js)")
     console = subprocess.run([sys.executable, str(ROOT / "tools" / "build_console.py"), "--check"],
                              capture_output=True, text=True, encoding="utf-8", errors="replace")
     print("console: " + (console.stdout + console.stderr).strip())

@@ -146,10 +146,10 @@
       return offsets.get(text);
     };
     const packed = cues.map((c) => ({ ...c, patternOff: c.pattern ? offsetOf(c.pattern) : NONE, messageOff: c.message ? offsetOf(c.message) : NONE }));
-    if (cues.length > MAX_CUES) throw new Error(`큐가 ${cues.length}개입니다. 쇼 하나에는 ${MAX_CUES}개까지 들어갑니다`);
-    if (pool.length > MAX_POOL) throw new Error('패턴 이름이 너무 많습니다');
+    if (cues.length > MAX_CUES) throw new Error(`${cues.length} cues: a show holds ${MAX_CUES}`);
+    if (pool.length > MAX_POOL) throw new Error('Too many pattern names for one show');
     const length = Math.round(show.length);
-    if (!(length >= 1 && length <= 0xFFFF)) throw new Error('길이가 범위를 벗어났습니다');
+    if (!(length >= 1 && length <= 0xFFFF)) throw new Error('The length is out of range');
 
     const out = new Uint8Array(HEADER + pool.length + cues.length * CUE);
     const view = new DataView(out.buffer);
@@ -189,7 +189,7 @@
                      tracks: whole.map((track) => simplify(track, tol).map((p) => ({ t: p.t, v: p.v, ease: true }))) };
       const cues = cueCount(show);
       if (cues <= MAX_CUES) return { bytes: write(show), cues, tolerance: tol, show };
-      if (tol > VALUE_MAX) throw new Error('이 녹화는 쇼 하나에 담기에 너무 깁니다');
+      if (tol > VALUE_MAX) throw new Error('This recording is too long for one show');
     }
   }
 

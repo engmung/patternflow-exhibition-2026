@@ -56,46 +56,6 @@ constexpr uint32_t RELAY_CONNECT_MS = 800;        // the hub does nothing else m
 constexpr long RELAY_MAX_BODY = 4L * 1024 * 1024; // of a request
 constexpr size_t RELAY_MAX_REPLY = 512 * 1024;    // of an answer
 
-inline size_t base64Encode(const uint8_t* in, size_t n, char* out) {
-  static const char A[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  size_t o = 0;
-  for (size_t i = 0; i < n; i += 3) {
-    const uint32_t v = ((uint32_t)in[i] << 16) | ((i + 1 < n ? in[i + 1] : 0u) << 8) | (i + 2 < n ? in[i + 2] : 0u);
-    out[o++] = A[(v >> 18) & 63];
-    out[o++] = A[(v >> 12) & 63];
-    out[o++] = i + 1 < n ? A[(v >> 6) & 63] : '=';
-    out[o++] = i + 2 < n ? A[v & 63] : '=';
-  }
-  return o;
-}
-
-// Returns the bytes written, or -1 for text that is not base64 or does not fit.
-inline long base64Decode(const char* in, size_t n, uint8_t* out, size_t cap) {
-  auto value = [](char c) -> int {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-  };
-  if (n % 4) return -1;
-  size_t o = 0;
-  for (size_t i = 0; i < n; i += 4) {
-    const int a = value(in[i]), b = value(in[i + 1]);
-    const bool pad2 = in[i + 2] == '=', pad3 = in[i + 3] == '=';
-    const int c = pad2 ? 0 : value(in[i + 2]), d = pad3 ? 0 : value(in[i + 3]);
-    if (a < 0 || b < 0 || c < 0 || d < 0 || (pad2 && !pad3) || ((pad2 || pad3) && i + 4 != n)) return -1;
-    const uint32_t v = ((uint32_t)a << 18) | ((uint32_t)b << 12) | ((uint32_t)c << 6) | (uint32_t)d;
-    const size_t bytes = pad2 ? 1 : pad3 ? 2 : 3;
-    if (o + bytes > cap) return -1;
-    out[o++] = (uint8_t)(v >> 16);
-    if (bytes > 1) out[o++] = (uint8_t)(v >> 8);
-    if (bytes > 2) out[o++] = (uint8_t)v;
-  }
-  return (long)o;
-}
-
 class Relay {
  public:
   void begin(RelaySocket* socket, const RelayIo& io) {

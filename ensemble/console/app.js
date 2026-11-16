@@ -16,8 +16,8 @@
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const KNOBS = 4;
   const LINKS = ['solo', 'sync', 'ripple'];
-  const LINK_LABEL = { solo: '단독', sync: '동시', ripple: '물결' };
-  const CHANNEL_LABEL = ['K1', 'K2', 'K3', 'K4', '패턴'];
+  const LINK_LABEL = { solo: 'Solo', sync: 'Sync', ripple: 'Ripple' };
+  const CHANNEL_LABEL = ['K1', 'K2', 'K3', 'K4', 'Pattern'];
   const TILE_W = 0.84, TILE_H = 0.42;   // a panel on the map, in map units (128 x 64 LEDs)
   // The mark a panel shows while it is identified, by its number: a shape and
   // a colour, both stepping with the number (1 red circle, 2 green square,
@@ -25,9 +25,9 @@
   // lists as core/pfe_proto.h identifyMark (tools/build_console.py --check
   // holds them together).
   const IDENTIFY_COLOURS = [[255, 0, 0], [0, 220, 0], [0, 80, 255], [255, 210, 0]];
-  const IDENTIFY_COLOUR_NAMES = ['빨강', '초록', '파랑', '노랑'];
+  const IDENTIFY_COLOUR_NAMES = ['red', 'green', 'blue', 'yellow'];
   const IDENTIFY_SHAPES = ['circle', 'square', 'triangle'];
-  const IDENTIFY_SHAPE_NAMES = ['원', '사각형', '삼각형'];
+  const IDENTIFY_SHAPE_NAMES = ['circle', 'square', 'triangle'];
   const idMark = (id) => {
     const n = (id || 1) - 1;
     const [r, g, b] = IDENTIFY_COLOURS[n % IDENTIFY_COLOURS.length];
@@ -66,6 +66,8 @@
     toastTimer = setTimeout(() => { t.hidden = true; }, 3800);
   }
 
+  const nOf = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;       // 1 panel, 3 panels
+
   function setPressed(ids, on) {
     for (const id of ids) $(id).setAttribute('aria-pressed', String(id === on));
   }
@@ -86,7 +88,7 @@
   }
 
   function patternName(i) {
-    if (i == null || i < 0) return '모름';
+    if (i == null || i < 0) return 'unknown';
     return S.names[i] ? `${i} · ${S.names[i]}` : `${i}`;
   }
 
@@ -119,7 +121,7 @@
     now() { return (5000 + (performance.now() - this.t0)) >>> 0; }
     async start() {
       try {
-        if (!window.PFE_SIM_WASM) throw new Error('pfe_sim.wasm.js가 없습니다');
+        if (!window.PFE_SIM_WASM) throw new Error('pfe_sim.wasm.js is missing');
         const bin = Uint8Array.from(atob(window.PFE_SIM_WASM), (c) => c.charCodeAt(0));
         const { instance } = await WebAssembly.instantiate(bin, {});
         this.x = instance.exports;
@@ -128,7 +130,7 @@
         // as plain JavaScript (binaryen's wasm2js) for those; the copy in
         // the repository does not, and says so instead.
         if (typeof window.PFE_SIM_JS !== 'function') {
-          throw new Error('이 화면에서는 데모를 돌릴 수 없습니다 (WebAssembly가 막혀 있습니다). ensemble/console/index.html을 브라우저에서 직접 여세요.');
+          throw new Error('The demo cannot run in this frame (WebAssembly is blocked). Open ensemble/console/index.html directly in a browser.');
         }
         this.x = window.PFE_SIM_JS();
       }
@@ -213,7 +215,7 @@
   class SerialTransport {
     constructor() { this.name = 'usb'; this.port = null; this.buffer = { text: '' }; }
     async start() {
-      if (!('serial' in navigator)) throw new Error('이 브라우저에는 Web Serial이 없습니다. Chrome이나 Edge에서 이 파일을 여세요.');
+      if (!('serial' in navigator)) throw new Error('This browser has no Web Serial. Open this file in Chrome or Edge.');
       this.port = await navigator.serial.requestPort();
       await this.port.open({ baudRate: 115200 });
       // The hub's own USB jack (Espressif's vendor id) sends only while DTR
@@ -248,7 +250,7 @@
           if (this.closing) break;
         }
       } catch (e) {
-        if (!this.closing) dropped('USB 연결이 끊겼습니다: ' + e.message);
+        if (!this.closing) dropped('The USB connection dropped: ' + e.message);
       }
     }
     send(text) {
@@ -280,8 +282,8 @@
           resolve();
         };
         ws.onmessage = (ev) => { for (const line of String(ev.data).split('\n')) if (line) onLine(line); };
-        ws.onerror = () => { if (!opened) reject(new Error(`${this.host}에 연결하지 못했습니다`)); };
-        ws.onclose = () => { if (opened && !this.closing) dropped('Wi-Fi 연결이 끊겼습니다'); };
+        ws.onerror = () => { if (!opened) reject(new Error(`Could not connect to ${this.host}`)); };
+        ws.onclose = () => { if (opened && !this.closing) dropped('The Wi-Fi connection dropped'); };
       });
     }
     send(text) { if (this.ws && this.ws.readyState === 1) this.ws.send(text); }
@@ -318,7 +320,7 @@
   function dropped(why) {
     S.connected = false;
     relayDropped();
-    status('끊김', 'bad');
+    status('Disconnected', 'bad');
     log('err', why);
     toast(why);
   }
@@ -329,6 +331,10 @@
     S.connected = false;
     relayDropped();
     shows.clear();
+    NG.said = '';
+    NG.live = null;
+    NG.hub = null;
+    NG.on = false;
     if (REC.on) { REC.on = false; clearInterval(REC.timer); REC.panels.clear(); }
     P.panels.clear();
     P.presets = null;
@@ -336,23 +342,23 @@
     S.mode = mode;
     setPressed(['conn-demo', 'conn-usb', 'conn-wifi'], 'conn-' + mode);
     $('demo-box').hidden = mode !== 'demo';
-    status('연결하는 중', 'warn');
+    status('Connecting', 'warn');
     const t = mode === 'demo' ? new DemoTransport() : mode === 'usb' ? new SerialTransport() : new SocketTransport(arg);
     if (mode === 'demo') t.count = +$('demo-count').value;
     try {
       S.transport = t;
       await t.start();
       S.connected = true;
-      status(mode === 'demo' ? '데모: 가상 패널' : mode === 'usb' ? 'USB로 허브에 연결됨' : `Wi-Fi: ${arg}`, 'ok');
-      log('', mode === 'demo' ? '데모를 시작했습니다. 하드웨어 없이 허브와 패널의 코드를 그대로 돌립니다.' : '허브에 연결했습니다.');
+      status(mode === 'demo' ? 'Demo: virtual panels' : mode === 'usb' ? 'Connected to the hub over USB' : `Wi-Fi: ${arg}`, 'ok');
+      log('', mode === 'demo' ? 'Demo started: the hub\'s and the panels\' own code, with no hardware.' : 'Connected to the hub.');
     } catch (e) {
       S.transport = null;
-      status('연결 안 됨', 'bad');
+      status('Not connected', 'bad');
       // A page inside a preview frame is refused the serial port outright;
       // a person who closes the port chooser picked nothing.
-      const why = e.name === 'NotFoundError' ? '포트를 고르지 않았습니다.'
+      const why = e.name === 'NotFoundError' ? 'No port was chosen.'
         : e.name === 'SecurityError' || e.name === 'NotAllowedError'
-          ? '이 화면에서는 USB 포트를 열 수 없습니다. 저장소의 ensemble/console/index.html을 Chrome이나 Edge에서 직접 여세요.'
+          ? 'This frame cannot open a USB port. Open ensemble/console/index.html from the repository directly in Chrome or Edge.'
           : (e.message || String(e));
       log('err', why);
       toast(why);
@@ -366,10 +372,11 @@
     if (text[0] !== '{') { log('raw', text); return; }   // the hub's own boot log on the same port
     let m;
     try { m = JSON.parse(text); } catch (_) { log('raw', text); return; }
-    if ($('log-raw').checked && m.t !== 'p' && m.t !== 'hub' && m.t !== 'hb' && m.t !== 'hk') log('raw', '← ' + text);
+    if ($('log-raw').checked && m.t !== 'p' && m.t !== 'hub' && m.t !== 'hb' && m.t !== 'hk' && m.t !== 'nv' && m.t !== 'mi') log('raw', '← ' + text);
     switch (m.t) {
       case 'hello':
-        log('', `허브: 프로토콜 ${m.proto}${m.fw ? ', 펌웨어 ' + m.fw : ''}${m.ssid ? ', Wi-Fi ' + m.ssid : ''}`);
+        log('', `Hub: protocol ${m.proto}${m.fw ? ', firmware ' + m.fw : ''}${m.ssid ? ', Wi-Fi ' + m.ssid : ''}`);
+        if (S.page === 'nodes') setTimeout(ngOpen, 300);      // a hub (again): what does it run, and watch it
         break;
       case 'cfg': S.cfg = m; renderRules(); renderInspector(); break;
       case 'names': {
@@ -391,7 +398,7 @@
       case 'hub':
         S.hub = m;
         S.lastHubLineAt = performance.now();
-        if (S.quiet) { S.quiet = false; status(S.mode === 'usb' ? 'USB로 허브에 연결됨' : 'Wi-Fi로 허브에 연결됨', 'ok'); }
+        if (S.quiet) { S.quiet = false; status(S.mode === 'usb' ? 'Connected to the hub over USB' : 'Connected to the hub over Wi-Fi', 'ok'); }
         renderStats();
         break;
       case 'p': {
@@ -406,6 +413,7 @@
         recSample(m);
         // It started or stopped a show: what the side column says of its player is from before.
         if (prev && ((prev.fl ^ m.fl) & RF_SOLO) && shows.has(m.uid)) loadShows(m.uid);
+        if (S.page === 'nodes' && (!prev || prev.on !== m.on)) throttled('ngPanels', ngRender, 600);
         if (S.page === 'shows' && (!prev || prev.on !== m.on || prev.n !== m.n || ((prev.fl ^ m.fl) & RF_SOLO))) throttled('libPanels', renderLib, 300);
         if (S.page === 'patterns' && (!prev || prev.on !== m.on || prev.n !== m.n)) {
           renderGo();
@@ -433,8 +441,9 @@
         break;
       }
       case 'log': log('', m.m); break;
-      case 'err': log('err', `${m.c}: ${m.m}`); toast(m.m); break;
-      case 'ack': break;
+      case 'err': if (m.c === 'graph') ngLine(m); log('err', `${m.c}: ${m.m}`); toast(m.m); break;
+      case 'ack': if (m.c === 'graph') ngLine(m); break;
+      case 'graph': case 'nv': case 'mi': ngLine(m); break;      // the node page's
       default: break;
     }
   }
@@ -453,7 +462,7 @@
       const seg = document.createElement('div');
       seg.className = 'seg small';
       seg.setAttribute('role', 'group');
-      seg.setAttribute('aria-label', CHANNEL_LABEL[c] + '의 연결');
+      seg.setAttribute('aria-label', 'How ' + CHANNEL_LABEL[c] + ' is linked');
       for (const l of LINKS) {
         const b = document.createElement('button');
         b.type = 'button';
@@ -503,13 +512,13 @@
     }
     $(`link-3-solo`).closest('.row').hidden = !!cfg.k4;   // K4 has no value to share while it switches patterns
     if (!busy($('cfg-speed'))) $('cfg-speed').value = cfg.speed;
-    $('cfg-speed-v').textContent = `${cfg.speed} 칸/초`;
+    $('cfg-speed-v').textContent = `${cfg.speed} units/s`;
     if (!busy($('cfg-glide'))) $('cfg-glide').value = cfg.glide;
     $('cfg-glide-v').textContent = `${cfg.glide} ms`;
     setPressed(['cfg-k4-pattern', 'cfg-k4-knob'], cfg.k4 ? 'cfg-k4-pattern' : 'cfg-k4-knob');
     $('k4-range').hidden = !cfg.k4;
     // While K4 switches patterns, the pattern row is K4's row: say so.
-    $('rule-lab-4').textContent = cfg.k4 ? 'K4 패턴' : '패턴';
+    $('rule-lab-4').textContent = cfg.k4 ? 'K4 pattern' : 'Pattern';
     for (const [id, v] of [['cfg-pmin', cfg.pmin], ['cfg-pmax', cfg.pmax], ['cfg-k4s', cfg.k4s]])
       if (!busy($(id))) $(id).value = v;
     $('cfg-lock').checked = !!cfg.lock;
@@ -558,11 +567,11 @@
     const hh = Math.floor(up / 3600), mm = Math.floor(up / 60) % 60, ss = up % 60;
     const time = (hh ? hh + ':' + String(mm).padStart(2, '0') : mm) + ':' + String(ss).padStart(2, '0');
     el.innerHTML =
-      `<span>패널 <b>${h.online}/${h.panels}</b></span>` +
-      `<span>이동 중인 값 <b>${h.fly}</b></span>` +
-      `<span>받음 <b>${h.rx}</b> · 보냄 <b>${h.tx}</b></span>` +
-      `<span>깨진 패킷 <b>${h.bad}</b> · 늦게 온 보고 <b>${h.stale}</b></span>` +
-      `<span>허브 가동 <b>${time}</b></span>`;
+      `<span>Panels <b>${h.online}/${h.panels}</b></span>` +
+      `<span>In flight <b>${h.fly}</b></span>` +
+      `<span>Received <b>${h.rx}</b> · sent <b>${h.tx}</b></span>` +
+      `<span>Bad packets <b>${h.bad}</b> · late reports <b>${h.stale}</b></span>` +
+      `<span>Hub up <b>${time}</b></span>`;
   }
 
   // ── The inspector ──────────────────────────────────────────────────────
@@ -599,8 +608,8 @@
       h.id = `p-hand-row-${k}`;
       h.style.marginBottom = '6px';
       h.innerHTML = `<span class="lab">K${k + 1}</span>` +
-        `<button type="button" class="btn small" id="p-hand-${k}-down" aria-label="K${k + 1} 왼쪽으로 한 클릭">◀ 왼쪽</button>` +
-        `<button type="button" class="btn small" id="p-hand-${k}-up" aria-label="K${k + 1} 오른쪽으로 한 클릭">오른쪽 ▶</button>`;
+        `<button type="button" class="btn small" id="p-hand-${k}-down" aria-label="K${k + 1} one click left">◀ Left</button>` +
+        `<button type="button" class="btn small" id="p-hand-${k}-up" aria-label="K${k + 1} one click right">Right ▶</button>`;
       hand.append(h);
       for (const [suffix, dir] of [['down', -1], ['up', 1]]) {
         const b = h.querySelector(`#p-hand-${k}-${suffix}`);
@@ -616,7 +625,7 @@
     br.className = 'knob';
     br.id = 'p-bright-row';
     br.style.marginBottom = '6px';
-    br.innerHTML = '<label class="lab" for="p-br">밝기</label>' +
+    br.innerHTML = '<label class="lab" for="p-br">Bri</label>' +
       '<input type="range" id="p-br" min="5" max="255" step="1" value="128">' +
       '<span class="val num" id="p-br-v">–</span>';
     knobs.append(br);
@@ -633,8 +642,8 @@
     k4.hidden = true;
     k4.style.marginBottom = '6px';
     k4.style.gridTemplateColumns = '26px minmax(0, 1fr) auto';
-    k4.innerHTML = '<span class="lab">K4</span><span class="note" style="margin:0">패턴을 넘기는 중 (위의 패턴에서 고름)</span>' +
-      '<button type="button" class="btn small" id="p-k4-as-knob">노브로 쓰기</button>';
+    k4.innerHTML = '<span class="lab">K4</span><span class="note" style="margin:0">steps patterns (choose above)</span>' +
+      '<button type="button" class="btn small" id="p-k4-as-knob">Use as a knob</button>';
     knobs.append(k4);
     $('p-k4-as-knob').addEventListener('click', () => send({ c: 'cfg', k4: false }));
   }
@@ -671,19 +680,19 @@
     if (!p) return;
     const k4 = S.cfg && S.cfg.k4;
     $('insp-id').textContent = p.id;
-    $('insp-title').textContent = (p.n || `패널 ${p.id}`) + (S.picked.size > 1 ? ` 외 ${S.picked.size - 1}대` : '');
+    $('insp-title').textContent = (p.n || `Panel ${p.id}`) + (S.picked.size > 1 ? ` + ${S.picked.size - 1} more` : '');
     $('insp-uid').textContent = p.uid;
     const st = $('insp-state');
-    if (!p.on) { st.textContent = '연결 안 됨'; st.className = 'pill bad'; }
-    else if (isSolo(p)) { st.textContent = '쇼 재생 중'; st.className = 'pill ok'; }
-    else if (!p.ok) { st.textContent = '따라오는 중'; st.className = 'pill warn'; }
-    else { st.textContent = '맞춰짐'; st.className = 'pill ok'; }
+    if (!p.on) { st.textContent = 'Offline'; st.className = 'pill bad'; }
+    else if (isSolo(p)) { st.textContent = 'Playing a show'; st.className = 'pill ok'; }
+    else if (!p.ok) { st.textContent = 'Catching up'; st.className = 'pill warn'; }
+    else { st.textContent = 'In sync'; st.className = 'pill ok'; }
     const turn = p.r || [0, 0, 0];
     for (const [id, v] of [['p-id', p.id], ['p-name', p.n], ['p-x', p.x], ['p-y', p.y], ['p-z', p.z || 0],
                            ['p-rx', turn[0]], ['p-ry', turn[1]], ['p-rz', turn[2]]])
       if (!busy($(id))) $(id).value = v;
     $('p-linked').checked = !!p.l;
-    $('p-sleep').textContent = p.sl ? '깨우기' : '절전';
+    $('p-sleep').textContent = p.sl ? 'Wake' : 'Sleep';
 
     // Patterns: as many as this panel says it has, named where a name is known.
     const sel = $('p-pattern');
@@ -704,30 +713,30 @@
     // The brightness the panel reports; a panel of the first version says none.
     $('p-bright-row').hidden = !p.br;
     if (p.br && !busy($('p-br'))) { $('p-br').value = p.br; $('p-br-v').textContent = p.br; }
-    $('p-hand-3-down').textContent = k4 ? '◀ 이전 패턴' : '◀ 왼쪽';
-    $('p-hand-3-up').textContent = k4 ? '다음 패턴 ▶' : '오른쪽 ▶';
+    $('p-hand-3-down').textContent = k4 ? '◀ Previous' : '◀ Left';
+    $('p-hand-3-up').textContent = k4 ? 'Next ▶' : 'Right ▶';
     if (demo && S.transport && S.transport.x) {
       const sim = S.transport.sim(p.uid);
-      $('p-power').textContent = sim >= 0 && S.transport.x.pfe_powered(sim) ? '전원 끄기' : '전원 켜기';
+      $('p-power').textContent = sim >= 0 && S.transport.x.pfe_powered(sim) ? 'Power off' : 'Power on';
     }
-    $('p-identify').textContent = p.idf ? '표시 끄기' : `표시 (${idMark(p.id).name})`;
+    $('p-identify').textContent = p.idf ? 'Hide mark' : `Mark (${idMark(p.id).name})`;
     $('p-forget').disabled = !!p.on;
-    $('p-forget').title = p.on ? '연결이 끊긴 패널만 지울 수 있습니다' : '';
+    $('p-forget').title = p.on ? 'Only a panel that is offline can be removed' : '';
     $('p-reboot').disabled = !p.on;
 
     const flags = [];
-    if (p.fl & 1) flags.push('막 켜짐');
-    if (p.fl & 2) flags.push('절전');
-    if (p.fl & 4) flags.push('패널 메뉴 열림');
-    if (p.fl & 8) flags.push('패턴 고르는 중');
-    const up = p.up >= 3600 ? `${Math.floor(p.up / 3600)}시간 ${Math.floor(p.up / 60) % 60}분` : `${Math.floor(p.up / 60)}분 ${p.up % 60}초`;
+    if (p.fl & 1) flags.push('just started');
+    if (p.fl & 2) flags.push('asleep');
+    if (p.fl & 4) flags.push('panel menu open');
+    if (p.fl & 8) flags.push('choosing a pattern');
+    const up = p.up >= 3600 ? `${Math.floor(p.up / 3600)} h ${Math.floor(p.up / 60) % 60} min` : `${Math.floor(p.up / 60)} min ${p.up % 60} s`;
     const rows = [
-      ['주소', p.ip], ['신호', `${p.rssi} dBm`], ['화면', `${p.fps} fps`], ['켜진 지', up],
-      ['펌웨어', `${p.fw || '?'}${p.var ? ' · ' + p.var : ''}`],
-      ['지금 패턴', `${patternName(p.pat)}${p.pn && !S.names[p.pat] ? ' · ' + p.pn : ''}`],
-      ['지금 노브', p.k.join(' / ')], ['목표 노브', p.tk.join(' / ')],
-      ['마지막 보고', `${p.age} ms 전`], ['보고 / 잃은 보고', `${p.rep} / ${p.lost}`],
-      ['손으로 돌린 횟수', p.hands], ['다시 켜진 횟수', p.rst], ['상태', flags.join(', ') || '보통'],
+      ['Address', p.ip], ['Signal', `${p.rssi} dBm`], ['Display', `${p.fps} fps`], ['Up for', up],
+      ['Firmware', `${p.fw || '?'}${p.var ? ' · ' + p.var : ''}`],
+      ['Pattern', `${patternName(p.pat)}${p.pn && !S.names[p.pat] ? ' · ' + p.pn : ''}`],
+      ['Knobs', p.k.join(' / ')], ['Knob targets', p.tk.join(' / ')],
+      ['Last report', `${p.age} ms ago`], ['Reports / lost', `${p.rep} / ${p.lost}`],
+      ['Hand turns', p.hands], ['Restarts', p.rst], ['State', flags.join(', ') || 'normal'],
     ];
     const dl = $('p-diag');
     dl.textContent = '';
@@ -758,10 +767,10 @@
   function renderAllPanels() {
     const ps = [...S.panels.values()].filter((p) => p.on);
     const allAsleep = ps.length > 0 && ps.every((p) => p.sl);
-    $('all-sleep').textContent = allAsleep ? '깨우기' : '절전';
+    $('all-sleep').textContent = allAsleep ? 'Wake' : 'Sleep';
     $('all-sleep').setAttribute('aria-pressed', String(allAsleep));
     $('all-sleep').disabled = !ps.length;
-    $('map-identify').textContent = anyIdentified() ? '표시 끄기' : '전체 모양·색 표시';
+    $('map-identify').textContent = anyIdentified() ? 'Hide marks' : 'Show all marks';
     $('map-identify').setAttribute('aria-pressed', String(anyIdentified()));
     const sel = $('all-pattern');
     const count = Math.max(1, S.names.length, ...ps.map((p) => p.pc || 0));
@@ -781,8 +790,8 @@
     const warn = $('all-pattern-warn');
     warn.hidden = new Set(counts.map((p) => p.pc)).size < 2;
     if (!warn.hidden) {
-      warn.textContent = `패널마다 패턴 수가 다릅니다 (${counts.map((p) => `${p.id}번 ${p.pc}개`).join(', ')}). ` +
-        '같은 번호가 다른 패턴이 됩니다. 맞추려면 ensemble\\tools\\sync-patterns.cmd 를 두 번 누르세요.';
+      warn.textContent = `The panels hold different numbers of patterns (${counts.map((p) => `#${p.id}: ${p.pc}`).join(', ')}). ` +
+        'The same number is then a different pattern on each. Put one set on all of them from the Patterns page.';
     }
     const slider = $('all-bright');
     const br = mostCommon(ps.map((p) => p.br).filter((v) => v > 0));
@@ -864,7 +873,7 @@
     pen.textAlign = 'right';
     pen.font = `700 ${clamp(Math.round(head * 0.62), 9, 26)}px ${colors.sans}`;
     pen.fillStyle = lit ? '#EDE7DB' : '#6F685D';
-    pen.fillText(`패턴 ${pat}`, x + tw - pad, y + head / 2 + 1);
+    pen.fillText(`Pattern ${pat}`, x + tw - pad, y + head / 2 + 1);
 
     const rows = th - head - pad;
     if (rows < 8) return;
@@ -931,7 +940,7 @@
       pen.font = `${clamp(Math.round(th * 0.22), 9, 16)}px ${colors.sans}`;
       pen.textAlign = 'center';
       pen.textBaseline = 'middle';
-      pen.fillText('절전', x + tw / 2, y + th / 2);
+      pen.fillText('Asleep', x + tw / 2, y + th / 2);
     }
     // The number rides on the tile's corner, with the state as a dot beside it.
     const chip = String(p.id);
@@ -949,7 +958,7 @@
     pen.fill();
   }
 
-  const subLabel = (p, pat) => (p.n ? p.n + ' · ' : '') + (!p.on ? '연결 안 됨' : isSolo(p) ? '쇼 재생 중' : (S.names[pat] || `패턴 ${pat}`)) + (p.l ? '' : ' · 따로');
+  const subLabel = (p, pat) => (p.n ? p.n + ' · ' : '') + (!p.on ? 'Offline' : isSolo(p) ? 'Playing a show' : (S.names[pat] || `Pattern ${pat}`)) + (p.l ? '' : ' · unlinked');
 
   function draw2d(now) {
     if (!S.cam.fitted && S.panels.size) fit();
@@ -1007,7 +1016,7 @@
         ctx.textBaseline = 'top';
         ctx.font = `11px ${colors.sans}`;
         ctx.fillStyle = p.on ? ROOM.text : colors.bad;
-        ctx.fillText(subLabel(p, st.pat) + (p.z ? ` · 깊이 ${p.z}` : '') + (turned3(p) ? ' · 돌려 놓음' : ''), x, y + th + 5, tw);
+        ctx.fillText(subLabel(p, st.pat) + (p.z ? ` · depth ${p.z}` : '') + (turned3(p) ? ' · rotated' : ''), x, y + th + 5, tw);
       }
     }
     drawBox();
@@ -1138,8 +1147,8 @@
   }
   function viewName() {
     const v = axisView();
-    const side = !v ? '사용자' : v[0] === 2 ? (v[1] > 0 ? '위' : '아래') : v[0] === 1 ? (v[1] > 0 ? '뒤' : '앞') : (v[1] > 0 ? '오른쪽' : '왼쪽');
-    return `${side} ${V.ortho ? '정사' : '원근'}`;
+    const side = !v ? 'User' : v[0] === 2 ? (v[1] > 0 ? 'Top' : 'Bottom') : v[0] === 1 ? (v[1] > 0 ? 'Back' : 'Front') : (v[1] > 0 ? 'Right' : 'Left');
+    return `${side} ${V.ortho ? 'Orthographic' : 'Perspective'}`;
   }
   // Look from that end of an axis, flat, as the numpad does.
   function viewFrom(axis, side) {
@@ -1398,11 +1407,11 @@
       const d = grab.delta, f = (v) => (Math.round(v * 100) / 100 || 0).toFixed(2), len = Math.hypot(d[0], d[1], d[2]);
       const typed = grab.typed ? `[${grab.typed}|]` : null;
       let text;
-      if (grab.mode === 'turn') text = `회전: ${typed || f(grab.angle * 180 / Math.PI)}°  ${grab.axis == null ? '보는 방향을 축으로' : AXIS_NAME[grab.axis] + ' 축'}`;
-      else if (grab.axis != null && !grab.plane) text = `D: ${typed || f(d[grab.axis])}  (${f(len)})  ${AXIS_NAME[grab.axis]} 축을 따라`;
-      else text = `Dx: ${f(d[0])}  Dy: ${f(d[1])}  Dz: ${f(d[2])}  (${f(len)})` + (grab.plane ? `  ${AXIS_NAME[grab.axis]} 축 고정` : '');
+      if (grab.mode === 'turn') text = `Rot: ${typed || f(grab.angle * 180 / Math.PI)}°  ${grab.axis == null ? 'about the view' : 'about ' + AXIS_NAME[grab.axis]}`;
+      else if (grab.axis != null && !grab.plane) text = `D: ${typed || f(d[grab.axis])}  (${f(len)})  along ${AXIS_NAME[grab.axis]}`;
+      else text = `Dx: ${f(d[0])}  Dy: ${f(d[1])}  Dz: ${f(d[2])}  (${f(len)})` + (grab.plane ? `  locking ${AXIS_NAME[grab.axis]}` : '');
       ctx.fillStyle = '#111';
-      ctx.fillText(text + (grab.snap ? '  · 스냅' : ''), 12, 62);
+      ctx.fillText(text + (grab.snap ? '  · snap' : ''), 12, 62);
     }
   }
 
@@ -1904,7 +1913,7 @@
 
   // -> { status, bytes, text, json }, or throws with what went wrong.
   async function panelHttp(uid, method, path, opt = {}) {
-    if (!S.transport || !S.connected) throw new Error('허브에 연결되어 있지 않습니다');
+    if (!S.transport || !S.connected) throw new Error('Not connected to a hub');
     if (relay.busy >= RELAY_SLOTS) await new Promise((go) => relay.waiting.push(go));
     relay.busy++;
     const id = relay.next++;
@@ -1915,7 +1924,7 @@
       return await new Promise((resolve, reject) => {
         const r = { status: 0, parts: [], sent: 0, timer: 0 };
         const fail = (why) => { clearTimeout(r.timer); relay.open.delete(id); reject(new Error(why)); };
-        const arm = () => { clearTimeout(r.timer); r.timer = setTimeout(() => fail('허브가 답하지 않습니다'), tmo + 4000); };
+        const arm = () => { clearTimeout(r.timer); r.timer = setTimeout(() => fail('The hub does not answer'), tmo + 4000); };
         const more = () => {
           if (r.sent >= body.length) return;
           const part = body.subarray(r.sent, r.sent + piece);
@@ -1952,15 +1961,15 @@
     }
   }
   const RELAY_ERRORS = {
-    'timeout': '패널이 답하지 않습니다',
-    'the panel does not answer': '패널이 답하지 않습니다',
-    'no such panel, or it is not connected': '패널이 연결되어 있지 않습니다',
-    'the panel closed the connection': '패널이 연결을 끊었습니다',
-    'the panel closed the connection without answering': '패널이 답 없이 연결을 끊었습니다',
-    'busy with another request': '허브가 다른 요청을 처리하는 중입니다',
+    'timeout': 'The panel does not answer',
+    'the panel does not answer': 'The panel does not answer',
+    'no such panel, or it is not connected': 'The panel is not connected',
+    'the panel closed the connection': 'The panel closed the connection',
+    'the panel closed the connection without answering': 'The panel closed the connection without answering',
+    'busy with another request': 'The hub is busy with another request',
   };
   function relayDropped() {       // the link to the hub went: nothing under way will be answered
-    for (const [, r] of relay.open) r.on({ t: 'he', err: '허브와 연결이 끊겼습니다' });
+    for (const [, r] of relay.open) r.on({ t: 'he', err: 'The connection to the hub dropped' });
   }
 
   // The demo has no panels with web servers. These stand in for them: a
@@ -2149,7 +2158,7 @@
   async function communityJson(from, query) {
     let res;
     try { res = await fetch(communityUrl(from, query), { cache: 'no-store' }); }
-    catch (_) { throw new Error('커뮤니티에 닿지 않습니다 (인터넷 연결을 확인하세요)'); }
+    catch (_) { throw new Error('Cannot reach the community (check the internet connection)'); }
     let data = null;
     try { data = await res.json(); } catch (_) { /* no body */ }
     return { status: res.status, data: data || {} };
@@ -2157,22 +2166,22 @@
   async function communityFile(from, name) {
     let res;
     try { res = await fetch(communityUrl(from, 'file=' + encodeURIComponent(name))); }
-    catch (_) { throw new Error('커뮤니티에 닿지 않습니다 (인터넷 연결을 확인하세요)'); }
-    if (!res.ok) throw new Error(res.status === 404 ? '커뮤니티에 이 파일이 없습니다' : `커뮤니티가 ${res.status}로 답했습니다`);
+    catch (_) { throw new Error('Cannot reach the community (check the internet connection)'); }
+    if (!res.ok) throw new Error(res.status === 404 ? 'The community does not have this file' : `The community answered ${res.status}`);
     return new Uint8Array(await res.arrayBuffer());
   }
   // The files of a pattern or a deck, once the community has them built.
   async function communityFiles(from) {
     for (let tries = 0; tries < 60; tries++) {
       const { status, data } = await communityJson(from, 'status=1');
-      if (status === 404) throw new Error(from.kind === 'd' ? '그런 덱이 없습니다' : '그런 패턴이 없습니다');
+      if (status === 404) throw new Error(from.kind === 'd' ? 'There is no such deck' : 'There is no such pattern');
       if (data.state === 'ready') break;
-      if (data.state !== 'building' && status !== 202) throw new Error(data.error || '패널용 파일이 없는 패턴입니다');
-      setPatStatus('커뮤니티가 패널용 파일을 만드는 중 …');
+      if (data.state !== 'building' && status !== 202) throw new Error(data.error || 'This pattern has no file for a panel');
+      setPatStatus('The community is building the panel file …');
       await sleep(2000);
     }
     const { status, data } = await communityJson(from, 'list=1');
-    if (status !== 200 || !Array.isArray(data.files)) throw new Error(data.error || '파일 목록을 받지 못했습니다');
+    if (status !== 200 || !Array.isArray(data.files)) throw new Error(data.error || 'Could not get the list of files');
     return data.files;
   }
 
@@ -2226,7 +2235,7 @@
     try {
       const data = await communityFile(e.from, e.file || e.slug + '.pfs');
       const info = pfsInfo(data);
-      if (!info) throw new Error('쇼 파일(.pfs)이 아닙니다');
+      if (!info) throw new Error('Not a show file (.pfs)');
       e.data = data;
       e.size = data.length;
       e.title = info.title || e.title || e.slug;
@@ -2274,7 +2283,7 @@
     // A deck with a performance attached carries its show table too.
     const tables = files.filter((f) => /\.pfs$/i.test(f)).map((f) =>
       ({ slug: showSlug(f), file: f, title: showSlug(f), seconds: 0, size: 0, from, data: null, state: 'idle', error: '' }));
-    if (!slugs.length && !tables.length) throw new Error('패널용 파일이 없습니다');
+    if (!slugs.length && !tables.length) throw new Error('There are no files for a panel there');
     const fresh = slugs.map((slug) => ({ slug, name: slug, author: '', size: 0, from, pfm: null, json: null, state: 'idle', error: '' }));
     for (const e of fresh) putEntry(e);
     for (const e of tables) putShow(e);
@@ -2285,11 +2294,11 @@
 
   async function addText(text) {
     const found = linksIn(text);
-    if (!found.length) { toast('커뮤니티의 패턴이나 덱 링크가 아닙니다'); return; }
+    if (!found.length) { toast('That is not a community pattern or deck link'); return; }
     P.adding++;
     let added = 0;
     const problems = [];
-    setPatStatus('커뮤니티에서 가져오는 중 …');
+    setPatStatus('Fetching from the community …');
     try {
       for (const from of found) {
         try { added += await addFrom(from); } catch (e) { problems.push(e.message); }
@@ -2300,7 +2309,7 @@
     saveSet();
     renderSet();
     compareAll();
-    setPatStatus(problems.length ? problems[0] : `${added}개를 모음에 넣었습니다`, problems.length ? 'bad' : '');
+    setPatStatus(problems.length ? problems[0] : `Added ${added} to the set`, problems.length ? 'bad' : '');
   }
 
   // Files from this computer: <slug>.pfm, with its <slug>.json if it came along.
@@ -2308,11 +2317,11 @@
     const files = [...fileList];
     const mods = files.filter((f) => /\.pfm$/i.test(f.name));
     const tables = files.filter((f) => /\.pfs$/i.test(f.name));
-    if (!mods.length && !tables.length) { toast('.pfm이나 .pfs 파일이 없습니다'); return; }
+    if (!mods.length && !tables.length) { toast('There are no .pfm or .pfs files there'); return; }
     for (const f of tables) {
       const data = new Uint8Array(await f.arrayBuffer());
       const info = pfsInfo(data);
-      if (!info) { toast(`${f.name}: 쇼 파일(.pfs)이 아닙니다`); continue; }
+      if (!info) { toast(`${f.name}: not a show file (.pfs)`); continue; }
       putShow({ slug: showSlug(f.name), title: info.title || showSlug(f.name), seconds: info.seconds, size: data.length, from: null, data, state: 'ready', error: '' });
       libAdd(data, { title: info.title || showSlug(f.name), slug: showSlug(f.name) });
     }
@@ -2355,7 +2364,7 @@
       name.textContent = e.name;
       const by = document.createElement('span');
       by.className = 'by';
-      by.textContent = e.state === 'error' ? e.error : e.state === 'loading' ? '받는 중 …' : (e.author || (e.from ? '' : '이 컴퓨터 파일'));
+      by.textContent = e.state === 'error' ? e.error : e.state === 'loading' ? 'fetching …' : (e.author || (e.from ? '' : 'a file from this computer'));
       const size = document.createElement('span');
       size.className = 'size num';
       size.textContent = e.size ? kb(e.size) : '';
@@ -2363,14 +2372,14 @@
       play.type = 'button';
       play.className = 'btn small quiet';
       play.textContent = '▶';
-      play.title = '모든 패널에서 이 패턴 틀기';
+      play.title = 'Play this pattern on every panel';
       play.hidden = P.presets == null || !isEverywhere(e.slug);
       play.addEventListener('click', () => send({ c: 'set', to: 'all', pat: P.presets + P.set.indexOf(e) }));
       const drop = document.createElement('button');
       drop.type = 'button';
       drop.className = 'btn small quiet';
       drop.textContent = '✕';
-      drop.title = '모음에서 빼기';
+      drop.title = 'Remove from the set';
       drop.disabled = P.running;
       drop.addEventListener('click', () => { P.set.splice(P.set.indexOf(e), 1); saveSet(); renderSet(); compareAll(); });
       li.append(n, name, by, size, play, drop);
@@ -2383,13 +2392,13 @@
       if (e.state === 'error') li.className = 'bad';
       const n = document.createElement('span');
       n.className = 'n';
-      n.textContent = '쇼';
+      n.textContent = 'Show';
       const name = document.createElement('span');
       name.className = 'name';
       name.textContent = e.title || e.slug;
       const by = document.createElement('span');
       by.className = 'by';
-      by.textContent = e.state === 'error' ? e.error : e.state === 'loading' ? '받는 중 …' : (e.seconds ? `${Math.round(e.seconds)}초` : '');
+      by.textContent = e.state === 'error' ? e.error : e.state === 'loading' ? 'fetching …' : (e.seconds ? `${Math.round(e.seconds)} s` : '');
       const size = document.createElement('span');
       size.className = 'size num';
       size.textContent = e.size ? kb(e.size) : '';
@@ -2397,7 +2406,7 @@
       drop.type = 'button';
       drop.className = 'btn small quiet';
       drop.textContent = '✕';
-      drop.title = '모음에서 빼기';
+      drop.title = 'Remove from the set';
       drop.disabled = P.running;
       drop.addEventListener('click', () => { P.shows.splice(P.shows.indexOf(e), 1); saveSet(); renderSet(); });
       li.append(n, name, by, size, document.createElement('span'), drop);
@@ -2406,7 +2415,7 @@
     $('pat-shows-head').hidden = !P.shows.length;
     $('pat-empty').hidden = P.set.length > 0 || P.shows.length > 0;
     const total = P.set.reduce((n, e) => n + (e.size || 0), 0);
-    $('pat-total').textContent = P.set.length ? `${P.set.length}개 · ${kb(total)}` : '';
+    $('pat-total').textContent = P.set.length ? `${nOf(P.set.length, 'pattern')} · ${kb(total)}` : '';
     $('pat-clear').hidden = !P.set.length && !P.shows.length;
     renderGo();
   }
@@ -2428,7 +2437,7 @@
 
   async function panelList(uid) {
     const res = await panelHttp(uid, 'GET', '/api/patterns', { timeout: 8000 });
-    if (res.status !== 200 || !res.json || !Array.isArray(res.json.patterns)) throw new Error('패턴 목록을 받지 못했습니다');
+    if (res.status !== 200 || !res.json || !Array.isArray(res.json.patterns)) throw new Error('Could not get the pattern list');
     const entries = [...res.json.patterns].sort((a, b) => (a.index || 0) - (b.index || 0));
     return { mounted: res.json.mounted !== false, presets: entries.filter((p) => !p.module).map((p) => p.name || ''),
              modules: entries.filter((p) => p.module).map((p) => p.module) };
@@ -2448,7 +2457,7 @@
         row.have = list.modules;
         P.presets = list.presets.length;
         const same = P.set.length > 0 && sameList(list.modules, setOrder());
-        row.text = same ? '모음과 같음' : `${list.modules.length}개`;
+        row.text = same ? 'same as the set' : nOf(list.modules.length, 'module');
         row.tone = same ? 'ok' : '';
         if (!row.touched) row.checked = !same;
       } catch (e) {
@@ -2480,7 +2489,7 @@
       id.textContent = p.id;
       const name = document.createElement('span');
       name.className = 'name';
-      name.textContent = p.n || `패널 ${p.id}`;
+      name.textContent = p.n || `Panel ${p.id}`;
       label.append(box, id, name);
       const state = document.createElement('span');
       state.className = 'state' + (row.tone ? ' ' + row.tone : '');
@@ -2499,7 +2508,7 @@
     const ready = (P.set.length > 0 || P.shows.length > 0) && !P.adding &&
                   P.set.every((e) => e.state !== 'loading') && P.shows.every((e) => e.state !== 'loading');
     const go = $('pat-install');
-    go.textContent = P.running ? '넣는 중 …' : chosen ? `패널 ${chosen}대에 넣기` : '넣기';
+    go.textContent = P.running ? 'Installing …' : chosen ? `Install on ${nOf(chosen, 'panel')}` : 'Install';
     go.disabled = P.running || !chosen || !ready || !S.connected;
     $('pat-check-all').hidden = panels.length < 2;
     $('pat-check-all').disabled = P.running;
@@ -2507,7 +2516,7 @@
 
   async function panelStatus(uid, timeout = 6000) {
     const res = await panelHttp(uid, 'GET', '/api/status', { timeout });
-    if (res.status !== 200 || !res.json) throw new Error('패널 상태를 받지 못했습니다');
+    if (res.status !== 200 || !res.json) throw new Error('Could not get the panel status');
     return res.json;
   }
 
@@ -2516,7 +2525,7 @@
   async function makeRoom(p, row, biggest) {
     const before = await panelStatus(p.uid);
     if (!Number.isInteger(before.heapLargest) || before.heapLargest >= biggest + 2048) return;
-    row.text = '메모리 정리하려고 다시 켜는 중 …';
+    row.text = 'Restarting to free memory …';
     renderGo();
     await panelHttp(p.uid, 'POST', '/api/wifi/reboot', { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }).catch(() => null);
     await sleep(6000);
@@ -2527,11 +2536,11 @@
       if (!now || !now.on) continue;                  // the hub has not seen it back yet
       const st = await panelStatus(p.uid, 3000).catch(() => null);
       if (st && (st.uptime || 0) < (before.uptime || 1e9)) {
-        if (Number.isInteger(st.heapLargest) && st.heapLargest < biggest) throw new Error('다시 켠 뒤에도 메모리가 모자랍니다');
+        if (Number.isInteger(st.heapLargest) && st.heapLargest < biggest) throw new Error('Still not enough memory after a restart');
         return;
       }
     }
-    throw new Error('다시 켠 패널이 돌아오지 않았습니다');
+    throw new Error('The panel did not come back after its restart');
   }
 
   async function putFile(uid, name, data, last) {
@@ -2555,7 +2564,7 @@
     if (order.length) await installPatterns(p, row, order, files);
     // The shows, into the panel's player. An image without one keeps its patterns and says so.
     for (const t of tables) {
-      row.text = '쇼 보내는 중 …';
+      row.text = 'Sending shows …';
       renderGo();
       const res = await panelHttp(p.uid, 'PUT', '/api/shows', {
         headers: { 'Content-Type': 'application/octet-stream', 'X-PF-Name': t.name }, body: t.data, timeout: 20000 });
@@ -2568,35 +2577,35 @@
   }
 
   async function installPatterns(p, row, order, files) {
-    row.text = '확인하는 중 …';
+    row.text = 'Checking …';
     renderGo();
     const have = await panelList(p.uid);
-    if (!have.mounted) throw new Error('패턴 저장소가 열리지 않습니다 (패널의 /patterns 화면을 보세요)');
+    if (!have.mounted) throw new Error('The pattern storage does not open (see the panel\'s own /patterns page)');
     await makeRoom(p, row, Math.max(...files.map((f) => f.data.length)));
-    row.text = '비우는 중 …';
+    row.text = 'Clearing …';
     renderGo();
     for (let tries = 0; ; tries++) {
       const res = await panelHttp(p.uid, 'POST', '/api/patterns/delete', {
         headers: { 'Content-Type': 'text/plain' }, body: new TextEncoder().encode('*'), timeout: 30000 });
       if (res.status === 200) break;
       if (res.status === 503 && tries < 3) { await sleep(1500); continue; }
-      throw new Error(`비우지 못했습니다 (HTTP ${res.status})`);
+      throw new Error(`Could not clear it (HTTP ${res.status})`);
     }
     row.done = 1;
     for (let i = 0; i < files.length; i++) {
-      row.text = `보내는 중 ${i + 1}/${files.length}`;
+      row.text = `Sending ${i + 1}/${files.length}`;
       renderGo();
       await putFile(p.uid, files[i].name, files[i].data, i === files.length - 1);
       row.done = 2 + i;
     }
-    row.text = '패널이 읽어 들이는 중 …';
+    row.text = 'The panel is loading them …';
     renderGo();
     const until = performance.now() + 40000;
     for (;;) {
       await sleep(1200);
       const now = await panelList(p.uid).catch(() => null);
       if (now && sameList(now.modules, order)) { row.have = now.modules; P.presets = now.presets.length; break; }
-      if (performance.now() > until) throw new Error(now ? `보냈지만 목록이 다릅니다 (${now.modules.length}개)` : '보낸 뒤 답이 없습니다');
+      if (performance.now() > until) throw new Error(now ? `Sent, but the panel's list differs (${nOf(now.modules.length, 'module')})` : 'No answer after sending');
     }
     row.done = files.length + 2;
   }
@@ -2613,10 +2622,10 @@
       // Everything here first: a set with a hole in it goes to no panel.
       await mapLimit(P.set.filter((e) => !e.pfm), 4, fetchEntry);
       const missing = P.set.filter((e) => !e.pfm);
-      if (missing.length) throw new Error(`${missing[0].name}: ${missing[0].error || '파일이 없습니다'}`);
+      if (missing.length) throw new Error(`${missing[0].name}: ${missing[0].error || 'the file is missing'}`);
       await mapLimit(P.shows.filter((e) => !e.data), 2, fetchShow);
       const lost = P.shows.filter((e) => !e.data);
-      if (lost.length) throw new Error(`${lost[0].title}: ${lost[0].error || '파일이 없습니다'}`);
+      if (lost.length) throw new Error(`${lost[0].title}: ${lost[0].error || 'the file is missing'}`);
       const tables = P.shows.map((e) => ({ name: e.slug + '.pfs', data: e.data }));
       const order = setOrder();
       // The largest first, while a panel's memory is at its least broken up;
@@ -2633,7 +2642,7 @@
         const row = panelRow(p.uid);
         try {
           await installOn(p, row, order, files, tables);
-          row.text = row.noPlayer ? '쇼는 못 넣었습니다 (재생기 없는 펌웨어)' : '넣었습니다';
+          row.text = row.noPlayer ? 'Patterns only: this firmware has no show player' : 'Done';
           row.tone = 'ok';
           row.checked = false;
           row.touched = false;
@@ -2641,7 +2650,7 @@
           failed++;
           row.text = e.message;
           row.tone = 'bad';
-          log('err', `패널 ${p.id}: ${e.message}`);
+          log('err', `Panel ${p.id}: ${e.message}`);
         }
         row.total = 0;
         renderGo();
@@ -2649,9 +2658,9 @@
       const secs = Math.round((performance.now() - started) / 1000);
       // The hub's list of names is from before: give it this one.
       if (!failed && order.length) sendNames();
-      const what = [order.length ? `패턴 ${order.length}개` : '', tables.length ? `쇼 ${tables.length}개` : ''].filter(Boolean).join(', ');
-      setPatStatus(failed ? `${panels.length - failed}대 완료, ${failed}대 실패` : `패널 ${panels.length}대에 ${what}를 넣었습니다 (${secs}초)`, failed ? 'bad' : '');
-      log(failed ? 'err' : '', `패턴 넣기: ${panels.length - failed}대 완료${failed ? `, ${failed}대 실패` : ''} (${secs}초)`);
+      const what = [order.length ? nOf(order.length, 'pattern') : '', tables.length ? nOf(tables.length, 'show') : ''].filter(Boolean).join(' and ');
+      setPatStatus(failed ? `${panels.length - failed} done, ${failed} failed` : `Put ${what} on ${nOf(panels.length, 'panel')} (${secs} s)`, failed ? 'bad' : '');
+      log(failed ? 'err' : '', `Install: ${panels.length - failed} done${failed ? `, ${failed} failed` : ''} (${secs} s)`);
     } catch (e) {
       setPatStatus(e.message, 'bad');
     } finally {
@@ -2672,11 +2681,14 @@
   }
 
   function setPage(page) {
+    if (S.page === 'nodes' && page !== 'nodes') ngWatch(false);
     S.page = page;
-    setPressed(['page-stage', 'page-patterns', 'page-shows'], 'page-' + page);
+    setPressed(['page-stage', 'page-patterns', 'page-shows', 'page-nodes'], 'page-' + page);
     $('stage-page').hidden = page !== 'stage';
     $('pat-page').hidden = page !== 'patterns';
     $('show-page').hidden = page !== 'shows';
+    $('node-page').hidden = page !== 'nodes';
+    if (page === 'nodes') { ngOpen(); return; }
     if (page === 'shows') {
       if (!L.sel && L.shows.length) L.sel = L.shows[0].id;
       L.touched = false;
@@ -2841,7 +2853,7 @@
       for (const s of list) {
         const o = document.createElement('option');
         o.value = s.slug;
-        o.textContent = `${s.title || s.slug} · ${s.length}초`;
+        o.textContent = `${s.title || s.slug} · ${s.length} s`;
         sel.append(o);
       }
       if (data && data.slug && list.some((s) => s.slug === data.slug)) sel.value = data.slug;
@@ -2856,18 +2868,18 @@
     const rec = $('p-show-rec');
     rec.disabled = !S.connected || REC.busy || (!REC.on && (!st || !!st.none || !st.data));
     rec.setAttribute('aria-pressed', String(REC.on));
-    rec.textContent = REC.busy ? (REC.on ? '준비하는 중 …' : '패널에 넣는 중 …')
-      : REC.on ? `■ 녹화 끝 · ${((performance.now() - REC.startedAt) / 1000).toFixed(1)}초 · 패널 ${REC.panels.size}대` : '● 녹화';
+    rec.textContent = REC.busy ? (REC.on ? 'Getting ready …' : 'Sending to the panels …')
+      : REC.on ? `■ Stop · ${((performance.now() - REC.startedAt) / 1000).toFixed(1)} s · ${nOf(REC.panels.size, 'panel')}` : '● Record';
     if (data && !busy($('p-show-loop')) && playing) $('p-show-loop').checked = !!data.loop;
     const note = $('p-show-state');
     note.style.color = '';
-    if (!st || (st.loading && !data && !st.none)) note.textContent = '확인하는 중 …';
-    else if (st.none) note.textContent = '이 패널의 펌웨어에는 쇼 재생기가 없습니다 (ensemble v0.2.0부터).';
+    if (!st || (st.loading && !data && !st.none)) note.textContent = 'Checking …';
+    else if (st.none) note.textContent = 'This panel\'s firmware has no show player (it comes with ensemble v0.2.0).';
     else if (st.error) { note.textContent = st.error; note.style.color = 'var(--bad)'; }
     else if (playing && data) {
-      const missing = (data.missing || []).length ? ` · 없는 패턴 ${data.missing.length}개` : '';
-      note.textContent = `재생 중 · ${data.title || data.slug} · ${data.t}/${data.length}초${data.loop ? ' · 반복' : ''}${missing}`;
-    } else if (!list.length) note.textContent = '이 패널에 쇼가 없습니다. 패턴 화면에서 넣습니다.';
+      const missing = (data.missing || []).length ? ` · ${nOf(data.missing.length, 'pattern')} missing` : '';
+      note.textContent = `Playing · ${data.title || data.slug} · ${data.t}/${data.length} s${data.loop ? ' · loop' : ''}${missing}`;
+    } else if (!list.length) note.textContent = 'No shows on this panel. Record one here, or put one on from Patterns or Shows.';
     else note.textContent = '';
   }
 
@@ -2885,12 +2897,12 @@
           st.data = { ...(st.data || {}), ...res.json };
           st.error = '';
         } else {
-          const why = (res.json && res.json.error) || (res.status === 404 ? '쇼 재생기가 없는 펌웨어입니다' : `HTTP ${res.status}`);
-          toast(`패널 ${p.id}: ${why}`);
-          log('err', `패널 ${p.id} 쇼: ${why}`);
+          const why = (res.json && res.json.error) || (res.status === 404 ? 'This firmware has no show player' : `HTTP ${res.status}`);
+          toast(`Panel ${p.id}: ${why}`);
+          log('err', `Panel ${p.id}, show: ${why}`);
         }
       } catch (e) {
-        toast(`패널 ${p.id}: ${e.message}`);
+        toast(`Panel ${p.id}: ${e.message}`);
       }
     });
     renderShow();
@@ -2948,7 +2960,7 @@
         if ((performance.now() - REC.startedAt) / 100 >= PFS.MAX_TICKS) stopRecording();
         else renderShow();
       }, 200);
-      log('', `녹화 시작: 패널 ${panels.map((p) => p.id).join(', ')}`);
+      log('', `Recording panel ${panels.map((p) => p.id).join(', ')}`);
     } finally {
       REC.busy = false;
       renderShow();
@@ -2960,7 +2972,7 @@
     REC.on = false;
     clearInterval(REC.timer);
     const length = Math.round((performance.now() - REC.startedAt) / 100);
-    if (length < 10) { toast('1초도 안 되는 녹화는 버렸습니다'); REC.panels.clear(); renderShow(); return; }
+    if (length < 10) { toast('A recording under a second was discarded'); REC.panels.clear(); renderShow(); return; }
     REC.busy = true;
     renderShow();
     const d = new Date();
@@ -2984,7 +2996,7 @@
           cues = Math.max(cues, made.cues);
           await tidyRecordings(uid).catch(() => {});      // older recordings make room: the newest few stay
         } catch (e) {
-          problems.push(`패널 ${r.id}: ${e.message}`);
+          problems.push(`Panel ${r.id}: ${e.message}`);
         }
         shows.delete(uid);
       });
@@ -2995,15 +3007,15 @@
     // Into the library (the show page), one entry a different table.
     let n = 0;
     for (const t of [...tables.values()].sort((a, b) => Math.min(...a.ids) - Math.min(...b.ids))) {
-      const entry = libAdd(t.bytes, { title: tables.size > 1 ? `${title} · 패널 ${t.ids.sort((a, b) => a - b).join(', ')}` : title,
+      const entry = libAdd(t.bytes, { title: tables.size > 1 ? `${title} · panel ${t.ids.sort((a, b) => a - b).join(', ')}` : title,
                                       slug: slug + (n ? String.fromCharCode(97 + n) : '') });
       if (entry && !n) L.sel = entry.id;
       n++;
     }
-    for (const p of problems) log('err', '녹화 ' + p);
+    for (const p of problems) log('err', 'Recording, ' + p);
     const secs = (length / 10).toFixed(1);
-    if (played) log('', `녹화 ${secs}초를 패널 ${played}대가 반복합니다 (${title}, 큐 ${cues}개)`);
-    toast(problems.length ? problems[0] : `${secs}초 녹화를 패널 ${played}대가 반복합니다. 쇼 화면에 저장했습니다`);
+    if (played) log('', `${secs} s recorded, looping on ${nOf(played, 'panel')} (${title}, ${nOf(cues, 'cue')})`);
+    toast(problems.length ? problems[0] : `${secs} s recorded and looping on ${nOf(played, 'panel')}. Kept on the Shows page`);
     renderShow();
   }
 
@@ -3014,9 +3026,9 @@
     await mapLimit(pickedPanels().filter((p) => p.on), RELAY_SLOTS, async (p) => {
       try {
         const res = await panelHttp(p.uid, 'DELETE', '/api/shows?slug=' + encodeURIComponent(slug), { timeout: 8000 });
-        if (res.status !== 200 && res.status !== 404) toast(`패널 ${p.id}: ${(res.json && res.json.error) || 'HTTP ' + res.status}`);
+        if (res.status !== 200 && res.status !== 404) toast(`Panel ${p.id}: ${(res.json && res.json.error) || 'HTTP ' + res.status}`);
       } catch (e) {
-        toast(`패널 ${p.id}: ${e.message}`);
+        toast(`Panel ${p.id}: ${e.message}`);
       }
       shows.delete(p.uid);
     });
@@ -3073,7 +3085,7 @@
   }
   function libSave() {
     try { localStorage.setItem(LIB_KEY, JSON.stringify(L.shows.map(({ show, ...rest }) => rest))); }
-    catch (_) { toast('브라우저의 저장 공간이 모자라 쇼를 저장하지 못했습니다'); }
+    catch (_) { toast('The browser is out of storage: the show was not saved'); }
   }
   // A table into the library (once: the same table again is the one already there).
   function libAdd(bytes, { title, slug }) {
@@ -3191,7 +3203,7 @@
       const meta = document.createElement('span');
       meta.className = 'meta num';
       const d = new Date(e.created);
-      meta.textContent = `${(e.edit.length / 10).toFixed(1)}초 · ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      meta.textContent = `${(e.edit.length / 10).toFixed(1)} s · ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       li.append(name, meta);
       const choose = () => { L.sel = e.id; setShStatus(''); renderLib(); };
       li.addEventListener('click', choose);
@@ -3212,7 +3224,7 @@
     set('sh-length', (c.length / 10).toFixed(1));
     $('sh-end').max = (e.show.length / 10).toFixed(1);
     const speed = (c.end - c.start) / c.length;
-    $('sh-speed').textContent = Math.abs(speed - 1) < 0.005 ? '원래 속도' : `×${speed.toFixed(2)}`;
+    $('sh-speed').textContent = Math.abs(speed - 1) < 0.005 ? 'as recorded' : `×${speed.toFixed(2)}`;
     $('sh-speed-reset').disabled = Math.abs(speed - 1) < 0.005;
     for (let k = 0; k < KNOBS; k++) {
       set(`sh-map-${k}`, String(c.map[k]));
@@ -3224,8 +3236,8 @@
     const written = PFS.patternsOf(e.show);
     const sel = $('sh-pattern');
     const nameOf = (key) => (L.known.find((k) => k.key === key) || {}).name || key;
-    const options = [['', written.length ? `녹화된 대로 (${written.map(nameOf).join(' → ')})` : '녹화에 패턴 없음'],
-                     ['-', '패턴은 바꾸지 않기 (패널에 지금 있는 패턴 위에서)'],
+    const options = [['', written.length ? `As recorded (${written.map(nameOf).join(' → ')})` : 'No pattern in the recording'],
+                     ['-', 'Leave the pattern alone (play on whatever the panel is showing)'],
                      ...L.known.map((k) => [k.key, k.name])];
     if (c.pattern && !options.some(([key]) => key === c.pattern)) options.push([c.pattern, c.pattern]);
     const key = options.map((o) => o.join('=')).join('|');
@@ -3245,7 +3257,7 @@
     try { show = effective(e); PFS.write(show); } catch (err) { problem = err.message; }
     if (show) {
       drawShowGraph(show);
-      $('sh-info').textContent = `큐 ${PFS.cueCount(show)}개 / ${PFS.MAX_CUES} · ${(show.length / 10).toFixed(1)}초` +
+      $('sh-info').textContent = `${PFS.cueCount(show)} of ${PFS.MAX_CUES} cues · ${(show.length / 10).toFixed(1)} s` +
         (problem ? ` · ${problem}` : '');
     } else {
       $('sh-info').textContent = problem;
@@ -3270,16 +3282,16 @@
       id.textContent = p.id;
       const name = document.createElement('span');
       name.className = 'name';
-      name.textContent = p.n || `패널 ${p.id}`;
+      name.textContent = p.n || `Panel ${p.id}`;
       label.append(box, id, name);
       const state = document.createElement('span');
       state.className = 'state' + (isSolo(p) ? ' ok' : '');
-      state.textContent = isSolo(p) ? '쇼 재생 중' : '';
+      state.textContent = isSolo(p) ? 'Playing a show' : '';
       li.append(label, state);
       ul.append(li);
     }
     const chosen = panels.filter((p) => L.targets.get(p.uid)).length;
-    $('sh-send').textContent = L.busy ? '넣는 중 …' : chosen ? `패널 ${chosen}대에 넣고 재생` : '넣고 재생';
+    $('sh-send').textContent = L.busy ? 'Sending …' : chosen ? `Put on ${nOf(chosen, 'panel')} and play` : 'Put on and play';
     $('sh-send').disabled = L.busy || !chosen || !!problem || !S.connected;
     $('sh-stop').disabled = L.busy || !chosen || !S.connected;
   }
@@ -3288,12 +3300,12 @@
   async function putAndPlay(uid, slug, bytes, loop) {
     const put = await panelHttp(uid, 'PUT', '/api/shows', {
       headers: { 'Content-Type': 'application/octet-stream', 'X-PF-Name': slug + '.pfs' }, body: bytes, timeout: 20000 });
-    if (put.status === 404) throw new Error('쇼 재생기가 없는 펌웨어입니다');
+    if (put.status === 404) throw new Error('This firmware has no show player');
     if (put.status !== 200) throw new Error((put.json && put.json.error) || `HTTP ${put.status}`);
     const res = await panelHttp(uid, 'POST', '/api/shows/control', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new TextEncoder().encode(new URLSearchParams({ op: 'play', slug, loop: loop ? '1' : '0' }).toString()), timeout: 10000 });
-    if (res.status !== 200) throw new Error((res.json && res.json.error) || `재생 HTTP ${res.status}`);
+    if (res.status !== 200) throw new Error((res.json && res.json.error) || `Play: HTTP ${res.status}`);
     shows.delete(uid);
     return (res.json && res.json.missing) || [];
   }
@@ -3321,12 +3333,12 @@
         ok++;
         await tidyRecordings(p.uid).catch(() => {});
       } catch (err) {
-        problems.push(`패널 ${p.id}: ${err.message}`);
+        problems.push(`Panel ${p.id}: ${err.message}`);
       }
     });
     L.busy = false;
-    for (const p of problems) log('err', '쇼 ' + p);
-    setShStatus(problems.length ? problems[0] : `패널 ${ok}대에서 재생 중` + (missing.size ? ` · 패널에 없는 패턴: ${[...missing].join(', ')}` : ''),
+    for (const p of problems) log('err', 'Show, ' + p);
+    setShStatus(problems.length ? problems[0] : `Playing on ${nOf(ok, 'panel')}` + (missing.size ? ` · patterns the panel does not hold: ${[...missing].join(', ')}` : ''),
                 problems.length || missing.size ? 'bad' : '');
     renderLib();
   }
@@ -3352,23 +3364,23 @@
       const field = document.createElement('div');
       field.className = 'field';
       const label = document.createElement('span');
-      label.innerHTML = `<i style="background:${KNOB_COLOURS[k]}"></i>K${k + 1}이 따를 값`;
+      label.innerHTML = `<i style="background:${KNOB_COLOURS[k]}"></i>K${k + 1} follows`;
       const sel = document.createElement('select');
       sel.id = `sh-map-${k}`;
-      sel.setAttribute('aria-label', `K${k + 1}이 따를 값`);
+      sel.setAttribute('aria-label', `What K${k + 1} follows`);
       for (let from = 0; from < KNOBS; from++) {
         const o = document.createElement('option');
         o.value = String(from);
-        o.textContent = `녹화의 K${from + 1}`;
+        o.textContent = `Recorded K${from + 1}`;
         sel.append(o);
       }
       const none = document.createElement('option');
       none.value = '-1';
-      none.textContent = '쇼가 건드리지 않음';
+      none.textContent = 'Nothing (the show leaves it alone)';
       sel.append(none);
       const inv = document.createElement('label');
       inv.className = 'check';
-      inv.innerHTML = `<input type="checkbox" id="sh-inv-${k}"> 뒤집기`;
+      inv.innerHTML = `<input type="checkbox" id="sh-inv-${k}"> Invert`;
       field.append(label, sel, inv);
       knobs.append(field);
       sel.addEventListener('change', () => change((c) => { c.map[k] = +sel.value; }));
@@ -3404,7 +3416,7 @@
       const base = e.id.replace(/_\d+$/, '');
       let id = base;
       for (let n = 2; L.shows.some((x) => x.id === id); n++) id = `${base}_${n}`;
-      const copy = { ...e, id, title: e.title + ' 사본', created: Date.now(), edit: JSON.parse(JSON.stringify(e.edit)) };
+      const copy = { ...e, id, title: e.title + ' copy', created: Date.now(), edit: JSON.parse(JSON.stringify(e.edit)) };
       L.shows.splice(L.shows.indexOf(e), 0, copy);
       L.sel = id;
       libSave();
@@ -3439,7 +3451,7 @@
       for (const f of files) {
         if (!/\.pfs$/i.test(f.name)) continue;
         const entry = libAdd(new Uint8Array(await f.arrayBuffer()), { slug: showSlug(f.name) });
-        if (entry) last = entry; else toast(`${f.name}: 쇼 파일(.pfs)이 아닙니다`);
+        if (entry) last = entry; else toast(`${f.name}: not a show file (.pfs)`);
       }
       if (last) { L.sel = last.id; renderLib(); }
     };
@@ -3453,6 +3465,743 @@
     new ResizeObserver(() => { if (S.page === 'shows' && libSel()) renderLib(); }).observe($('sh-graph'));
   }
 
+  // ── The node page: MIDI in, arithmetic, panels out ─────────────────────
+  // A graph of nodes, wired by hand (console/graph.js says what the nodes
+  // are and turns the graph into the hub's program). Every change is
+  // compiled and sent to the hub at once, which runs it from then on with
+  // or without this page; the hub says back what comes in over MIDI and
+  // what each node's value is for one panel, and that is drawn on the nodes.
+  const NG_KEY = 'pfe-graph';
+  const NG = {
+    graph: { nodes: [], links: [] },
+    view: { x: 60, y: 40, z: 1 },
+    sel: new Set(),
+    els: new Map(),            // node id -> its element
+    drag: null,                // what the pointer is doing: { kind: 'pan' | 'node' | 'wire', ... }
+    made: null,                // the last compile
+    live: null,                // the registers of the watched panel, as the hub last said
+    seq: 0, pending: 0,
+    hub: null,                 // what the hub says it is running
+    learn: null,               // the controller node waiting for a controller to move
+    wiresDirty: true, liveDirty: false,
+    mouse: { x: 0, y: 0, over: false },
+    timer: 0, said: '',
+    on: false,                 // the hub's switch for the graph, as it last said
+    open: null,                // the Panel Output whose list of panels is open
+    clip: null,                // nodes copied
+  };
+  const NG_COLOUR = { Input: '#A8452B', Converter: '#2B6CB0', Output: '#1B1813' };
+
+  function ngLoad() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(NG_KEY) || 'null');
+      if (saved && Array.isArray(saved.nodes)) {
+        NG.graph = { nodes: saved.nodes.filter((n) => PFG.TYPES[n.type] && n.p), links: Array.isArray(saved.links) ? saved.links : [] };
+        if (saved.view && saved.view.z > 0) NG.view = saved.view;
+      }
+    } catch (_) { /* start empty */ }
+  }
+  function ngSave() {
+    try { localStorage.setItem(NG_KEY, JSON.stringify({ nodes: NG.graph.nodes, links: NG.graph.links, view: NG.view })); } catch (_) { /* no storage */ }
+  }
+  const ngNode = (id) => NG.graph.nodes.find((n) => n.id === id);
+  function ngNewId() {
+    for (let n = NG.graph.nodes.length + 1; ; n++) if (!ngNode('n' + n)) return 'n' + n;
+  }
+  function ngToWorld(cx, cy) {
+    const r = $('ng-stage').getBoundingClientRect();
+    return [(cx - r.left - NG.view.x) / NG.view.z, (cy - r.top - NG.view.y) / NG.view.z];
+  }
+  function ngApplyView() {
+    $('ng-world').style.transform = `translate(${NG.view.x}px, ${NG.view.y}px) scale(${NG.view.z})`;
+    NG.wiresDirty = true;
+  }
+
+  // ── Compiling and sending ──────────────────────────────────────────────
+  function ngStatus(text, tone) {
+    const el = $('ng-status');
+    el.textContent = text;
+    el.style.color = tone === 'bad' ? 'var(--bad)' : tone === 'ok' ? 'var(--ok)' : '';
+  }
+  function ngChanged(structure) {
+    ngSave();
+    if (structure) ngRender();
+    clearTimeout(NG.timer);
+    NG.timer = setTimeout(ngApply, 180);
+  }
+  function ngApply(force) {
+    const made = PFG.compile(NG.graph);
+    NG.made = made;
+    for (const [id, el] of NG.els) {
+      const err = made.errors.find((e) => e.node === id);
+      el.classList.toggle('bad', !!err);
+      el.title = err ? err.text : '';
+    }
+    $('ng-hint').hidden = NG.graph.nodes.length > 0;
+    if (made.errors.length) { ngStatus(made.errors[0].text, 'bad'); return; }
+    const key = made.bytes ? b64(made.bytes) : '';
+    if (!S.connected) { ngStatus('Not connected to a hub. The graph is sent when one is'); return; }
+    if (!force && key === NG.said) { ngSaid(made); return; }
+    NG.said = key;
+    const r = ++NG.seq;
+    NG.pending = r;
+    if (!made.bytes) send({ c: 'graph', op: 'clear', r });
+    else {
+      send({ c: 'graph', op: 'begin', len: made.bytes.length });
+      for (let at = 0; at < made.bytes.length; at += 240) send({ c: 'graph', op: 'data', d: b64(made.bytes.subarray(at, at + 240)) });
+      send({ c: 'graph', op: 'end', r });
+    }
+    ngStatus('Sending to the hub …');
+  }
+  function ngSaid(made) {
+    const power = $('ng-power');
+    power.setAttribute('aria-pressed', String(NG.on));
+    power.textContent = NG.on ? 'Nodes: On' : 'Nodes: Off';
+    if (!made.bytes) ngStatus(NG.graph.nodes.length ? 'Nothing is wired to a Panel Output yet' : '');
+    else if (!NG.on) ngStatus(`Off: the hub reads MIDI the plain way. Turn Nodes on to run this graph (${made.size} bytes)`);
+    else ngStatus(`Running on the hub · ${made.size} bytes · ${made.controllers.length} MIDI controller${made.controllers.length === 1 ? '' : 's'}`, 'ok');
+  }
+  // The switch: off, the hub keeps the graph and reads MIDI the plain way.
+  function ngPower(on) {
+    if (!S.connected) { toast('Not connected to a hub'); return; }
+    NG.on = on;
+    send({ c: 'graph', op: on ? 'on' : 'off' });
+    send({ c: 'graph', op: 'get' });
+    if (NG.made) ngSaid(NG.made);
+  }
+
+  // ── Copies ─────────────────────────────────────────────────────────────
+  // The chosen nodes and the wires among them, to put down again.
+  function ngCopy(ids) {
+    const nodes = NG.graph.nodes.filter((n) => ids.has(n.id)).map((n) => JSON.parse(JSON.stringify(n)));
+    const links = NG.graph.links.filter((l) => ids.has(l.a) && ids.has(l.b)).map((l) => ({ ...l }));
+    return nodes.length ? { nodes, links } : null;
+  }
+  // Put a copy down: with its corner at (wx, wy), or a little off where it came from.
+  function ngPaste(clip, wx, wy) {
+    if (!clip || !clip.nodes.length) return;
+    const x0 = Math.min(...clip.nodes.map((n) => n.x)), y0 = Math.min(...clip.nodes.map((n) => n.y));
+    const dx = wx == null ? 30 : Math.round(wx - x0), dy = wy == null ? 30 : Math.round(wy - y0);
+    const renamed = new Map();
+    for (const n of clip.nodes) {
+      const copy = { ...JSON.parse(JSON.stringify(n)), id: ngNewId(), x: n.x + dx, y: n.y + dy };
+      NG.graph.nodes.push(copy);
+      renamed.set(n.id, copy.id);
+    }
+    for (const l of clip.links) NG.graph.links.push({ a: renamed.get(l.a), o: l.o, b: renamed.get(l.b), i: l.i });
+    NG.sel = new Set(renamed.values());
+    ngChanged(true);
+  }
+  // A line from the hub that is the node page's.
+  function ngLine(m) {
+    if (m.t === 'ack' && m.c === 'graph' && m.r === NG.pending && NG.made) { ngSaid(NG.made); return; }
+    if (m.t === 'err' && m.c === 'graph') { NG.said = ''; ngStatus('The hub refused it: ' + m.m, 'bad'); return; }
+    if (m.t === 'graph') {
+      NG.hub = m;
+      NG.on = !!m.en;
+      // The hub holds something this page did not send (another browser's graph, or none): say so.
+      const mine = NG.made && NG.made.bytes ? NG.made.size : 0;
+      if (NG.made) ngSaid(NG.made);
+      if (!NG.pending && (m.on ? m.len : 0) !== mine)
+        ngStatus(m.on ? `The hub holds another graph (${m.len} bytes). "Send to hub" replaces it with this one`
+                      : (mine ? 'The hub does not have this graph yet. Press "Send to hub"' : ''));
+      return;
+    }
+    if (m.t === 'nv') { NG.live = m.v; NG.liveDirty = true; return; }
+    if (m.t === 'mi') {
+      const learner = NG.learn && ngNode(NG.learn);
+      if (learner) {
+        learner.p.ch = m.ch;
+        learner.p.cc = m.cc;
+        learner.p.v = m.v;
+        NG.learn = null;
+        toast(`Learned: channel ${m.ch}, CC ${m.cc}`);
+        ngChanged(true);
+        return;
+      }
+      // A real controller moved: its fader here follows.
+      for (const n of NG.graph.nodes) {
+        if (n.type !== 'cc' || +n.p.ch !== m.ch || +n.p.cc !== m.cc) continue;
+        n.p.v = m.v;
+        const el = NG.els.get(n.id);
+        const fader = el && el.querySelector('input[type="range"]');
+        if (fader && document.activeElement !== fader) fader.value = m.v;
+        if (el) { el.querySelector('.gn-cc-v').textContent = m.v; el.classList.add('heard'); setTimeout(() => el.classList.remove('heard'), 250); }
+      }
+    }
+  }
+  function ngWatch(on) {
+    if (!S.connected) return;
+    const id = +$('ng-preview').value || 0;
+    send(on ? { c: 'mon', on: true, ...(id ? { panel: '#' + id } : {}) } : { c: 'mon', on: false });
+  }
+
+  // ── Drawing ────────────────────────────────────────────────────────────
+  const ngWired = (id, i) => NG.graph.links.find((l) => l.b === id && l.i === i);
+
+  function ngNodeEl(node) {
+    const T = PFG.TYPES[node.type];
+    const el = document.createElement('div');
+    el.className = 'gn' + (NG.sel.has(node.id) ? ' sel' : '');
+    el.dataset.id = node.id;
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+    const head = document.createElement('div');
+    head.className = 'gn-head';
+    head.style.background = NG_COLOUR[T.group];
+    head.textContent = node.type === 'cc' && node.p.label ? node.p.label : T.title;
+    el.append(head);
+    const body = document.createElement('div');
+    body.className = 'gn-body';
+    el.append(body);
+
+    T.outs.forEach((name, o) => {
+      const row = document.createElement('div');
+      row.className = 'gn-row out';
+      const val = document.createElement('span');
+      val.className = 'gn-val num';
+      val.dataset.o = o;
+      const label = document.createElement('span');
+      label.textContent = name;
+      const sock = document.createElement('i');
+      sock.className = 'sock out';
+      sock.dataset.o = o;
+      row.append(val, label, sock);
+      body.append(row);
+    });
+
+    for (const q of T.params) {
+      const row = document.createElement('div');
+      row.className = 'gn-row param';
+      const set = (v) => { node.p[q.key] = v; ngChanged(false); };
+      if (q.kind === 'select') {
+        const sel = document.createElement('select');
+        for (const [value, text] of q.options) {
+          const o = document.createElement('option');
+          o.value = value;
+          o.textContent = text;
+          sel.append(o);
+        }
+        sel.value = node.p[q.key];
+        sel.addEventListener('change', () => { node.p[q.key] = sel.value; ngChanged(true); });      // which inputs count may change
+        row.append(sel);
+      } else if (q.kind === 'check') {
+        const label = document.createElement('label');
+        label.className = 'check';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = node.p[q.key] !== false;
+        box.addEventListener('change', () => set(box.checked));
+        label.append(box, ' ' + q.label);
+        row.append(label);
+      } else if (q.kind === 'cc') {
+        const fader = document.createElement('input');
+        fader.type = 'range';
+        fader.min = 0;
+        fader.max = 127;
+        fader.value = node.p.v || 0;
+        fader.title = 'Move it here to try the graph without the controller';
+        const v = document.createElement('span');
+        v.className = 'gn-cc-v num';
+        v.textContent = node.p.v || 0;
+        fader.addEventListener('input', () => {
+          node.p.v = +fader.value;
+          v.textContent = fader.value;
+          send({ c: 'midi', ch: +node.p.ch, cc: +node.p.cc, v: +fader.value });
+          ngSave();
+        });
+        const learn = document.createElement('button');
+        learn.type = 'button';
+        learn.className = 'btn small';
+        learn.textContent = NG.learn === node.id ? 'Move it …' : 'Learn';
+        learn.title = 'Press, then move a MIDI controller: its channel and number are taken';
+        learn.addEventListener('click', () => { NG.learn = NG.learn === node.id ? null : node.id; ngRender(); });
+        row.classList.add('cc');
+        row.append(fader, v, learn);
+      } else if (q.kind === 'panels') {
+        // Who it is for: one line, and the list only when it is asked for.
+        row.classList.add('targets');
+        const to = Array.isArray(node.p.to) ? node.p.to : [];
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'gn-pick';
+        pick.setAttribute('aria-expanded', String(NG.open === node.id));
+        pick.textContent = !to.length ? 'All panels' : to.length === 1 ? `Panel ${to[0]}` : `Panels ${to.join(', ')}`;
+        pick.addEventListener('click', () => { NG.open = NG.open === node.id ? null : node.id; ngRender(); });
+        row.append(pick);
+        if (NG.open === node.id) {
+          el.classList.add('open');
+          const list = document.createElement('div');
+          list.className = 'gn-pop';
+          const item = (text, on, click) => {
+            const label = document.createElement('label');
+            label.className = 'check';
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = on;
+            box.addEventListener('change', click);
+            label.append(box, ' ' + text);
+            list.append(label);
+          };
+          item('All panels', !to.length, () => { node.p.to = []; ngChanged(true); });
+          const names = new Map(patPanels().map((p) => [p.id, p.n]));
+          const ids = [...new Set([...names.keys(), ...to])].sort((a, b) => a - b);
+          for (const id of ids) {
+            item(`Panel ${id}${names.get(id) ? ' · ' + names.get(id) : ''}`, to.includes(id), () => {
+              node.p.to = to.includes(id) ? to.filter((x) => x !== id) : [...to, id].sort((a, b) => a - b);
+              ngChanged(true);
+            });
+          }
+          row.append(list);
+        }
+      } else {
+        if (q.label) {
+          const label = document.createElement('span');
+          label.textContent = q.label;
+          row.append(label);
+        }
+        const input = document.createElement('input');
+        input.type = q.kind === 'number' ? 'number' : 'text';
+        if (q.kind === 'number') {
+          if (q.min != null) input.min = q.min;
+          if (q.max != null) input.max = q.max;
+          input.step = q.step || 'any';
+        }
+        if (q.kind === 'formula') { input.className = 'mono'; input.spellcheck = false; input.placeholder = 'a * 0.5 + sin(t)'; }
+        if (q.key === 'label') input.placeholder = 'e.g. Filter';
+        input.value = node.p[q.key] == null ? '' : node.p[q.key];
+        input.addEventListener('input', () => {
+          set(q.kind === 'number' ? (input.value === '' ? q.def : +input.value) : input.value);
+          if (q.key === 'label') head.textContent = input.value || T.title;
+        });
+        row.append(input);
+      }
+      body.append(row);
+    }
+
+    const uses = T.uses ? T.uses(node) : T.ins.length;
+    T.ins.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'gn-row in' + (i >= uses ? ' unused' : '');
+      const sock = document.createElement('i');
+      sock.className = 'sock in' + (ngWired(node.id, i) ? ' wired' : '');
+      sock.dataset.i = i;
+      const label = document.createElement('span');
+      label.textContent = s.name;
+      row.append(sock, label);
+      if (T.sink || ngWired(node.id, i)) {
+        const val = document.createElement('span');
+        val.className = 'gn-val num';
+        val.dataset.i = i;
+        row.append(val);
+      } else {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = s.step || 'any';
+        input.value = PFG.inputValue(node, i);
+        input.addEventListener('input', () => { node.p['in' + i] = input.value === '' ? s.def : +input.value; ngChanged(false); });
+        row.append(input);
+      }
+      body.append(row);
+    });
+    return el;
+  }
+
+  function ngRender() {
+    const world = $('ng-world');
+    world.textContent = '';
+    NG.els.clear();
+    for (const n of NG.graph.nodes) {
+      const el = ngNodeEl(n);
+      NG.els.set(n.id, el);
+      world.append(el);
+    }
+    NG.wiresDirty = true;
+    NG.liveDirty = true;
+    // Which panel's values the nodes show.
+    const sel = $('ng-preview');
+    const panels = patPanels();
+    const key = panels.map((p) => p.id).join(',');
+    if (sel.dataset.key !== key) {
+      const was = sel.value;
+      sel.dataset.key = key;
+      sel.textContent = '';
+      for (const p of panels) {
+        const o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = `Values for panel ${p.id}`;
+        sel.append(o);
+      }
+      if ([...sel.options].some((o) => o.value === was)) sel.value = was;
+    }
+  }
+
+  function ngSockAt(el) {            // the centre of a socket, in the stage's own pixels
+    const r = el.getBoundingClientRect(), s = $('ng-stage').getBoundingClientRect();
+    return [r.left + r.width / 2 - s.left, r.top + r.height / 2 - s.top];
+  }
+  function ngPath(a, b) {
+    const reach = Math.max(40, Math.abs(b[0] - a[0]) * 0.5);
+    return `M${a[0]},${a[1]} C${a[0] + reach},${a[1]} ${b[0] - reach},${b[1]} ${b[0]},${b[1]}`;
+  }
+  // A wire as a run of points (the same curve ngPath draws).
+  function ngCurve(a, b, steps = 24) {
+    const reach = Math.max(40, Math.abs(b[0] - a[0]) * 0.5);
+    const p1 = [a[0] + reach, a[1]], p2 = [b[0] - reach, b[1]];
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, u = 1 - t;
+      pts.push([u * u * u * a[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * b[0],
+                u * u * u * a[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * b[1]]);
+    }
+    return pts;
+  }
+  function ngCross(p, q, r, s) {      // do the segments p-q and r-s cross?
+    const side = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    const d1 = side(r, s, p), d2 = side(r, s, q), d3 = side(p, q, r), d4 = side(p, q, s);
+    // Touching counts (a stroke through the very point where two pieces of a wire meet has to cut it);
+    // lying along each other does not.
+    if (d1 === 0 && d2 === 0 && d3 === 0 && d4 === 0) return false;
+    return d1 * d2 <= 0 && d3 * d4 <= 0;
+  }
+  // The wires a stroke (points in the stage's pixels) passes over.
+  function ngCutBy(stroke) {
+    const hit = [];
+    for (const l of NG.graph.links) {
+      const from = NG.els.get(l.a), to = NG.els.get(l.b);
+      const o = from && from.querySelector(`.sock.out[data-o="${l.o}"]`), i = to && to.querySelector(`.sock.in[data-i="${l.i}"]`);
+      if (!o || !i) continue;
+      const curve = ngCurve(ngSockAt(o), ngSockAt(i));
+      let crossed = false;
+      for (let a = 1; a < stroke.length && !crossed; a++)
+        for (let b = 1; b < curve.length && !crossed; b++) crossed = ngCross(stroke[a - 1], stroke[a], curve[b - 1], curve[b]);
+      if (crossed) hit.push(l);
+    }
+    return hit;
+  }
+
+  function ngDrawWires() {
+    const svg = $('ng-wires');
+    let d = '';
+    for (const l of NG.graph.links) {
+      const from = NG.els.get(l.a), to = NG.els.get(l.b);
+      const o = from && from.querySelector(`.sock.out[data-o="${l.o}"]`), i = to && to.querySelector(`.sock.in[data-i="${l.i}"]`);
+      if (o && i) d += ngPath(ngSockAt(o), ngSockAt(i)) + ' ';
+    }
+    svg.querySelector('.wires').setAttribute('d', d);
+    const w = NG.drag && NG.drag.kind === 'wire' ? NG.drag : null;
+    let loose = '';
+    if (w) {
+      const s = $('ng-stage').getBoundingClientRect();
+      const end = [w.x - s.left, w.y - s.top];
+      const fixed = NG.els.get(w.node) && NG.els.get(w.node).querySelector(w.out ? `.sock.out[data-o="${w.n}"]` : `.sock.in[data-i="${w.n}"]`);
+      if (fixed) loose = w.out ? ngPath(ngSockAt(fixed), end) : ngPath(end, ngSockAt(fixed));
+    }
+    svg.querySelector('.loose').setAttribute('d', loose);
+    const cut = NG.drag && NG.drag.kind === 'cut' ? NG.drag.pts : null;
+    svg.querySelector('.cut').setAttribute('d', cut && cut.length > 1 ? 'M' + cut.map((p) => p.join(',')).join(' L') : '');
+  }
+  function ngShowLive() {
+    const made = NG.made, live = NG.live;
+    const text = (r) => (live && r >= 0 && r < live.length ? (Math.round(live[r] * 100) / 100).toString() : '');
+    for (const [id, el] of NG.els) {
+      const outs = made && made.regs[id], ins = made && made.ins[id];
+      for (const span of el.querySelectorAll('.gn-val')) {
+        if (span.dataset.o != null) span.textContent = outs ? text(outs[+span.dataset.o]) : '';
+        else span.textContent = ins ? text(ins[+span.dataset.i]) : '';
+      }
+    }
+  }
+  // Once a frame, while the page is up.
+  function ngFrame() {
+    if (NG.wiresDirty) { NG.wiresDirty = false; ngDrawWires(); }
+    if (NG.liveDirty) { NG.liveDirty = false; ngShowLive(); }
+  }
+
+  // ── Adding, removing, wiring ───────────────────────────────────────────
+  function ngAdd(type, wx, wy) {
+    const node = PFG.create(type, ngNewId(), Math.round(wx), Math.round(wy));
+    if (!node) return null;
+    NG.graph.nodes.push(node);
+    NG.sel = new Set([node.id]);
+    ngChanged(true);
+    return node;
+  }
+  function ngRemove(ids) {
+    NG.graph.nodes = NG.graph.nodes.filter((n) => !ids.has(n.id));
+    NG.graph.links = NG.graph.links.filter((l) => !ids.has(l.a) && !ids.has(l.b));
+    NG.sel.clear();
+    if (NG.learn && ids.has(NG.learn)) NG.learn = null;
+    ngChanged(true);
+  }
+  function ngLink(a, o, b, i) {
+    if (a === b) return;
+    NG.graph.links = NG.graph.links.filter((l) => !(l.b === b && l.i === i));       // an input takes one wire
+    NG.graph.links.push({ a, o, b, i });
+    ngChanged(true);
+  }
+  function ngMenu(cx, cy) {
+    const menu = $('ng-menu');
+    const [wx, wy] = ngToWorld(cx, cy);
+    menu.textContent = '';
+    let group = '';
+    for (const [type, T] of Object.entries(PFG.TYPES)) {
+      if (T.group !== group) {
+        group = T.group;
+        const h = document.createElement('h3');
+        h.textContent = group;
+        menu.append(h);
+      }
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = T.title;
+      b.addEventListener('click', () => { menu.hidden = true; ngAdd(type, wx - 20, wy - 14); });
+      menu.append(b);
+    }
+    menu.hidden = false;
+    const s = $('ng-stage').getBoundingClientRect();
+    menu.style.left = clamp(cx - s.left, 4, Math.max(4, s.width - menu.offsetWidth - 4)) + 'px';
+    menu.style.top = clamp(cy - s.top, 4, Math.max(4, s.height - menu.offsetHeight - 4)) + 'px';
+  }
+  function ngFit() {
+    if (!NG.graph.nodes.length) { NG.view = { x: 60, y: 40, z: 1 }; ngApplyView(); return; }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of NG.graph.nodes) {
+      const el = NG.els.get(n.id);
+      x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
+      x1 = Math.max(x1, n.x + (el ? el.offsetWidth : 180)); y1 = Math.max(y1, n.y + (el ? el.offsetHeight : 120));
+    }
+    const s = $('ng-stage').getBoundingClientRect();
+    const z = clamp(Math.min((s.width - 60) / (x1 - x0), (s.height - 60) / (y1 - y0)), 0.3, 1);
+    NG.view = { z, x: (s.width - (x1 - x0) * z) / 2 - x0 * z, y: (s.height - (y1 - y0) * z) / 2 - y0 * z };
+    ngApplyView();
+    ngSave();
+  }
+  // Something to start from: a controller to every panel, another shaped on its way, a wave across the room.
+  function ngExample() {
+    const G = { nodes: [], links: [] };
+    const add = (type, x, y, p) => { const n = PFG.create(type, 'n' + (G.nodes.length + 1), x, y); Object.assign(n.p, p || {}); G.nodes.push(n); return n; };
+    const wire = (a, o, b, i) => G.links.push({ a: a.id, o, b: b.id, i });
+    const c1 = add('cc', 0, 0, { label: 'Controller 1', ch: 1, cc: 21 });
+    const c2 = add('cc', 0, 225, { label: 'Controller 2', ch: 1, cc: 22 });
+    const map = add('map', 260, 215, { in3: 0.2, in4: 0.8 });
+    const smooth = add('smooth', 520, 250, { in1: 0.5 });
+    const panel = add('panel', 0, 450);
+    const lfo = add('lfo', 260, 480, { wave: 'sine', in0: 0.25 });
+    const out = add('out', 780, 110);
+    wire(c1, 0, out, 0);
+    wire(c2, 0, map, 0);
+    wire(map, 0, smooth, 0);
+    wire(smooth, 0, out, 1);
+    wire(panel, 1, lfo, 1);
+    wire(lfo, 0, out, 2);
+    NG.graph = G;
+    NG.sel.clear();
+    ngChanged(true);
+    requestAnimationFrame(ngFit);
+  }
+
+  function ngOpen() {
+    $('ng-hint').hidden = NG.graph.nodes.length > 0;
+    ngRender();
+    ngApplyView();
+    NG.pending = 0;
+    NG.made = PFG.compile(NG.graph);
+    if (S.connected) { send({ c: 'graph', op: 'get' }); ngWatch(true); }
+    if (S.connected && S.mode === 'demo') { NG.said = ''; ngApply(true); }      // the demo's hub starts with none
+    if (NG.made.errors.length) ngStatus(NG.made.errors[0].text, 'bad');
+  }
+
+  function wireNodes() {
+    ngLoad();
+    const stage = $('ng-stage');
+    const ngCapture = (ev) => { try { stage.setPointerCapture(ev.pointerId); } catch (_) { /* not every pointer can be held */ } };
+    $('page-nodes').addEventListener('click', () => setPage('nodes'));
+    $('ng-add').addEventListener('click', (ev) => { const r = ev.target.getBoundingClientRect(); ngMenu(r.left, r.bottom + 6); });
+    $('ng-fit').addEventListener('click', ngFit);
+    $('ng-send').addEventListener('click', () => ngApply(true));
+    $('ng-power').addEventListener('click', () => ngPower(!NG.on));
+    $('ng-example').addEventListener('click', ngExample);
+    $('ng-hint-example').addEventListener('click', ngExample);
+    $('ng-clear').addEventListener('click', () => { NG.graph = { nodes: [], links: [] }; NG.sel.clear(); ngChanged(true); });
+    $('ng-preview').addEventListener('change', () => ngWatch(true));
+    $('ng-export').addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify({ nodes: NG.graph.nodes, links: NG.graph.links }, null, 1)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'patternflow-graph.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    });
+    $('ng-import').addEventListener('change', async (ev) => {
+      const f = ev.target.files[0];
+      ev.target.value = '';
+      if (!f) return;
+      try {
+        const g = JSON.parse(await f.text());
+        if (!Array.isArray(g.nodes)) throw new Error('nodes');
+        NG.graph = { nodes: g.nodes.filter((n) => PFG.TYPES[n.type] && n.p), links: Array.isArray(g.links) ? g.links : [] };
+        NG.sel.clear();
+        ngChanged(true);
+        requestAnimationFrame(ngFit);
+      } catch (_) { toast('That is not a graph file'); }
+    });
+
+    stage.addEventListener('pointerenter', () => { NG.mouse.over = true; });
+    stage.addEventListener('pointerleave', () => { NG.mouse.over = false; });
+    stage.addEventListener('pointerdown', (ev) => {
+      NG.mouse.x = ev.clientX; NG.mouse.y = ev.clientY;
+      if (ev.target.closest('#ng-menu')) return;
+      $('ng-menu').hidden = true;
+      if (NG.open && !ev.target.closest('.gn-row.targets')) { NG.open = null; ngRender(); return; }
+      if (ev.target.closest('.gn-row.targets')) return;
+      // Cut Links, as in Blender: hold Ctrl and drag the right button across wires
+      // (or the left button, starting on empty space).
+      if (ev.ctrlKey && (ev.button === 2 || (ev.button === 0 && !ev.target.closest('.gn')))) {
+        const r = stage.getBoundingClientRect();
+        NG.drag = { kind: 'cut', pts: [[ev.clientX - r.left, ev.clientY - r.top]] };
+        stage.classList.add('cutting');
+        ngCapture(ev);
+        ev.preventDefault();
+        return;
+      }
+      const sock = ev.target.closest('.sock');
+      const nodeEl = ev.target.closest('.gn');
+      if (sock && nodeEl && ev.button === 0) {
+        const id = nodeEl.dataset.id;
+        if (sock.classList.contains('out')) NG.drag = { kind: 'wire', node: id, n: +sock.dataset.o, out: true, x: ev.clientX, y: ev.clientY };
+        else {
+          const was = ngWired(id, +sock.dataset.i);
+          if (was) {                                 // pulled off: the wire comes along from its source
+            NG.graph.links = NG.graph.links.filter((l) => l !== was);
+            ngChanged(true);
+            NG.drag = { kind: 'wire', node: was.a, n: was.o, out: true, x: ev.clientX, y: ev.clientY };
+          } else NG.drag = { kind: 'wire', node: id, n: +sock.dataset.i, out: false, x: ev.clientX, y: ev.clientY };
+        }
+        ngCapture(ev);
+        ev.preventDefault();
+        NG.wiresDirty = true;
+        return;
+      }
+      if (nodeEl) {
+        const id = nodeEl.dataset.id;
+        if (ev.shiftKey) { if (NG.sel.has(id)) NG.sel.delete(id); else NG.sel.add(id); }
+        else if (!NG.sel.has(id)) NG.sel = new Set([id]);
+        for (const [nid, el] of NG.els) el.classList.toggle('sel', NG.sel.has(nid));
+        if (ev.target.closest('.gn-head') && ev.button === 0) {
+          const [wx, wy] = ngToWorld(ev.clientX, ev.clientY);
+          NG.drag = { kind: 'node', wx, wy, start: [...NG.sel].map((nid) => { const n = ngNode(nid); return [n, n.x, n.y]; }) };
+          ngCapture(ev);
+          ev.preventDefault();
+        }
+        return;
+      }
+      if (ev.button === 0 || ev.button === 1) {
+        NG.drag = { kind: 'pan', sx: ev.clientX, sy: ev.clientY, vx: NG.view.x, vy: NG.view.y, moved: false };
+        ngCapture(ev);
+        if (ev.button === 1) ev.preventDefault();
+      }
+    });
+    stage.addEventListener('pointermove', (ev) => {
+      NG.mouse.x = ev.clientX; NG.mouse.y = ev.clientY;
+      const d = NG.drag;
+      if (!d) return;
+      if (d.kind === 'pan') {
+        if (Math.abs(ev.clientX - d.sx) + Math.abs(ev.clientY - d.sy) > 3) d.moved = true;
+        NG.view.x = d.vx + ev.clientX - d.sx;
+        NG.view.y = d.vy + ev.clientY - d.sy;
+        ngApplyView();
+      } else if (d.kind === 'node') {
+        const [wx, wy] = ngToWorld(ev.clientX, ev.clientY);
+        for (const [n, x, y] of d.start) {
+          n.x = Math.round(x + wx - d.wx);
+          n.y = Math.round(y + wy - d.wy);
+          const el = NG.els.get(n.id);
+          if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+        }
+        NG.wiresDirty = true;
+      } else if (d.kind === 'wire') {
+        d.x = ev.clientX; d.y = ev.clientY;
+        NG.wiresDirty = true;
+      } else if (d.kind === 'cut') {
+        const r = stage.getBoundingClientRect();
+        const p = [ev.clientX - r.left, ev.clientY - r.top], last = d.pts[d.pts.length - 1];
+        if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) > 3) { d.pts.push(p); NG.wiresDirty = true; }
+      }
+    });
+    const drop = (ev) => {
+      const d = NG.drag;
+      NG.drag = null;
+      NG.wiresDirty = true;
+      if (!d) return;
+      if (d.kind === 'cut') {
+        stage.classList.remove('cutting');
+        NG.cutAt = performance.now();              // the right button's menu is not wanted after this
+        const gone = ev.type === 'pointerup' ? ngCutBy(d.pts) : [];
+        if (gone.length) {
+          NG.graph.links = NG.graph.links.filter((l) => !gone.includes(l));
+          ngChanged(true);
+        }
+      } else if (d.kind === 'pan') {
+        if (!d.moved && NG.sel.size) { NG.sel.clear(); for (const el of NG.els.values()) el.classList.remove('sel'); }
+        ngSave();
+      } else if (d.kind === 'node') ngSave();
+      else if (d.kind === 'wire' && ev.type === 'pointerup') {
+        const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+        const sock = hit && hit.closest('.sock');
+        const el = hit && hit.closest('.gn');
+        if (sock && el) {
+          if (d.out && sock.classList.contains('in')) ngLink(d.node, d.n, el.dataset.id, +sock.dataset.i);
+          else if (!d.out && sock.classList.contains('out')) ngLink(el.dataset.id, +sock.dataset.o, d.node, d.n);
+        } else if (el && d.out) {
+          // Dropped on a node, not on a socket: its first free input.
+          const T = PFG.TYPES[ngNode(el.dataset.id).type];
+          const free = T.ins.findIndex((_, i) => !ngWired(el.dataset.id, i));
+          if (free >= 0) ngLink(d.node, d.n, el.dataset.id, free);
+        }
+      }
+    };
+    stage.addEventListener('pointerup', drop);
+    stage.addEventListener('pointercancel', drop);
+    stage.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      if (ev.ctrlKey || (NG.drag && NG.drag.kind === 'cut') || performance.now() - (NG.cutAt || 0) < 400) return;      // that was a cut
+      if (!ev.target.closest('.gn')) ngMenu(ev.clientX, ev.clientY);
+    });
+    stage.addEventListener('dblclick', (ev) => { if (!ev.target.closest('.gn') && !ev.target.closest('#ng-menu')) ngMenu(ev.clientX, ev.clientY); });
+    stage.addEventListener('wheel', (ev) => {
+      if (ev.target.closest('#ng-menu')) return;
+      ev.preventDefault();
+      const s = stage.getBoundingClientRect();
+      const mx = ev.clientX - s.left, my = ev.clientY - s.top;
+      const z = clamp(NG.view.z * Math.exp(-ev.deltaY * 0.0012), 0.3, 1.6);
+      NG.view.x = mx - (mx - NG.view.x) * z / NG.view.z;
+      NG.view.y = my - (my - NG.view.y) * z / NG.view.z;
+      NG.view.z = z;
+      ngApplyView();
+      throttled('ngSave', ngSave, 400);
+    }, { passive: false });
+    document.addEventListener('keydown', (ev) => {
+      if (S.page !== 'nodes' || $('help').open) return;
+      const el = document.activeElement;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) { if (ev.key === 'Escape') el.blur(); return; }
+      const key = ev.key.toLowerCase();
+      if (key === 'escape') { $('ng-menu').hidden = true; NG.learn = null; if (NG.open) { NG.open = null; ngRender(); } return; }
+      if (!NG.mouse.over && document.activeElement !== stage) return;
+      const cmdKey = ev.ctrlKey || ev.metaKey;
+      const under = NG.mouse.over ? ngToWorld(NG.mouse.x, NG.mouse.y) : [null, null];
+      if (key === 'a' && ev.shiftKey) { ev.preventDefault(); ngMenu(NG.mouse.x, NG.mouse.y); }
+      else if (key === 'c' && cmdKey) { if (NG.sel.size) { NG.clip = ngCopy(NG.sel); toast(`Copied ${NG.clip.nodes.length} node${NG.clip.nodes.length === 1 ? '' : 's'}`); } }
+      else if (key === 'x' && cmdKey) { if (NG.sel.size) { ev.preventDefault(); NG.clip = ngCopy(NG.sel); ngRemove(new Set(NG.sel)); } }
+      else if (key === 'v' && cmdKey) { if (NG.clip) { ev.preventDefault(); ngPaste(NG.clip, under[0], under[1]); } }
+      else if (key === 'd' && ev.shiftKey) { if (NG.sel.size) { ev.preventDefault(); ngPaste(ngCopy(NG.sel)); } }
+      else if ((key === 'x' || key === 'delete' || key === 'backspace') && NG.sel.size) { ev.preventDefault(); ngRemove(new Set(NG.sel)); }
+      else if (key === 'home') ngFit();
+      else if (key === 'a' && !cmdKey) { NG.sel = new Set(ev.altKey ? [] : NG.graph.nodes.map((n) => n.id)); for (const [id, e2] of NG.els) e2.classList.toggle('sel', NG.sel.has(id)); }
+    });
+    new ResizeObserver(() => { NG.wiresDirty = true; }).observe(stage);
+  }
+
   // ── Wiring the controls ────────────────────────────────────────────────
   function wire() {
     $('conn-demo').addEventListener('click', () => connect('demo'));
@@ -3462,8 +4211,8 @@
       try { host = localStorage.getItem('pfe-host') || host; } catch (_) { /* no storage here */ }
       const row = document.createElement('form');
       row.className = 'conn';
-      row.innerHTML = `<input type="text" id="wifi-host" value="${host}" aria-label="허브 주소" style="width:150px">` +
-        `<button type="submit" class="btn small primary">연결</button>`;
+      row.innerHTML = `<input type="text" id="wifi-host" value="${host}" aria-label="Hub address" style="width:150px">` +
+        `<button type="submit" class="btn small primary">Connect</button>`;
       const old = $('wifi-host');
       if (old) old.closest('form').remove();
       $('conn-status').after(row);
@@ -3477,12 +4226,12 @@
       });
     });
     if (!('serial' in navigator)) {
-      $('conn-usb').title = 'Web Serial이 있는 브라우저(Chrome, Edge)에서 이 파일을 직접 열어야 합니다';
+      $('conn-usb').title = 'Needs a browser with Web Serial (Chrome, Edge), with this file opened directly';
     }
 
     $('cfg-speed').addEventListener('input', (ev) => {
       const v = +ev.target.value;
-      $('cfg-speed-v').textContent = `${v} 칸/초`;
+      $('cfg-speed-v').textContent = `${v} units/s`;
       throttled('speed', () => send({ c: 'cfg', speed: v }));
     });
     $('cfg-glide').addEventListener('input', (ev) => {
@@ -3496,7 +4245,7 @@
       $(id).addEventListener('change', (ev) => send({ c: 'cfg', [key]: +ev.target.value }));
     $('cfg-lock').addEventListener('change', (ev) => send({ c: 'cfg', lock: ev.target.checked }));
 
-    $('demo-count').addEventListener('input', (ev) => { $('demo-count-v').textContent = `${ev.target.value}대`; });
+    $('demo-count').addEventListener('input', (ev) => { $('demo-count-v').textContent = `${ev.target.value}`; });
     $('demo-count').addEventListener('change', (ev) => {
       if (S.mode !== 'demo' || !S.transport) return;
       resetState();
@@ -3512,7 +4261,7 @@
       if (S.mode !== 'demo' || !S.transport || !S.transport.x) return;
       S.transport.x.pfe_restart_hub();
       S.transport.send('{"c":"hello"}');
-      log('', '허브를 껐다 켰습니다. 배치와 규칙은 저장된 것에서 돌아오고, 패널은 보던 것을 그대로 보여 줍니다.');
+      log('', 'The hub was switched off and on. The layout and the rules come back from what was saved, and the panels go on showing what they showed.');
     });
 
     $('map-fit').addEventListener('click', () => (S.view === '3d' ? frame3() : fit()));
@@ -3533,14 +4282,14 @@
     // numbers: what a loop that pushes firmware to each of them reads.
     $('map-addresses').addEventListener('click', async () => {
       const list = [...S.panels.values()].filter((p) => p.on).sort((a, b) => a.id - b.id);
-      if (!list.length) { toast('연결된 패널이 없습니다.'); return; }
+      if (!list.length) { toast('No panels are connected.'); return; }
       const text = list.map((p) => p.ip).join('\n');
-      for (const p of list) log('', `패널 ${p.id}  ${p.ip}  ${p.uid}  ${p.fw || '?'} ${p.var || ''}`);
+      for (const p of list) log('', `Panel ${p.id}  ${p.ip}  ${p.uid}  ${p.fw || '?'} ${p.var || ''}`);
       try {
         await navigator.clipboard.writeText(text + '\n');
-        toast(`패널 ${list.length}대의 주소를 복사했습니다.`);
+        toast(`Copied the address of ${nOf(list.length, 'panel')}.`);
       } catch (_) {
-        toast('복사하지 못했습니다. 아래 로그에 주소를 적어 두었습니다.');
+        toast('Could not copy. The addresses are in the log below.');
       }
     });
 
@@ -3598,7 +4347,7 @@
       ev.preventDefault();
       const text = $('log-input').value.trim();
       if (!text) return;
-      try { JSON.parse(text); } catch (_) { toast('JSON 한 줄이어야 합니다. 예: {"c":"get"}'); return; }
+      try { JSON.parse(text); } catch (_) { toast('It has to be one line of JSON, for example {"c":"get"}'); return; }
       log('me', '→ ' + text);
       if (S.transport) S.transport.send(text);
       $('log-input').value = '';
@@ -3607,10 +4356,11 @@
     wirePatterns();
     wireShows();
     wireShowPage();
+    wireNodes();
 
     // Help: what is easy to forget (the MIDI numbers, the map's keys).
     const help = $('help');
-    const helpTabs = ['midi', 'map', 'patterns'];
+    const helpTabs = ['midi', 'map', 'patterns', 'nodes'];
     const showHelp = (tab) => {
       setPressed(helpTabs.map((t) => 'help-tab-' + t), 'help-tab-' + tab);
       for (const t of helpTabs) $('help-' + t).hidden = t !== tab;
@@ -3618,7 +4368,7 @@
     };
     for (const t of helpTabs) $('help-tab-' + t).addEventListener('click', () => showHelp(t));
     $('help-open').addEventListener('click', () => {
-      showHelp(S.page === 'patterns' ? 'patterns' : help.dataset.last || 'midi');
+      showHelp(S.page === 'nodes' ? 'nodes' : S.page === 'patterns' || S.page === 'shows' ? 'patterns' : help.dataset.last || 'midi');
       help.showModal();
     });
     $('help-close').addEventListener('click', () => help.close());
@@ -3632,11 +4382,12 @@
 
   function frame(now) {
     if (S.transport && S.transport.tick) S.transport.tick();
+    if (S.page === 'nodes') ngFrame();
     draw(now);
     // A hub that has gone quiet (unplugged, out of range) should not look alive.
     if (S.connected && S.mode !== 'demo' && S.hub && !S.quiet && now - S.lastHubLineAt > 4000) {
       S.quiet = true;
-      status('허브가 조용합니다', 'warn');
+      status('The hub has gone quiet', 'warn');
     }
     requestAnimationFrame(frame);
   }

@@ -569,6 +569,7 @@ class Conductor {
   }
 
   const Stats& stats() const { return stats_; }
+  uint32_t nowMs() const { return nowMs_; }      // the clock, as the last tick or packet gave it
   int inFlight() const { return count_; }
   const char* patternNameAt(int idx) const {
     return idx >= 0 && idx < MAX_NAMES ? names_[idx] : "";

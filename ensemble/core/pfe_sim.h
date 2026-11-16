@@ -56,7 +56,10 @@ struct SimPacket {
 
 class Sim {
  public:
-  Sim() : console_(conductor_, io(), "\"fw\":\"sim\",\"hub\":\"demo\"") {}
+  Sim() : console_(conductor_, io(), "\"fw\":\"sim\",\"hub\":\"demo\"") {
+    graph_.begin(&conductor_, io());
+    console_.setGraph(&graph_);
+  }
 
   void begin(int panels, uint32_t seed, uint32_t nowMs) {
     rng_ = seed ? seed : 1;
@@ -90,6 +93,7 @@ class Sim {
       nowMs_++;
       deliver();
       conductor_.tick(nowMs_);
+      graph_.tick(nowMs_);
       for (int i = 0; i < count_; i++) frameIfDue(i);
     }
   }
@@ -146,6 +150,7 @@ class Sim {
   // ── What can be seen ──────────────────────────────────────────────────
   int count() const { return count_; }
   Conductor& conductor() { return conductor_; }
+  Graph& graph() { return graph_; }
   const SimPanel& panel(int i) const { return panels_[i]; }
   SimPanel& panel(int i) { return panels_[i]; }
   uint32_t now() const { return nowMs_; }
@@ -255,6 +260,7 @@ class Sim {
 
   Conductor conductor_;
   Console console_;
+  Graph graph_;
   SimPanel panels_[MAX_PANELS];
   SimPacket queue_[SIM_QUEUE];
   int count_ = 0;

@@ -140,6 +140,7 @@ pfe::ConductorIo io() {
 }
 
 pfe::Midi midi;          // the ensemble as MIDI (../../core/pfe_midi.h), over the USB jack: see USB-MIDI below
+pfe::Graph graph;        // the console's node graph, as a program (../../core/pfe_graph.h)
 
 // What the hub says about itself in its hello.
 char hubInfo[160];
@@ -509,6 +510,36 @@ void loadSetup() {
                 ok ? "loaded" : "NOT understood (ignored)", conductor.panelCount());
 }
 
+// The graph's program: its own entry beside the setup, written a moment
+// after it changes (a console that edits a graph sends one at every change).
+void loadGraph() {
+  static uint8_t blob[pfe::GRAPH_MAX_BYTES];
+  if (!prefs.begin("pfe", true)) return;
+  const size_t n = prefs.getBytes("graph", blob, sizeof(blob));
+  const bool on = prefs.getBool("graphon", false);
+  prefs.end();
+  const char* problem = n ? graph.load(blob, n, millis()) : nullptr;
+  graph.setEnabled(on, millis());
+  graph.takeChanged();                   // it is what the flash holds already
+  if (n) Serial.printf("[hub] saved graph: %u bytes, %s, switched %s\n", (unsigned)n, problem ? problem : "understood", on ? "on" : "off");
+}
+
+void saveGraphIfDue() {
+  static bool due = false;
+  static uint32_t changedMs = 0;
+  if (graph.takeChanged()) { due = true; changedMs = millis(); }
+  if (!due || millis() - changedMs < HUB_SAVE_AFTER_MS) return;
+  due = false;
+  if (!prefs.begin("pfe", false)) { hubLog("graph NOT saved (flash)"); return; }
+  if (graph.active()) {
+    if (prefs.putBytes("graph", graph.bytes(), graph.size()) != graph.size()) hubLog("graph NOT saved");
+  } else {
+    prefs.remove("graph");
+  }
+  prefs.putBool("graphon", graph.enabled());
+  prefs.end();
+}
+
 void saveSetupIfDue() {
   if (!conductor.persistDirty() || millis() - conductor.persistChangedMs() < HUB_SAVE_AFTER_MS) return;
   static uint8_t blob[pfe::SAVE_MAX];
@@ -565,7 +596,10 @@ void readMidi() {
   for (int budget = 32; budget > 0 && tud_midi_packet_read(packet); budget--) {
     const uint8_t cin = packet[0] & 0x0F;
     if (cin < 0x8 || cin > 0xE) continue;            // channel messages only
-    midi.onMessage(packet + 1, (cin == 0xC || cin == 0xD) ? 2 : 3);
+    const size_t len = (cin == 0xC || cin == 0xD) ? 2 : 3;
+    // A controller the graph names is the graph's, and not also a knob the plain way.
+    if (graph.onMidi(packet + 1, len, millis())) continue;
+    midi.onMessage(packet + 1, len);
   }
 }
 
@@ -616,6 +650,9 @@ void setup() {
   );
   static pfe::Console theConsole(conductor, io(), hubInfo);
   console = &theConsole;
+  graph.begin(&conductor, io());
+  theConsole.setGraph(&graph);
+  loadGraph();
   pfe::RelayIo relayIo;
   relayIo.line = consoleLine;
   relayIo.room = consoleRoom;
@@ -656,9 +693,11 @@ void loop() {
   readPorts();
   readMidi();
   conductor.tick(millis());
+  graph.tick(millis());
   for (pfe::Relay& r : relays) r.tick(millis());
   midi.flush();      // what the MIDI port had no room for a moment ago
   saveSetupIfDue();
+  saveGraphIfDue();
 
   static uint32_t lastCleanup = 0;
   if (millis() - lastCleanup > 1000) {

@@ -122,6 +122,9 @@ Every command has `"c"`. An optional `"r"` (integer) comes back in the reply. Pa
 | `identify` | `uid` (or `"all"`), `on` | The panel shows its mark: a big shape in a colour on black, both from its number (`identifyMark` in `core/pfe_proto.h`: circle, square, triangle and red, green, blue, yellow, stepping together, twelve marks). One panel switches itself off after 30 s. `"all"` stays on until it is switched off, or for 30 minutes, and a panel that joins meanwhile shows its mark too |
 | `reboot` | `uid` (a panel, or `"hub"`) | |
 | `names` | `at` + `n` (names for the patterns from that number on), and/or `clear: true` with `from` | What the console knows after giving the panels another set of patterns. `clear` forgets the names from `from` on |
+| `graph` | `op`: `begin` + `len`, `data` + `d` (base64, up to 240 bytes), `end`; or `clear`; or `on` / `off`; or `get` | The node graph's program (`core/pfe_graph.h`), in pieces. `end` answers `err` with what is wrong, or `ack` and the program runs (and is kept in the hub's flash). `on` and `off` are the graph's switch (off, which is how a hub starts: the program is kept, drives nothing and takes no controller). `get` answers with a `graph` line |
+| `midi` | `ch` (1 to 16), `cc`, `v` (0 to 127) | A MIDI controller moved from the console instead of a MIDI port: for the graph |
+| `mon` | `on`, `panel` | While on: a `mi` line for each controller that comes in (25 a second of each at most) and, five times a second, an `nv` line with the graph's registers as computed for that panel |
 | `http` | `id`, `to` (a panel), `m` (`GET`, `POST`, `PUT`, `DELETE`), `path`, `h` (headers), `len` (bytes of body), `tmo` (ms, 1000 to 120000) | A request to that panel's own web server, passed on by the hub. See below. No `ack` |
 | `hb` | `id`, `d` | The next piece of that request's body: base64 of up to 1080 bytes (720 over the WebSocket, where a line has to fit one packet) |
 
@@ -158,6 +161,9 @@ One piece at a time: the next `hb` after its `hk`. A request ends with `he`, wit
 | `hub` | every second | `ms` uptime, `proto`, `panels`, `online`, `rx`, `tx`, `bad`, `ev` values emitted, `fly` values in flight, `drop`, `full`, `stale` |
 | `gone` | a panel was forgotten | `i` |
 | `log` | something happened | `ms`, `m` |
+| `graph` | answer to `graph` `get` | `on` (1: there is a program), `en` (1: the switch is on), `len` its bytes, `cc`: the controllers it names, `[channel, number]` each |
+| `mi` | a MIDI controller came in (while `mon` is on) | `ch`, `cc`, `v` |
+| `nv` | five times a second (while `mon` is on) | `p` the panel's number, `v`: the program's registers for that panel |
 | `hk` | a piece of a request's body went to the panel | `id`, `n` bytes passed on so far |
 | `http` | the panel answered | `id`, `s` status, `len` its Content-Length (-1: not said) |
 | `hb` | the answer's body, in order | `id`, `d` base64 of up to 360 bytes |

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -90,10 +90,10 @@ h2 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: 
 .col { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .group { display: flex; flex-direction: column; gap: 9px; }
 .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.row > label, .row > .lab { width: 44px; flex: none; color: var(--muted); font-size: 12.5px; }
+.row > label, .row > .lab { width: 68px; flex: none; color: var(--muted); font-size: 12.5px; }
 .row > label.check { width: auto; font-size: 13px; }
 .row > .grow { flex: 1; min-width: 0; }
-.row .val { width: 54px; flex: none; text-align: right; color: var(--muted); font-size: 12.5px; }
+.row .val { width: 62px; flex: none; text-align: right; color: var(--muted); font-size: 12.5px; }
 .note { color: var(--faint); font-size: 12px; margin: 0; }
 input[type="range"] { width: 100%; accent-color: var(--led); margin: 0; }
 input[type="text"], input[type="number"], select {
@@ -209,6 +209,65 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 .sh-grid .check { font-size: 12px; }
 @media (max-width: 700px) { .sh-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+/* ── Node page ───────────────────────────────────────── */
+.nodes { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.node-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.node-bar select { width: auto; }
+.node-bar .grow { flex: 1; min-width: 140px; margin: 0; }
+.node-stage { position: relative; flex: 1; min-height: 440px; overflow: hidden; border: 1px solid var(--rule); border-radius: 10px;
+  background-color: #fff; background-image: radial-gradient(#D9D4CA 1px, transparent 1px); background-size: 24px 24px; touch-action: none; cursor: grab; }
+.node-stage:focus { outline: none; }
+#ng-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+#ng-wires path { fill: none; stroke: #6B655B; stroke-width: 2; }
+#ng-wires .loose { stroke: var(--led); stroke-dasharray: 5 4; }
+#ng-wires .cut { stroke: #B83C1C; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.node-stage.cutting, .node-stage.cutting .gn, .node-stage.cutting .sock { cursor: crosshair; }
+#ng-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; z-index: 2; }
+.gn { position: absolute; width: 196px; background: #FFFCFA; color: #1A1814; border: 1px solid #B9B2A4; border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(26, 24, 20, 0.12); font-size: 12.5px; cursor: default; }
+.gn.sel { border-color: var(--led); box-shadow: 0 0 0 2px var(--led); }
+.gn.bad { border-color: #B83C1C; box-shadow: 0 0 0 2px #B83C1C; }
+.gn.heard .gn-head { filter: brightness(1.4); }
+.gn-head { color: #fff; font-weight: 600; padding: 4px 9px; border-radius: 7px 7px 0 0; cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+.gn-body { padding: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+.gn-row { position: relative; display: flex; align-items: center; gap: 6px; padding: 0 11px; min-height: 22px; }
+.gn-row.out { justify-content: flex-end; }
+.gn-row.unused { opacity: 0.35; }
+.gn-row > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gn-row.in > span:not(.gn-val) { flex: 1; min-width: 0; }
+.gn-row input[type="number"], .gn-row input[type="text"], .gn-row select { padding: 2px 5px; font-size: 12px; border-radius: 5px; background: #F4EFE6; color: #1A1814; border: 1px solid #DDD5C6; }
+.gn-row.in input[type="number"] { width: 64px; flex: none; }
+.gn-row.param input[type="number"], .gn-row.param input[type="text"], .gn-row.param select { flex: 1; min-width: 0; width: auto; }
+.gn-row.param > span { color: #625C51; flex: none; }
+.gn-row .check { color: #625C51; font-size: 12px; }
+.gn-val { color: #625C51; font-size: 11.5px; min-width: 30px; text-align: right; }
+.gn-row.out .gn-val { margin-right: auto; text-align: left; }
+.sock { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #9A9384; border: 2px solid #FFFCFA; box-shadow: 0 0 0 1px #6B655B; cursor: crosshair; top: 50%; margin-top: -6px; }
+.sock.in { left: -7px; }
+.sock.out { right: -7px; }
+.sock.in.wired, .sock:hover { background: var(--led); }
+.gn-row.cc { flex-wrap: wrap; }
+.gn-row.cc input[type="range"] { flex: 1 1 100%; }
+.gn-cc-v { flex: 1; color: #625C51; }
+.gn.open { z-index: 6; }
+.gn-row.targets { position: relative; }
+.gn-pick { flex: 1; min-width: 0; text-align: left; border: 1px solid #DDD5C6; background: #F4EFE6; color: #1A1814; border-radius: 5px; padding: 2px 22px 2px 7px;
+  font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+.gn-pick::after { content: "▾"; position: absolute; right: 7px; top: 1px; color: #625C51; }
+.gn-pop { position: absolute; left: 11px; right: 11px; top: 100%; margin-top: 3px; background: #FFFCFA; border: 1px solid #B9B2A4; border-radius: 7px;
+  box-shadow: 0 6px 18px rgba(26, 24, 20, 0.2); padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow-y: auto; z-index: 7; }
+.gn-pop .check { color: #1A1814; font-size: 12px; white-space: nowrap; }
+.btn.power[aria-pressed="true"] { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: 600; }
+.btn.power[aria-pressed="false"] { color: var(--muted); }
+.node-menu { position: absolute; z-index: 5; background: var(--panel); border: 1px solid var(--rule); border-radius: 9px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 6px; display: flex; flex-direction: column; width: 176px; max-height: 86%; overflow-y: auto; }
+.node-menu h3 { font-size: 11px; color: var(--faint); padding: 5px 8px 2px; letter-spacing: 0.06em; }
+.node-menu button { border: 0; background: transparent; text-align: left; padding: 4px 8px; border-radius: 6px; cursor: pointer; white-space: normal; }
+.node-menu button:hover { background: var(--ghost); }
+.node-hint { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; color: #5A5347; z-index: 3; pointer-events: none; padding: 24px; }
+.node-hint strong { color: #1B1813; font-size: 15px; font-weight: 600; }
+.node-hint .btn { pointer-events: auto; background: #fff; color: #2A2620; border-color: #CFC9BD; }
+
 /* ── Help ────────────────────────────────────────────── */
 dialog.help { border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 0; width: min(92vw, 760px); max-height: 86vh; }
 dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
@@ -245,191 +304,192 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 
 <header class="bar">
   <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Patternflow Ensemble</h1></div>
-  <div class="seg" role="group" aria-label="화면">
-    <button type="button" id="page-stage" aria-pressed="true">무대</button>
-    <button type="button" id="page-patterns" aria-pressed="false">패턴</button>
-    <button type="button" id="page-shows" aria-pressed="false">쇼</button>
+  <div class="seg" role="group" aria-label="Page">
+    <button type="button" id="page-stage" aria-pressed="true">Stage</button>
+    <button type="button" id="page-patterns" aria-pressed="false">Patterns</button>
+    <button type="button" id="page-shows" aria-pressed="false">Shows</button>
+    <button type="button" id="page-nodes" aria-pressed="false">Nodes</button>
   </div>
   <div class="conn">
-    <div class="seg" role="group" aria-label="허브 연결 방법">
-      <button type="button" id="conn-demo" aria-pressed="true">데모</button>
+    <div class="seg" role="group" aria-label="How to reach the hub">
+      <button type="button" id="conn-demo" aria-pressed="true">Demo</button>
       <button type="button" id="conn-usb" aria-pressed="false">USB</button>
       <button type="button" id="conn-wifi" aria-pressed="false">Wi-Fi</button>
     </div>
-    <span class="pill" id="conn-status">시작하는 중</span>
+    <span class="pill" id="conn-status">Starting</span>
   </div>
   <div class="stats num" id="hub-stats" aria-live="off"></div>
-  <button type="button" class="btn small" id="help-open" aria-haspopup="dialog">도움말</button>
+  <button type="button" class="btn small" id="help-open" aria-haspopup="dialog">Help</button>
 </header>
 
 <main class="grid" id="stage-page">
 
-  <section class="col rules" aria-label="연결 규칙">
+  <section class="col rules" aria-label="Link rules">
     <div class="group">
-      <h2>모든 패널</h2>
-      <div class="row"><label for="all-pattern">패턴</label><div class="grow step">
-        <button type="button" class="btn" id="all-pattern-prev" aria-label="이전 패턴" title="이전 패턴">◀</button>
+      <h2>All panels</h2>
+      <div class="row"><label for="all-pattern">Pattern</label><div class="grow step">
+        <button type="button" class="btn" id="all-pattern-prev" aria-label="Previous pattern" title="Previous pattern">◀</button>
         <select id="all-pattern"></select>
-        <button type="button" class="btn" id="all-pattern-next" aria-label="다음 패턴" title="다음 패턴">▶</button>
+        <button type="button" class="btn" id="all-pattern-next" aria-label="Next pattern" title="Next pattern">▶</button>
       </div></div>
-      <div class="row"><label for="all-bright">밝기</label><div class="grow"><input type="range" id="all-bright" min="5" max="255" step="1" value="128"></div><span class="val num" id="all-bright-v">–</span></div>
-      <div class="actions"><button type="button" class="btn small" id="all-sleep" aria-pressed="false">절전</button></div>
+      <div class="row"><label for="all-bright">Brightness</label><div class="grow"><input type="range" id="all-bright" min="5" max="255" step="1" value="128"></div><span class="val num" id="all-bright-v">–</span></div>
+      <div class="actions"><button type="button" class="btn small" id="all-sleep" aria-pressed="false">Sleep</button></div>
       <p class="note" id="all-pattern-warn" style="color:var(--warn)" hidden></p>
     </div>
 
     <div class="group">
-      <h2>노브를 돌리면</h2>
+      <h2>When a knob turns</h2>
       <div id="links"></div>
     </div>
 
     <div class="group">
-      <h2>물결</h2>
-      <div class="row"><label for="cfg-speed">속도</label><div class="grow"><input type="range" id="cfg-speed" min="0.2" max="12" step="0.1" value="2"></div><span class="val num" id="cfg-speed-v">2 칸/초</span></div>
-      <div class="row"><label for="cfg-glide">번짐</label><div class="grow"><input type="range" id="cfg-glide" min="0" max="1500" step="10" value="80"></div><span class="val num" id="cfg-glide-v">80 ms</span></div>
+      <h2>Ripple</h2>
+      <div class="row"><label for="cfg-speed">Speed</label><div class="grow"><input type="range" id="cfg-speed" min="0.2" max="12" step="0.1" value="2"></div><span class="val num" id="cfg-speed-v">2 units/s</span></div>
+      <div class="row"><label for="cfg-glide">Glide</label><div class="grow"><input type="range" id="cfg-glide" min="0" max="1500" step="10" value="80"></div><span class="val num" id="cfg-glide-v">80 ms</span></div>
     </div>
 
     <div class="group">
       <h2>K4</h2>
-      <div class="seg small" role="group" aria-label="K4의 역할">
-        <button type="button" id="cfg-k4-pattern" aria-pressed="true">패턴 넘기기</button>
-        <button type="button" id="cfg-k4-knob" aria-pressed="false">네 번째 노브</button>
+      <div class="seg small" role="group" aria-label="What K4 does">
+        <button type="button" id="cfg-k4-pattern" aria-pressed="true">Steps patterns</button>
+        <button type="button" id="cfg-k4-knob" aria-pressed="false">Fourth knob</button>
       </div>
       <div class="row" id="k4-range">
-        <span class="lab">범위</span>
-        <input type="number" id="cfg-pmin" min="0" max="254" value="0" aria-label="첫 패턴 번호">
+        <span class="lab">Range</span>
+        <input type="number" id="cfg-pmin" min="0" max="254" value="0" aria-label="First pattern number">
         <span class="note">~</span>
-        <input type="number" id="cfg-pmax" min="0" max="255" value="255" aria-label="마지막 패턴 번호">
-        <input type="number" id="cfg-k4s" min="1" max="24" value="3" aria-label="패턴 한 칸에 드는 클릭 수" title="패턴 한 칸에 드는 클릭 수">
+        <input type="number" id="cfg-pmax" min="0" max="255" value="255" aria-label="Last pattern number">
+        <input type="number" id="cfg-k4s" min="1" max="24" value="3" aria-label="Clicks per pattern step" title="Clicks per pattern step">
       </div>
-      <label class="check"><input type="checkbox" id="cfg-lock"> 패널의 길게 누르기 메뉴 잠그기</label>
+      <label class="check"><input type="checkbox" id="cfg-lock"> Lock the panels' long-press menus</label>
     </div>
 
     <div class="group" id="demo-box" hidden>
-      <h2>데모 설정</h2>
-      <div class="row"><label for="demo-count">패널</label><div class="grow"><input type="range" id="demo-count" min="2" max="24" step="1" value="10"></div><span class="val num" id="demo-count-v">10대</span></div>
-      <div class="row"><label for="demo-lat">지연</label><div class="grow"><input type="range" id="demo-lat" min="0" max="200" step="5" value="5"></div><span class="val num" id="demo-lat-v">5 ms</span></div>
-      <div class="row"><label for="demo-loss">손실</label><div class="grow"><input type="range" id="demo-loss" min="0" max="60" step="5" value="0"></div><span class="val num" id="demo-loss-v">0 %</span></div>
-      <label class="check"><input type="checkbox" id="demo-auto" checked> 누군가 돌리는 것처럼 자동 시연</label>
-      <div class="actions"><button type="button" class="btn small" id="demo-hub-restart">허브 껐다 켜기</button></div>
+      <h2>Demo</h2>
+      <div class="row"><label for="demo-count">Panels</label><div class="grow"><input type="range" id="demo-count" min="2" max="24" step="1" value="10"></div><span class="val num" id="demo-count-v">10</span></div>
+      <div class="row"><label for="demo-lat">Latency</label><div class="grow"><input type="range" id="demo-lat" min="0" max="200" step="5" value="5"></div><span class="val num" id="demo-lat-v">5 ms</span></div>
+      <div class="row"><label for="demo-loss">Loss</label><div class="grow"><input type="range" id="demo-loss" min="0" max="60" step="5" value="0"></div><span class="val num" id="demo-loss-v">0 %</span></div>
+      <label class="check"><input type="checkbox" id="demo-auto" checked> Play by itself, as if someone were turning</label>
+      <div class="actions"><button type="button" class="btn small" id="demo-hub-restart">Restart the hub</button></div>
     </div>
   </section>
 
   <section class="center">
     <div class="stage" id="stage">
       <div class="stage-tools">
-        <div class="seg" role="group" aria-label="지도를 평면으로 볼지 공간으로 볼지">
-          <button type="button" id="view-2d" aria-pressed="true" title="끌기: 옮기기 · 빈 곳 끌기: 여러 개 고르기 · Shift+클릭: 더 고르기 · 가운데 버튼(또는 Alt) 끌기: 지도 이동 · 휠: 확대 · A: 모두 고르기">2D</button>
-          <button type="button" id="view-3d" aria-pressed="false" title="Blender처럼. 가운데 버튼: 회전 · Shift+가운데: 이동 · 휠: 확대 · 넘패드 1/3/7: 앞/옆/위, 5: 원근↔정사 · G: 옮기기, R: 돌리기 (X/Y/Z 축, Ctrl 스냅, 숫자) · 빈 곳 끌기: 여러 개 고르기 · Shift+클릭: 더 고르기 · A: 모두 · Home: 전체 보기. 가운데 버튼이 없으면 Alt+끌기, 넘패드가 없으면 숫자 키">3D</button>
+        <div class="seg" role="group" aria-label="The map flat, or as a room">
+          <button type="button" id="view-2d" aria-pressed="true" title="Drag: move · Drag empty space: box select · Shift+click: add to the selection · Middle button (or Alt) drag: pan · Wheel: zoom · A: select all">2D</button>
+          <button type="button" id="view-3d" aria-pressed="false" title="As in Blender. Middle button: orbit · Shift+middle: pan · Wheel: zoom · Numpad 1/3/7: front/right/top, 5: perspective/orthographic · G: move, R: rotate (X/Y/Z for an axis, Ctrl snaps, type a number) · Drag empty space: box select · Shift+click: add · A: all · Home: frame all. No middle button: Alt+drag. No numpad: the number keys">3D</button>
         </div>
-        <button type="button" class="btn" id="map-fit">화면에 맞추기</button>
-        <select id="map-arrange" aria-label="패널 자동 배치">
-          <option value="">자동 배치</option>
-          <option value="row">한 줄</option>
-          <option value="grid">격자</option>
-          <option value="ring">원</option>
-          <option value="stagger">엇갈린 두 줄</option>
+        <button type="button" class="btn" id="map-fit">Frame all</button>
+        <select id="map-arrange" aria-label="Arrange the panels">
+          <option value="">Arrange …</option>
+          <option value="row">Row</option>
+          <option value="grid">Grid</option>
+          <option value="ring">Ring</option>
+          <option value="stagger">Staggered rows</option>
         </select>
-        <button type="button" class="btn" id="map-identify">전체 모양·색 표시</button>
-        <button type="button" class="btn" id="map-addresses" title="연결된 패널의 주소를 한 줄에 하나씩 복사합니다. 펌웨어를 Wi-Fi로 올리거나 되돌릴 때 씁니다.">주소 복사</button>
+        <button type="button" class="btn" id="map-identify">Show all marks</button>
+        <button type="button" class="btn" id="map-addresses" title="Copies the address of every connected panel, one a line. For putting firmware on over Wi-Fi.">Copy addresses</button>
       </div>
-      <canvas id="map" tabindex="0" aria-label="패널 배치도"></canvas>
+      <canvas id="map" tabindex="0" aria-label="Panel layout"></canvas>
       <div class="stage-empty" id="stage-empty" hidden>
-        <strong>아직 패널이 없습니다</strong>
-        <span>패널이 허브의 Wi-Fi에 들어오면 여기에 나타납니다.</span>
+        <strong>No panels yet</strong>
+        <span>Panels appear here as they join the hub's Wi-Fi.</span>
       </div>
     </div>
 
-    <section class="log" aria-label="로그">
+    <section class="log" aria-label="Log">
       <div class="log-head">
-        <h2>로그</h2>
-        <label class="check"><input type="checkbox" id="log-raw"> 오가는 줄 모두 보기</label>
-        <button type="button" class="btn small quiet" id="log-clear">지우기</button>
+        <h2>Log</h2>
+        <label class="check"><input type="checkbox" id="log-raw"> Show every line</label>
+        <button type="button" class="btn small quiet" id="log-clear">Clear</button>
       </div>
       <div class="log-body" id="log" role="log" aria-live="off"></div>
       <form class="log-form" id="log-form">
-        <input type="text" id="log-input" placeholder='허브에 보낼 줄  {"c":"get"}' autocomplete="off" spellcheck="false" aria-label="허브에 보낼 JSON 한 줄">
-        <button type="submit" class="btn small">보내기</button>
+        <input type="text" id="log-input" placeholder='A line for the hub  {"c":"get"}' autocomplete="off" spellcheck="false" aria-label="One line of JSON for the hub">
+        <button type="submit" class="btn small">Send</button>
       </form>
     </section>
   </section>
 
-  <section class="col insp" aria-label="고른 패널">
+  <section class="col insp" aria-label="Selected panel">
     <div id="insp-none" class="group">
-      <h2>패널</h2>
-      <p class="empty">고른 패널 없음</p>
+      <h2>Panel</h2>
+      <p class="empty">No panel selected</p>
     </div>
 
     <div id="insp" class="group" hidden>
       <div class="insp-head">
         <span class="big num" id="insp-id">1</span>
-        <div><h3 id="insp-title" style="font-size:14px">패널</h3><span class="note mono" id="insp-uid"></span></div>
-        <span class="pill" id="insp-state">연결됨</span>
+        <div><h3 id="insp-title" style="font-size:14px">Panel</h3><span class="note mono" id="insp-uid"></span></div>
+        <span class="pill" id="insp-state">Connected</span>
       </div>
       <div class="two">
-        <label class="field"><span>번호</span><input type="number" id="p-id" min="1" max="250"></label>
-        <label class="field"><span>이름</span><input type="text" id="p-name" maxlength="16" placeholder="입구 쪽"></label>
-        <label class="field"><span>가로 (칸)</span><input type="number" id="p-x" step="0.25"></label>
-        <label class="field"><span>세로 (칸)</span><input type="number" id="p-y" step="0.25"></label>
-        <label class="field"><span>깊이 (칸)</span><input type="number" id="p-z" step="0.25"></label>
+        <label class="field"><span>Number</span><input type="number" id="p-id" min="1" max="250"></label>
+        <label class="field"><span>Name</span><input type="text" id="p-name" maxlength="16" placeholder="By the door"></label>
+        <label class="field"><span>X (units)</span><input type="number" id="p-x" step="0.25"></label>
+        <label class="field"><span>Y (units)</span><input type="number" id="p-y" step="0.25"></label>
+        <label class="field"><span>Z (units)</span><input type="number" id="p-z" step="0.25"></label>
       </div>
-      <div class="three-up" title="3D에서 패널을 돌린 각도. Blender의 X, Y, Z 순서">
-        <label class="field"><span>회전 X°</span><input type="number" id="p-rx" step="5"></label>
-        <label class="field"><span>회전 Y°</span><input type="number" id="p-ry" step="5"></label>
-        <label class="field"><span>회전 Z°</span><input type="number" id="p-rz" step="5"></label>
+      <div class="three-up" title="The panel's rotation in 3D, in Blender's X, Y, Z order">
+        <label class="field"><span>Rotation X°</span><input type="number" id="p-rx" step="5"></label>
+        <label class="field"><span>Rotation Y°</span><input type="number" id="p-ry" step="5"></label>
+        <label class="field"><span>Rotation Z°</span><input type="number" id="p-rz" step="5"></label>
       </div>
-      <label class="check"><input type="checkbox" id="p-linked"> 다른 패널과 함께 움직이기</label>
+      <label class="check"><input type="checkbox" id="p-linked"> Linked with the other panels</label>
     </div>
 
     <div id="insp-set" class="group" hidden>
-      <h2>콘솔에서 정하기</h2>
-      <div class="seg small" role="group" aria-label="값을 받을 패널">
-        <button type="button" id="scope-one" aria-pressed="true">고른 패널</button>
-        <button type="button" id="scope-wave" aria-pressed="false">여기서 물결로</button>
-        <button type="button" id="scope-all" aria-pressed="false">전체 동시에</button>
+      <h2>Set from the console</h2>
+      <div class="seg small" role="group" aria-label="Which panels take the value">
+        <button type="button" id="scope-one" aria-pressed="true">Selected</button>
+        <button type="button" id="scope-wave" aria-pressed="false">Ripple from here</button>
+        <button type="button" id="scope-all" aria-pressed="false">All at once</button>
       </div>
-      <div class="field"><span>패턴</span><div class="step">
-        <button type="button" class="btn" id="p-pattern-prev" aria-label="이전 패턴" title="이전 패턴">◀</button>
-        <select id="p-pattern" aria-label="패턴"></select>
-        <button type="button" class="btn" id="p-pattern-next" aria-label="다음 패턴" title="다음 패턴">▶</button>
+      <div class="field"><span>Pattern</span><div class="step">
+        <button type="button" class="btn" id="p-pattern-prev" aria-label="Previous pattern" title="Previous pattern">◀</button>
+        <select id="p-pattern" aria-label="Pattern"></select>
+        <button type="button" class="btn" id="p-pattern-next" aria-label="Next pattern" title="Next pattern">▶</button>
       </div></div>
       <div id="p-knobs"></div>
     </div>
 
     <div id="insp-show" class="group" hidden>
-      <h2>쇼</h2>
+      <h2>Shows</h2>
       <div class="step">
-        <select id="p-show" aria-label="이 패널에 있는 쇼"></select>
-        <button type="button" class="btn" id="p-show-play" aria-pressed="false" aria-label="쇼 재생" title="재생">▶</button>
-        <button type="button" class="btn" id="p-show-stop" aria-label="쇼 정지" title="정지">■</button>
-        <button type="button" class="btn" id="p-show-delete" aria-label="이 쇼를 패널에서 지우기" title="이 쇼를 패널에서 지우기">✕</button>
+        <select id="p-show" aria-label="Shows on this panel"></select>
+        <button type="button" class="btn" id="p-show-play" aria-pressed="false" aria-label="Play the show" title="Play">▶</button>
+        <button type="button" class="btn" id="p-show-stop" aria-label="Stop the show" title="Stop">■</button>
+        <button type="button" class="btn" id="p-show-delete" aria-label="Delete this show from the panel" title="Delete this show from the panel">✕</button>
       </div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="p-show-loop" checked> 반복</label>
-        <button type="button" class="btn small rec" id="p-show-rec" aria-pressed="false" title="고른 패널이 하는 것을 녹화해서, 끝내면 바로 그 패널에서 반복합니다">● 녹화</button>
+        <label class="check"><input type="checkbox" id="p-show-loop" checked> Loop</label>
+        <button type="button" class="btn small rec" id="p-show-rec" aria-pressed="false" title="Records what the selected panels do. When stopped, each of them loops its own recording at once">● Record</button>
       </div>
       <p class="note" id="p-show-state" role="status"></p>
     </div>
 
     <div id="insp-hand" class="group" hidden>
-      <h2>손으로 돌리기 (가상)</h2>
+      <h2>Turn by hand (virtual)</h2>
       <div id="p-hand"></div>
       <div class="actions">
-        <button type="button" class="btn small" id="p-power">전원 끄기</button>
+        <button type="button" class="btn small" id="p-power">Power off</button>
       </div>
     </div>
 
     <div id="insp-act" class="group" hidden>
-      <h2>패널에게</h2>
+      <h2>To the panel</h2>
       <div class="actions">
-        <button type="button" class="btn small" id="p-identify">표시</button>
-        <button type="button" class="btn small" id="p-sleep">절전</button>
-        <button type="button" class="btn small" id="p-reboot">다시 시작</button>
-        <button type="button" class="btn small" id="p-forget">목록에서 지우기</button>
+        <button type="button" class="btn small" id="p-identify">Mark</button>
+        <button type="button" class="btn small" id="p-sleep">Sleep</button>
+        <button type="button" class="btn small" id="p-reboot">Restart</button>
+        <button type="button" class="btn small" id="p-forget">Remove from the list</button>
       </div>
     </div>
 
     <div id="insp-diag" class="group" hidden>
-      <h2>진단</h2>
+      <h2>Diagnostics</h2>
       <dl class="diag" id="p-diag"></dl>
     </div>
   </section>
@@ -437,115 +497,143 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 </main>
 
 <main class="pats" id="pat-page" hidden>
-  <section class="col pat-set" aria-label="패턴 모음">
+  <section class="col pat-set" aria-label="Pattern set">
     <div class="pat-head">
-      <h2>모음</h2>
+      <h2>Set</h2>
       <span class="note num" id="pat-total"></span>
-      <button type="button" class="btn small quiet" id="pat-clear" hidden>비우기</button>
+      <button type="button" class="btn small quiet" id="pat-clear" hidden>Clear</button>
     </div>
     <form class="pat-add" id="pat-add">
-      <input type="text" id="pat-link" placeholder="커뮤니티 덱·패턴 링크 붙여넣기" autocomplete="off" spellcheck="false" aria-label="커뮤니티 덱이나 패턴 링크">
-      <button type="submit" class="btn">추가</button>
-      <a class="btn" id="pat-open" href="https://patternflow.work/community" target="_blank" rel="noopener">커뮤니티 ↗</a>
+      <input type="text" id="pat-link" placeholder="Paste community deck or pattern links" autocomplete="off" spellcheck="false" aria-label="Community deck or pattern links">
+      <button type="submit" class="btn">Add</button>
+      <a class="btn" id="pat-open" href="https://patternflow.work/community" target="_blank" rel="noopener">Community ↗</a>
     </form>
     <ol class="pat-list" id="pat-list"></ol>
-    <h2 id="pat-shows-head" hidden>퍼포먼스</h2>
+    <h2 id="pat-shows-head" hidden>Performances</h2>
     <ul class="pat-list" id="pat-shows"></ul>
-    <p class="empty" id="pat-empty">링크를 붙여넣거나, 커뮤니티에서 패턴을 끌어다 놓으세요.</p>
+    <p class="empty" id="pat-empty">Paste a link, or drag a pattern over from the community.</p>
   </section>
 
-  <section class="col pat-go" aria-label="패널에 넣기">
+  <section class="col pat-go" aria-label="Put on the panels">
     <div class="group">
-      <div class="pat-head"><h2>패널</h2><button type="button" class="btn small quiet" id="pat-check-all" hidden>전체 선택</button></div>
+      <div class="pat-head"><h2>Panels</h2><button type="button" class="btn small quiet" id="pat-check-all" hidden>Select all</button></div>
       <ul class="pat-panels" id="pat-panels"></ul>
-      <p class="empty" id="pat-none">연결된 패널 없음</p>
-      <button type="button" class="btn primary" id="pat-install" disabled>넣기</button>
+      <p class="empty" id="pat-none">No panels connected</p>
+      <button type="button" class="btn primary" id="pat-install" disabled>Install</button>
       <p class="note" id="pat-status" role="status"></p>
     </div>
   </section>
 </main>
 
 <main class="shows" id="show-page" hidden>
-  <section class="col" aria-label="쇼 보관함">
+  <section class="col" aria-label="Show library">
     <div class="pat-head">
-      <h2>보관함</h2>
-      <label class="btn small quiet" for="sh-file">.pfs 가져오기</label>
+      <h2>Library</h2>
+      <label class="btn small quiet" for="sh-file">Import .pfs</label>
       <input type="file" id="sh-file" accept=".pfs" multiple hidden>
     </div>
-    <ul class="lib-list" id="lib-list" role="listbox" aria-label="저장된 쇼"></ul>
-    <p class="empty" id="lib-empty">녹화한 쇼가 여기에 쌓입니다.</p>
+    <ul class="lib-list" id="lib-list" role="listbox" aria-label="Saved shows"></ul>
+    <p class="empty" id="lib-empty">Recorded shows are kept here.</p>
   </section>
 
-  <section class="col" aria-label="쇼 편집">
-    <p class="empty" id="sh-none">보관함에서 쇼를 고르세요.</p>
+  <section class="col" aria-label="Edit the show">
+    <p class="empty" id="sh-none">Choose a show from the library.</p>
     <div class="sh-body" id="sh-body" hidden>
-      <div class="row"><label for="sh-title">이름</label><input type="text" id="sh-title" class="grow" maxlength="31" autocomplete="off"></div>
-      <canvas id="sh-graph" aria-label="시간에 따른 노브 네 개의 값과 패턴이 바뀌는 곳"></canvas>
+      <div class="row"><label for="sh-title">Name</label><input type="text" id="sh-title" class="grow" maxlength="31" autocomplete="off"></div>
+      <canvas id="sh-graph" aria-label="The four knobs over time, and where the pattern changes"></canvas>
       <div class="sh-grid">
-        <label class="field"><span>시작 (초)</span><input type="number" id="sh-start" min="0" step="0.1"></label>
-        <label class="field"><span>끝 (초)</span><input type="number" id="sh-end" min="0.1" step="0.1"></label>
-        <label class="field"><span>길이 (초)</span><input type="number" id="sh-length" min="0.1" step="0.1" title="잘라 낸 구간이 이 시간 동안 재생됩니다. 늘리면 느려지고 줄이면 빨라집니다"></label>
-        <div class="field"><span>속도</span><div class="row"><span class="num" id="sh-speed"></span><button type="button" class="btn small" id="sh-speed-reset">원래 속도로</button></div></div>
+        <label class="field"><span>Start (s)</span><input type="number" id="sh-start" min="0" step="0.1"></label>
+        <label class="field"><span>End (s)</span><input type="number" id="sh-end" min="0.1" step="0.1"></label>
+        <label class="field"><span>Length (s)</span><input type="number" id="sh-length" min="0.1" step="0.1" title="The kept piece plays over this long: longer is slower, shorter is faster"></label>
+        <div class="field"><span>Speed</span><div class="row"><span class="num" id="sh-speed"></span><button type="button" class="btn small" id="sh-speed-reset">Original speed</button></div></div>
       </div>
       <div class="sh-grid" id="sh-knobs"></div>
-      <div class="row"><label for="sh-pattern">패턴</label><select id="sh-pattern" class="grow"></select></div>
+      <div class="row"><label for="sh-pattern">Pattern</label><select id="sh-pattern" class="grow"></select></div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="sh-loop" checked> 반복</label>
+        <label class="check"><input type="checkbox" id="sh-loop" checked> Loop</label>
         <span class="note num grow" id="sh-info"></span>
       </div>
       <div class="actions">
-        <button type="button" class="btn small" id="sh-dup">복제</button>
-        <button type="button" class="btn small" id="sh-reset">녹화한 대로 되돌리기</button>
-        <button type="button" class="btn small" id="sh-export">.pfs 파일로 저장</button>
-        <button type="button" class="btn small" id="sh-delete">보관함에서 지우기</button>
+        <button type="button" class="btn small" id="sh-dup">Duplicate</button>
+        <button type="button" class="btn small" id="sh-reset">Reset to the recording</button>
+        <button type="button" class="btn small" id="sh-export">Save as .pfs</button>
+        <button type="button" class="btn small" id="sh-delete">Remove from the library</button>
       </div>
-      <h2>패널</h2>
+      <h2>Panels</h2>
       <ul class="pat-panels" id="sh-panels"></ul>
       <div class="actions">
-        <button type="button" class="btn primary" id="sh-send" disabled>넣고 재생</button>
-        <button type="button" class="btn" id="sh-stop">정지</button>
+        <button type="button" class="btn primary" id="sh-send" disabled>Put on and play</button>
+        <button type="button" class="btn" id="sh-stop">Stop</button>
       </div>
       <p class="note" id="sh-status" role="status"></p>
     </div>
   </section>
 </main>
 
-<dialog class="help" id="help" aria-label="도움말">
-  <div class="help-head">
-    <div class="seg small" role="group" aria-label="도움말 항목">
-      <button type="button" id="help-tab-midi" aria-pressed="true">MIDI</button>
-      <button type="button" id="help-tab-map" aria-pressed="false">지도 조작</button>
-      <button type="button" id="help-tab-patterns" aria-pressed="false">패턴 넣기</button>
+<main class="nodes" id="node-page" hidden lang="en">
+  <div class="node-bar">
+    <button type="button" class="btn power" id="ng-power" aria-pressed="false" title="Off: the hub keeps the graph but reads MIDI the plain way (CC 20-28, Program Change). On: the graph runs, and the controllers it names are its own">Nodes: Off</button>
+    <button type="button" class="btn" id="ng-add" title="Also Shift+A, right-click, or double-click on empty space">+ Add</button>
+    <button type="button" class="btn" id="ng-fit" title="Home">Frame all</button>
+    <select id="ng-preview" aria-label="The panel whose values the nodes show"></select>
+    <span class="note grow" id="ng-status" role="status"></span>
+    <button type="button" class="btn small" id="ng-send">Send to hub</button>
+    <button type="button" class="btn small" id="ng-example">Example</button>
+    <button type="button" class="btn small" id="ng-export">Export</button>
+    <label class="btn small" for="ng-import">Import</label>
+    <input type="file" id="ng-import" accept=".json" hidden>
+    <button type="button" class="btn small" id="ng-clear">Clear</button>
+  </div>
+  <div class="node-stage" id="ng-stage" tabindex="0" aria-label="Node graph">
+    <svg id="ng-wires" aria-hidden="true"><path class="wires"></path><path class="loose"></path><path class="cut"></path></svg>
+    <div id="ng-world"></div>
+    <div class="node-hint" id="ng-hint">
+      <strong>Wire MIDI to the panels</strong>
+      <span>Shift+A or right-click adds a node. Drag from socket to socket to connect.</span>
+      <button type="button" class="btn" id="ng-hint-example">Start from an example</button>
     </div>
-    <button type="button" class="btn small" id="help-close">닫기</button>
+    <div class="node-menu" id="ng-menu" hidden></div>
+  </div>
+</main>
+
+<dialog class="help" id="help" aria-label="Help">
+  <div class="help-head">
+    <div class="seg small" role="group" aria-label="Help topics">
+      <button type="button" id="help-tab-midi" aria-pressed="true">MIDI</button>
+      <button type="button" id="help-tab-map" aria-pressed="false">Map</button>
+      <button type="button" id="help-tab-patterns" aria-pressed="false">Patterns &amp; shows</button>
+      <button type="button" id="help-tab-nodes" aria-pressed="false">Nodes</button>
+    </div>
+    <button type="button" class="btn small" id="help-close">Close</button>
   </div>
 
   <div class="help-body" id="help-midi">
-    <p>허브의 USB 잭을 컴퓨터에 꽂으면 MIDI 장치 <b>Patternflow Ensemble</b>이 잡힙니다. 콘솔과 같은 케이블입니다.</p>
+    <p>Plug the hub's USB jack into the computer and a MIDI device named <b>Patternflow Ensemble</b> appears. It is the same cable as the console.</p>
+    <p>This is the plain mapping. It is what applies while <b>Nodes</b> is off; with Nodes on, the controllers the graph names go to the graph instead, and everything else still works this way.</p>
     <section>
-      <h3>채널</h3>
+      <h3>Channels</h3>
       <table>
-        <tr><th class="num">1 ~ 15</th><td>그 번호의 패널 하나</td></tr>
-        <tr><th class="num">16</th><td>모든 패널</td></tr>
+        <tr><th class="num">1 – 15</th><td>The panel with that number</td></tr>
+        <tr><th class="num">16</th><td>Every panel</td></tr>
       </table>
     </section>
     <section>
-      <h3>컴퓨터 → 패널</h3>
+      <h3>Computer → panels</h3>
       <table>
-        <tr><th class="num">CC 20 ~ 23</th><td>노브 K1 ~ K4, 절대값. 0 ~ 127</td></tr>
-        <tr><th class="num">CC 24 ~ 27</th><td>노브 K1 ~ K4, 상대값. 64 그대로, 65 한 칸 위, 63 한 칸 아래</td></tr>
-        <tr><th class="num">CC 28</th><td>밝기. 0 ~ 127 (가장 어둡게 ~ 가장 밝게)</td></tr>
-        <tr><th>Program Change</th><td>패턴 번호</td></tr>
+        <tr><th class="num">CC 20 – 23</th><td>Knobs K1 – K4, absolute. 0 – 127</td></tr>
+        <tr><th class="num">CC 24 – 27</th><td>Knobs K1 – K4, relative. 64 is no motion, 65 one click up, 63 one click down</td></tr>
+        <tr><th class="num">CC 28</th><td>Brightness. 0 – 127 (darkest to brightest)</td></tr>
+        <tr><th>Program Change</th><td>The pattern number</td></tr>
       </table>
     </section>
     <section>
-      <h3>패널 → 컴퓨터</h3>
+      <h3>Panels → computer</h3>
       <table>
-        <tr><th class="num">CC 24 ~ 27</th><td>채널 n으로 패널 n의 K1 ~ K4. 그 패널이 보여 줄 값이 바뀔 때마다 (손으로 돌림, 물결이 닿음, 콘솔)</td></tr>
-        <tr><th>Program Change</th><td>채널 n으로 패널 n의 패턴</td></tr>
-        <tr><th class="num">채널 16</th><td>어디서든 방금 돌린 값 하나. 앙상블 전체를 악기 하나로 쓸 때</td></tr>
+        <tr><th class="num">CC 24 – 27</th><td>On channel n, panel n's K1 – K4, whenever what that panel shows changes (a hand, a ripple arriving, the console)</td></tr>
+        <tr><th>Program Change</th><td>On channel n, panel n's pattern</td></tr>
+        <tr><th class="num">Channel 16</th><td>The value somebody just turned, anywhere: the ensemble as one instrument</td></tr>
       </table>
-      <p>컴퓨터가 보낸 노브 값은 되돌아오지 않습니다. 패턴은 되돌아옵니다. 밝기는 받기만 합니다. 16번 이후 패널은 MIDI에 없습니다.</p>
+      <p>A knob value the computer sent does not come back; a pattern does. Brightness is received only. Panels numbered 16 and up are not on MIDI.</p>
     </section>
   </div>
 
@@ -553,43 +641,82 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
     <section>
       <h3>2D</h3>
       <table>
-        <tr><th>패널 끌기</th><td>옮기기. 0.25칸씩 붙고, <kbd>Alt</kbd>를 누르면 0.01칸씩</td></tr>
-        <tr><th>빈 곳 끌기</th><td>상자 안의 패널 고르기</td></tr>
-        <tr><th><kbd>Shift</kbd> + 클릭</th><td>하나씩 더 고르거나 빼기. <kbd>A</kbd> 모두, <kbd>Esc</kbd> 없음</td></tr>
-        <tr><th>가운데 버튼 끌기</th><td>지도 이동. 휠은 확대</td></tr>
+        <tr><th>Drag a panel</th><td>Move it. It snaps to 0.25 units; hold <kbd>Alt</kbd> for 0.01</td></tr>
+        <tr><th>Drag empty space</th><td>Select the panels inside the box</td></tr>
+        <tr><th><kbd>Shift</kbd> + click</th><td>Add to or take from the selection. <kbd>A</kbd> all, <kbd>Esc</kbd> none</td></tr>
+        <tr><th>Middle button drag</th><td>Pan. The wheel zooms</td></tr>
       </table>
     </section>
     <section>
-      <h3>3D (Blender와 같습니다)</h3>
+      <h3>3D (as in Blender)</h3>
       <table>
-        <tr><th>가운데 버튼 끌기</th><td>회전. <kbd>Shift</kbd>와 함께 이동, <kbd>Ctrl</kbd>과 함께 확대. 가운데 버튼이 없으면 <kbd>Alt</kbd> + 왼쪽 버튼</td></tr>
-        <tr><th>휠</th><td>확대</td></tr>
-        <tr><th>넘패드 <kbd>1</kbd> <kbd>3</kbd> <kbd>7</kbd></th><td>앞, 오른쪽, 위. <kbd>9</kbd> 반대편, <kbd>5</kbd> 원근 ↔ 정사, <kbd>2</kbd> <kbd>4</kbd> <kbd>6</kbd> <kbd>8</kbd> 15°씩 회전. 넘패드가 없으면 숫자 키</td></tr>
-        <tr><th><kbd>Home</kbd></th><td>전체 보기. 넘패드 <kbd>.</kbd>은 고른 패널 보기</td></tr>
-        <tr><th><kbd>G</kbd></th><td>고른 패널 옮기기. <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd>로 그 축만, <kbd>Shift</kbd>와 함께면 그 축만 빼고. <kbd>Ctrl</kbd>은 0.25칸 스냅, 숫자를 치면 그 거리</td></tr>
-        <tr><th><kbd>R</kbd></th><td>고른 패널 돌리기. <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd>로 축을 고르고, <kbd>Ctrl</kbd>은 5° 스냅, 숫자를 치면 그 각도. <kbd>Alt</kbd> + <kbd>R</kbd>은 회전 없애기</td></tr>
-        <tr><th>놓기 · 되돌리기</th><td>클릭이나 <kbd>Enter</kbd> · 오른쪽 버튼이나 <kbd>Esc</kbd></td></tr>
-        <tr><th>오른쪽 위의 축</th><td>끝을 누르면 그쪽에서 봅니다</td></tr>
+        <tr><th>Middle button drag</th><td>Orbit. With <kbd>Shift</kbd> pan, with <kbd>Ctrl</kbd> zoom. No middle button: <kbd>Alt</kbd> + left button</td></tr>
+        <tr><th>Wheel</th><td>Zoom</td></tr>
+        <tr><th>Numpad <kbd>1</kbd> <kbd>3</kbd> <kbd>7</kbd></th><td>Front, right, top. <kbd>9</kbd> the opposite side, <kbd>5</kbd> perspective ↔ orthographic, <kbd>2</kbd> <kbd>4</kbd> <kbd>6</kbd> <kbd>8</kbd> orbit by 15°. No numpad: the number keys</td></tr>
+        <tr><th><kbd>Home</kbd></th><td>Frame everything. Numpad <kbd>.</kbd> frames the selection</td></tr>
+        <tr><th><kbd>G</kbd></th><td>Move the selection. <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> for one axis, with <kbd>Shift</kbd> for the other two. <kbd>Ctrl</kbd> snaps to 0.25 units; type a number for a distance</td></tr>
+        <tr><th><kbd>R</kbd></th><td>Rotate the selection. <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> choose the axis, <kbd>Ctrl</kbd> snaps to 5°; type a number for an angle. <kbd>Alt</kbd> + <kbd>R</kbd> clears the rotation</td></tr>
+        <tr><th>Confirm · cancel</th><td>Click or <kbd>Enter</kbd> · right button or <kbd>Esc</kbd></td></tr>
+        <tr><th>The axes, top right</th><td>Click an end to look from there</td></tr>
       </table>
     </section>
   </div>
 
   <div class="help-body" id="help-patterns" hidden>
     <section>
+      <h3>Patterns</h3>
       <ol>
-        <li>위쪽에서 <b>패턴</b>을 누릅니다.</li>
-        <li>커뮤니티에서 패턴이나 덱의 주소를 복사해 붙여넣고 <b>추가</b>. 주소 뒤에 노브 값이 붙어 있어도 됩니다. 여러 개를 한 번에 붙여도 되고, 덱 주소 하나면 덱 전체가 들어옵니다.</li>
-        <li>줄을 끌어 순서를 정합니다. 이 순서가 패널의 패턴 번호입니다.</li>
-        <li>오른쪽에서 패널을 체크하고 <b>넣기</b>. 그 패널에 있던 모듈은 지워지고 모음 그대로 채워집니다.</li>
-        <li>다 들어가면 줄마다 ▶ 가 생깁니다. 모든 패널에서 그 패턴을 틉니다.</li>
+        <li>Open <b>Patterns</b> at the top.</li>
+        <li>Copy the address of a pattern or a deck on the community and paste it, then <b>Add</b>. Knob values on the end of the address are fine. Several at once work, and one deck address brings the whole deck.</li>
+        <li>Drag the rows into order. The order is the panels' pattern numbers.</li>
+        <li>Tick the panels on the right and <b>Install</b>. What those panels held is cleared and replaced by the set.</li>
+        <li>When it is done every row has a ▶: it plays that pattern on every panel.</li>
       </ol>
-      <h3>쇼 (퍼포먼스)</h3>
-      <p>덱에 퍼포먼스가 붙어 있으면 덱 주소 하나로 함께 들어오고, <b>넣기</b>가 패널에 같이 저장합니다. <code>.pfs</code> 파일을 끌어다 놓아도 됩니다. 무대 화면에서 패널을 고르면 오른쪽 <b>쇼</b>에서 재생(▶), 정지(■), 반복을 정합니다. 여러 패널을 골랐으면 모두에게 갑니다.</p>
-      <p><b>● 녹화</b>: 패널을 고르고 누른 뒤 노브를 돌리며 연주하고, <b>■ 녹화 끝</b>을 누르면 고른 패널마다 자기가 한 것을 바로 반복합니다. 가장 긴 녹화는 10분이고, 움직임이 아주 많으면 조금 거칠게 담깁니다. 패널은 녹화를 네 개까지 두고 오래된 것부터 지웁니다. 목록 옆 ✕ 는 고른 쇼를 패널에서 지웁니다.</p>
-      <p><b>쇼 화면</b>(위쪽 <b>쇼</b>): 녹화한 것과 가져온 것이 보관함에 남습니다. 고르면 노브 네 개의 곡선과 패턴이 바뀌는 곳이 그래프로 보이고, 구간 자르기(시작·끝), 길이(늘리면 느려짐), 노브 바꾸기·뒤집기, 다른 패턴에 얹기를 해 볼 수 있습니다. 원본은 그대로 남아서 언제든 되돌립니다. <b>넣고 재생</b>이 체크한 패널에 넣어 바로 돌립니다.</p>
-      <p>쇼가 도는 패널은 그동안 앙상블에서 빠집니다. 그 패널의 노브는 다른 패널을 움직이지 않고, 다른 패널의 값도 받지 않습니다. 쇼를 멈추면 앙상블이 보여 주는 값으로 돌아옵니다.</p>
-      <p>파일은 이 컴퓨터가 커뮤니티에서 받아 허브를 거쳐 패널로 보냅니다. 컴퓨터는 인터넷에, 허브와는 USB로 이어져 있어야 합니다.</p>
+      <p>This computer fetches the files from the community and sends them to the panels through the hub. It needs the internet, and the USB cable to the hub.</p>
     </section>
+    <section>
+      <h3>Shows (performances)</h3>
+      <p>A show is a recorded loop of patterns and knob moves that a panel plays by itself. A deck with a performance attached brings it along, and <b>Install</b> stores it on the panels too. A <code>.pfs</code> file can be dropped in as well. On the Stage, select a panel and use <b>Shows</b> on the right: play (▶), stop (■), loop. With several panels selected it goes to all of them.</p>
+      <p><b>● Record</b>: select panels, press it, play (by hand, the console or MIDI), then <b>■ Stop</b>. Each selected panel loops what it did, at once. A recording can be ten minutes long; very busy ones are stored a little coarser. A panel keeps four recordings and drops the oldest. The ✕ beside the list deletes the chosen show from the panel.</p>
+      <p>The <b>Shows</b> page keeps every recording and imported show. Choose one to see its four knob curves and where the pattern changes, then cut it (start, end), stretch it (longer is slower), swap or invert knobs, or put it on another pattern. The recording itself is never changed, so it can always be reset. <b>Put on and play</b> sends it to the ticked panels.</p>
+      <p>A panel playing a show is out of the ensemble for that long: its knobs move no other panel, and it takes no values from the others. Stop the show and it returns to what the ensemble is showing.</p>
+    </section>
+  </div>
+
+  <div class="help-body" id="help-nodes" hidden lang="en">
+    <p>Wire the way from a MIDI controller to the panels. Every edit goes to the hub, which then runs the graph by itself, with or without this page. The hub evaluates the graph <b>once for every panel</b>: mix in a Panel Info output (order, position, random) and each panel gets a different value from the same signal.</p>
+    <p><b>Nodes: On / Off</b> is the switch. Off, the hub keeps the graph but ignores it, and MIDI works the plain way (the MIDI tab). On, the controllers the graph names belong to the graph; everything else still works the plain way.</p>
+    <section>
+      <h3>Controls</h3>
+      <table>
+        <tr><th><kbd>Shift</kbd> + <kbd>A</kbd></th><td>Add a node. Also right-click, double-click on empty space, or <b>+ Add</b></td></tr>
+        <tr><th>Drag a socket</th><td>Connect. Drag a connected input away to disconnect. Dropping on a node takes its first free input</td></tr>
+        <tr><th><kbd>Ctrl</kbd> + right-drag</th><td>Cut Links: every wire the stroke crosses is removed. <kbd>Ctrl</kbd> + left-drag from empty space does the same</td></tr>
+        <tr><th>Drag a title</th><td>Move. <kbd>Shift</kbd> + click selects several, <kbd>A</kbd> all, <kbd>Alt</kbd> + <kbd>A</kbd> none</td></tr>
+        <tr><th><kbd>Shift</kbd> + <kbd>D</kbd></th><td>Duplicate. <kbd>Ctrl</kbd> + <kbd>C</kbd> / <kbd>V</kbd> / <kbd>X</kbd> copy, paste (at the pointer), cut. Wires between the copied nodes come along</td></tr>
+        <tr><th><kbd>X</kbd> · <kbd>Delete</kbd></th><td>Delete the selected nodes</td></tr>
+        <tr><th>Drag empty space · wheel</th><td>Pan · zoom. <kbd>Home</kbd> frames everything</td></tr>
+      </table>
+    </section>
+    <section>
+      <h3>Nodes</h3>
+      <table>
+        <tr><th>MIDI CC</th><td>One controller: a channel and a CC number, as 0–1. <b>Learn</b>, then move the controller, and the numbers fill in. Name it. Its slider moves the value without the controller</td></tr>
+        <tr><th>Value · Time · LFO · Noise</th><td>A number · seconds running · a wave (sine, triangle, saw, square) · a slow wander</td></tr>
+        <tr><th>Panel Info</th><td>Of the panel being evaluated: its number, order (0–1), position on the map, and a random number of its own</td></tr>
+        <tr><th>Panel Knobs</th><td>Where that panel's own K1–K4 are now (a hand's turn as an input)</td></tr>
+        <tr><th>Math · Expression</th><td>Add, multiply, invert … · a formula you type</td></tr>
+        <tr><th>Map Range · Clamp · Mix</th><td>0–1 onto 0.2–0.8 · keep inside limits · between two values</td></tr>
+        <tr><th>Smooth · Snap · Switch</th><td>Follow slowly · quantise to steps · choose by a condition</td></tr>
+        <tr><th>Panel Output</th><td>K1–K4 (0–1), Pattern (index), Brightness (0–1). Only connected sockets are sent. Click the line under the title to choose the panels: all, or some. Duplicate it for different panels</td></tr>
+      </table>
+    </section>
+    <section>
+      <h3>Expression</h3>
+      <p><code>a b c d</code> (the inputs) <code>t</code> (seconds) <code>pi</code> · <code>+ - * / % ^ &gt; &lt;</code> · <code>sin cos abs floor round fract sqrt sign noise min max pow mod clamp(x, lo, hi) mix(a, b, f) select(cond, yes, no)</code></p>
+      <p>For example <code>0.5 + 0.5 * sin(t + a * 6)</code></p>
+    </section>
+    <p>A knob turned by hand stays where the hand left it until the graph's value for it moves again. A panel that is playing a show takes nothing from the graph.</p>
   </div>
 </dialog>
 
@@ -597,6 +724,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 
 <script src="pfe_sim.wasm.js"></script>
 <script src="pfs.js"></script>
+<script src="graph.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@
 #include "../core/pfe_midi.h"
 #include "../core/pfe_relay.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1740,6 +1741,337 @@ static void testSolo() {
   CHECK_EQ(val(0, 0), val(1, 0));
 }
 
+// ── 23. The node graph, as the hub runs it ──────────────────────────────
+// A program, assembled the way console/graph.js does.
+struct Prog {
+  std::vector<uint8_t> cc, code;
+  int regs = 0;
+  int reg() { return regs++; }
+  int ctl(int channel, int number, int start = 0) {
+    cc.push_back((uint8_t)channel); cc.push_back((uint8_t)number); cc.push_back((uint8_t)start);
+    return (int)cc.size() / 3 - 1;
+  }
+  int k(float v) {
+    const int r = reg();
+    code.push_back(G_CONST); code.push_back((uint8_t)r);
+    uint8_t b[4]; std::memcpy(b, &v, 4);
+    code.insert(code.end(), b, b + 4);
+    return r;
+  }
+  int op(uint8_t o, std::initializer_list<int> in) {       // an instruction with a result
+    const int r = reg();
+    code.push_back(o); code.push_back((uint8_t)r);
+    for (int x : in) code.push_back((uint8_t)x);
+    return r;
+  }
+  void target(std::initializer_list<int> ids) {
+    code.push_back(G_TARGET); code.push_back((uint8_t)ids.size());
+    for (int id : ids) code.push_back((uint8_t)id);
+  }
+  void out(int r, int what) { code.push_back(G_OUT); code.push_back((uint8_t)r); code.push_back((uint8_t)what); }
+  std::vector<uint8_t> bytes() const {
+    std::vector<uint8_t> b = {'P', 'F', 'G', 1, (uint8_t)(regs ? regs : 1), (uint8_t)(cc.size() / 3)};
+    b.insert(b.end(), cc.begin(), cc.end());
+    b.insert(b.end(), code.begin(), code.end());
+    b.push_back(G_END);
+    return b;
+  }
+};
+static const char* loadGraph(const Prog& g) {
+  const std::vector<uint8_t> b = g.bytes();
+  sim->graph().setEnabled(true, T);
+  return sim->graph().load(b.data(), b.size(), T);
+}
+// The same, the way a console sends it: base64 lines.
+static void sendGraph(const Prog& g) {
+  const std::vector<uint8_t> b = g.bytes();
+  cmd("{\"c\":\"graph\",\"op\":\"begin\",\"len\":" + std::to_string(b.size()) + "}");
+  for (size_t at = 0; at < b.size(); at += 90) {
+    const size_t n = std::min<size_t>(90, b.size() - at);
+    std::string text((n + 2) / 3 * 4, 0);
+    text.resize(base64Encode(b.data() + at, n, &text[0]));
+    cmd("{\"c\":\"graph\",\"op\":\"data\",\"d\":\"" + text + "\"}");
+  }
+  cmd("{\"c\":\"graph\",\"op\":\"end\"}");
+  cmd("{\"c\":\"graph\",\"op\":\"on\"}");
+}
+static void midiCC(int ch, int cc, int v) {
+  cmd("{\"c\":\"midi\",\"ch\":" + std::to_string(ch) + ",\"cc\":" + std::to_string(cc) + ",\"v\":" + std::to_string(v) + "}");
+}
+static bool near(float a, float b, float tol = 0.002f) { return std::fabs(a - b) <= tol; }
+
+static void testGraph() {
+  g_test = "graph";
+  // The arithmetic is the hub's own (no library): close to the real thing.
+  for (float x = -7.0f; x < 7.0f; x += 0.37f) CHECK(near(gmath::sinF(x), std::sin(x), 0.0005f));
+  for (float x = 0.05f; x < 30.0f; x *= 1.7f) {
+    CHECK(near(gmath::logF(x), std::log(x), 0.0005f));
+    CHECK(std::fabs(gmath::powF(x, 0.5f) - std::sqrt(x)) <= 0.001f * std::sqrt(x) + 0.0005f);
+  }
+  CHECK(near(gmath::powF(2.0f, 10.0f), 1024.0f, 0.5f) && gmath::powF(-2.0f, 2.0f) == 0.0f && gmath::powF(5.0f, 0.0f) == 1.0f);
+  CHECK(gmath::floorF(-0.5f) == -1.0f && gmath::floorF(2.9f) == 2.0f && gmath::floorF(-3.0f) == -3.0f);
+  for (float x = 0; x < 20; x += 0.13f) CHECK(gmath::noiseF(x) >= 0.0f && gmath::noiseF(x) <= 1.0f);
+  CHECK(near(gmath::noiseF(3.0f), gmath::noiseF(3.001f), 0.01f));          // it wanders, it does not jump
+
+  fresh(4);
+  links("solo", "solo");
+  cmd("{\"c\":\"cfg\",\"k4\":false}");                 // K4 a fourth knob here, not the pattern switch
+  run(600);
+
+  // One controller to every panel's K1.
+  {
+    Prog g;
+    const int in = g.op(G_CC, {g.ctl(5, 21, 64)});
+    g.out(in, GO_K1);
+    CHECK(loadGraph(g) == nullptr);
+    run(400);
+    CHECK(allValue(0, 504));                                // where the controller starts, until it is heard
+    midiCC(5, 21, 127);
+    run(400);
+    CHECK(allValue(0, 1000));
+    midiCC(5, 21, 0);
+    run(400);
+    CHECK(allValue(0, 0));
+    midiCC(5, 22, 127);                                     // not the program's
+    midiCC(6, 21, 127);
+    run(400);
+    CHECK(allValue(0, 0));
+    CHECK(allValue(1, 500));                                // and a knob it does not write stays the panel's
+    CHECK(sim->graph().onCC(5, 21, 10, T) && !sim->graph().onCC(5, 22, 10, T));   // its own, and not its own
+  }
+
+  // A hand keeps a knob until the program's value for it moves again.
+  {
+    run(400);
+    sim->hand(2, 0, 6);
+    run(800);
+    const uint16_t held = val(2, 0);
+    CHECK(held != val(0, 0));
+    run(1500);
+    CHECK_EQ(val(2, 0), held);
+    midiCC(5, 21, 80);
+    run(500);
+    CHECK(allValue(0, (uint16_t)(80 * 1000 / 127.0f + 0.5f)));
+  }
+
+  // Arithmetic, a range mapped, a choice, and only the panels it names.
+  {
+    Prog g;
+    const int a = g.op(G_CC, {g.ctl(1, 1, 0)});            // 0..1
+    const int half = g.op(G_MUL, {a, g.k(0.5f)});          // 0..0.5
+    const int up = g.op(G_ADD, {half, g.k(0.25f)});        // 0.25..0.75
+    const int inv = g.op(G_SUB, {g.k(1.0f), a});           // 1..0
+    const int big = g.op(G_GT, {a, g.k(0.5f)});
+    const int pick = g.op(G_SELECT, {big, g.k(0.9f), g.k(0.1f)});
+    const int cl = g.op(G_CLAMP, {g.op(G_MUL, {a, g.k(3.0f)}), g.k(0.2f), g.k(0.8f)});
+    g.target({1, 3});
+    g.out(up, GO_K1);
+    g.out(inv, GO_K2);
+    g.target({2});
+    g.out(pick, GO_K1);
+    g.out(cl, GO_K3);
+    g.target({});                                          // everyone
+    g.out(g.op(G_MIX, {g.k(0.0f), g.k(1.0f), a}), GO_K4);
+    sendGraph(g);
+    CHECK(anyLine("\"t\":\"ack\",\"c\":\"graph\""));
+    CHECK(!anyLine("\"t\":\"err\""));
+    for (int i = 0; i < 4; i++) { cmd("{\"c\":\"set\",\"to\":\"" + uidOf(i) + "\",\"k\":[111,222,333,444]}"); }
+    run(500);
+    midiCC(1, 1, 127);
+    run(500);
+    CHECK(val(0, 0) == 750 && val(2, 0) == 750);           // panels 1 and 3
+    CHECK(val(0, 1) == 0 && val(2, 1) == 0);
+    CHECK(val(1, 0) == 900 && val(1, 2) == 800);           // panel 2
+    CHECK(val(3, 0) == 111 && val(3, 1) == 222 && val(3, 2) == 333);   // panel 4: named by nothing but the last
+    CHECK(allValue(3, 1000));
+    midiCC(1, 1, 0);
+    run(500);
+    CHECK(val(0, 0) == 250 && val(0, 1) == 1000 && val(1, 0) == 100 && val(1, 2) == 200 && allValue(3, 0));
+  }
+
+  // The program runs once a panel: its order, its place and a number of its own.
+  {
+    cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(0) + "\",\"x\":0,\"y\":0}");
+    cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(1) + "\",\"x\":2,\"y\":0}");
+    cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(2) + "\",\"x\":4,\"y\":1}");
+    cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(3) + "\",\"x\":6,\"y\":1}");
+    Prog g;
+    g.out(g.op(G_PANEL, {GP_ORDER01}), GO_K1);                                  // 0, 1/3, 2/3, 1
+    g.out(g.op(G_DIV, {g.op(G_PANEL, {GP_X}), g.k(10.0f)}), GO_K2);             // 0, .2, .4, .6
+    g.out(g.op(G_PANEL, {GP_RANDOM}), GO_K3);
+    g.out(g.op(G_DIV, {g.op(G_PANEL, {GP_ID}), g.op(G_PANEL, {GP_COUNT})}), GO_K4);   // 1/4 .. 4/4
+    CHECK(loadGraph(g) == nullptr);
+    run(500);
+    CHECK(val(0, 0) == 0 && val(1, 0) == 333 && val(2, 0) == 667 && val(3, 0) == 1000);
+    CHECK(val(0, 1) == 0 && val(1, 1) == 200 && val(2, 1) == 400 && val(3, 1) == 600);
+    CHECK(val(0, 2) != val(1, 2) && val(1, 2) != val(2, 2));                    // each its own
+    CHECK(val(0, 3) == 250 && val(3, 3) == 1000);
+    const uint16_t mine = val(1, 2);
+    run(2000);
+    CHECK_EQ(val(1, 2), mine);                                                  // and always the same one
+  }
+
+  // A panel's own knob as an input: K1 by hand drives K2, turned over.
+  {
+    Prog g;
+    g.out(g.op(G_SUB, {g.k(1.0f), g.op(G_KNOB, {0})}), GO_K2);
+    CHECK(loadGraph(g) == nullptr);
+    run(500);
+    const uint16_t k1 = val(1, 0);
+    CHECK_EQ(val(1, 1), 1000 - k1);
+    sim->hand(1, 0, 4);
+    run(900);
+    CHECK(val(1, 0) != k1);
+    CHECK_EQ(val(1, 1), 1000 - val(1, 0));
+    CHECK_EQ(val(0, 1), 1000 - val(0, 0));                                      // each panel from its own
+  }
+
+  // Time: a phase goes round at its rate, a smoothed value arrives late and then is there.
+  {
+    Prog g;
+    g.out(g.op(G_PHASE, {g.k(0.5f)}), GO_K1);                                   // once in two seconds
+    const int in = g.op(G_CC, {g.ctl(2, 7, 0)});
+    g.out(g.op(G_SMOOTH, {in, g.k(1.0f)}), GO_K2);
+    g.out(g.op(G_SIN, {g.op(G_TIME, {})}), GO_K3);
+    CHECK(loadGraph(g) == nullptr);
+    run(520);
+    const int p1 = val(0, 0);
+    CHECK(p1 > 180 && p1 < 330);                                                // a quarter of the way round
+    run(1000);
+    CHECK(std::abs((int)val(0, 0) - (p1 + 500)) < 60);
+    run(1000);
+    CHECK(std::abs((int)val(0, 0) - p1) < 80);                                  // round once: back where it was
+    CHECK_EQ(val(0, 1), 0);
+    midiCC(2, 7, 127);
+    run(300);
+    const int early = val(0, 1);
+    CHECK(early > 200 && early < 900);                                          // on its way
+    run(3000);
+    CHECK(val(0, 1) > 990);                                                     // there
+    CHECK(val(0, 2) <= 1000);
+  }
+
+  // The pattern and the brightness.
+  {
+    Prog g;
+    const int in = g.op(G_CC, {g.ctl(1, 30, 0)});
+    g.out(g.op(G_FLOOR, {g.op(G_MUL, {in, g.k(4.999f)})}), GO_PATTERN);         // 0..4
+    g.out(in, GO_BRIGHT);
+    CHECK(loadGraph(g) == nullptr);
+    run(800);
+    CHECK(allPattern(0));
+    midiCC(1, 30, 127);
+    run(1200);
+    CHECK(allPattern(4));
+    for (int i = 0; i < 4; i++) CHECK_EQ(sim->panel(i).brightness, 255);
+    midiCC(1, 30, 64);
+    run(1200);
+    CHECK(allPattern(2));
+    for (int i = 0; i < 4; i++) CHECK(sim->panel(i).brightness > 120 && sim->panel(i).brightness < 140);
+  }
+
+  // What the console sees while it looks: the controllers as they come, one panel's registers.
+  {
+    Prog g;
+    const int in = g.op(G_CC, {g.ctl(3, 40, 0)});
+    g.out(g.op(G_MUL, {in, g.k(0.5f)}), GO_K1);
+    sendGraph(g);
+    sim->outClear();
+    cmd("{\"c\":\"mon\",\"on\":true,\"panel\":\"#2\"}");
+    midiCC(3, 40, 127);
+    midiCC(9, 99, 5);                                                           // nobody's: still shown, to learn it by
+    run(600);
+    CHECK(anyLine("\"t\":\"mi\",\"ch\":3,\"cc\":40,\"v\":127"));
+    CHECK(anyLine("\"t\":\"mi\",\"ch\":9,\"cc\":99,\"v\":5"));
+    CHECK(anyLine("\"t\":\"nv\",\"p\":2,\"v\":[1,0.5,0.5]"));
+    sim->outClear();
+    cmd("{\"c\":\"graph\",\"op\":\"get\"}");
+    CHECK(anyLine("\"t\":\"graph\",\"on\":1", "\"cc\":[[3,40]]"));
+    sim->outClear();
+    cmd("{\"c\":\"mon\",\"on\":false}");
+    midiCC(3, 40, 1);
+    run(600);
+    CHECK(!anyLine("\"t\":\"mi\"") && !anyLine("\"t\":\"nv\""));
+  }
+
+  // The switch. Off: the program is kept, drives nothing and takes no
+  // controller (MIDI is then read the plain way); on again, it sends afresh.
+  {
+    Prog g;
+    g.out(g.op(G_CC, {g.ctl(4, 50, 100)}), GO_K1);
+    sendGraph(g);
+    run(400);
+    const uint16_t driven = (uint16_t)(100 * 1000 / 127.0f + 0.5f);
+    CHECK(allValue(0, driven));
+    cmd("{\"c\":\"graph\",\"op\":\"off\"}");
+    CHECK(sim->graph().active() && !sim->graph().enabled() && !sim->graph().running());
+    CHECK(!sim->graph().onCC(4, 50, 0, T));                                       // not the graph's now
+    cmd("{\"c\":\"set\",\"to\":\"all\",\"k\":[250,null,null,null]}");
+    run(600);
+    CHECK(allValue(0, 250));                                                    // and nothing puts it back
+    sim->outClear();
+    cmd("{\"c\":\"graph\",\"op\":\"get\"}");
+    CHECK(anyLine("\"t\":\"graph\",\"on\":1,\"en\":0"));
+    cmd("{\"c\":\"graph\",\"op\":\"on\"}");
+    run(400);
+    CHECK(allValue(0, driven));                                                 // on: what it says, again
+    CHECK(sim->graph().onCC(4, 50, 100, T));
+    // A hub that has never been told starts with the switch off.
+    Graph cold;
+    CHECK(!cold.enabled() && !cold.running());
+  }
+
+  // No program: nothing is driven, and a controller is nobody's.
+  {
+    cmd("{\"c\":\"graph\",\"op\":\"clear\"}");
+    CHECK(!sim->graph().active());
+    const uint16_t before = val(0, 0);
+    midiCC(3, 40, 127);
+    run(500);
+    CHECK_EQ(val(0, 0), before);
+    CHECK(!sim->graph().onCC(3, 40, 1, T));
+  }
+
+  // What is not a program is refused whole, and what was running goes on.
+  {
+    Prog good;
+    good.out(good.k(0.3f), GO_K1);
+    CHECK(loadGraph(good) == nullptr);
+    run(300);
+    CHECK(allValue(0, 300));
+    auto refuse = [&](std::vector<uint8_t> b) { return Graph::check(b.data(), b.size()) != nullptr; };
+    std::vector<uint8_t> b = good.bytes();
+    CHECK(Graph::check(b.data(), b.size()) == nullptr);
+    { auto x = b; x[3] = 9; CHECK(refuse(x)); }                                 // another version
+    { auto x = b; x.pop_back(); CHECK(refuse(x)); }                             // no END
+    { auto x = b; x.push_back(0); CHECK(refuse(x)); }                           // bytes after END
+    { auto x = b; x[7] = 200; CHECK(refuse(x)); }                               // a register out of range
+    { auto x = b; x[6] = 250; CHECK(refuse(x)); }                               // an instruction nobody knows
+    { auto x = b; x[4] = 0; CHECK(refuse(x)); }                                 // no registers
+    { Prog g; g.code.push_back(G_OUT); g.code.push_back(0); g.code.push_back(9); g.regs = 1; CHECK(refuse(g.bytes())); }
+    { Prog g; g.code.push_back(G_CC); g.code.push_back(0); g.code.push_back(0); g.regs = 1; CHECK(refuse(g.bytes())); }   // a controller not listed
+    { Prog g; g.ctl(17, 1); g.out(g.k(0), GO_K1); CHECK(refuse(g.bytes())); }   // channel 17
+    { Prog g; g.code.push_back(G_TARGET); g.code.push_back(5); g.regs = 1; CHECK(refuse(g.bytes())); }   // cut short
+    { Prog g; const int z = g.k(1); for (int i = 0; i < GRAPH_MAX_STATE + 1; i++) g.op(G_PHASE, {z}); CHECK(refuse(g.bytes())); }
+    CHECK(refuse(std::vector<uint8_t>(3000, 1)));
+    // Through the console: an error, and the good one still runs.
+    sim->outClear();
+    cmd("{\"c\":\"graph\",\"op\":\"begin\",\"len\":8}");
+    cmd("{\"c\":\"graph\",\"op\":\"data\",\"d\":\"UEZHAQEA+g==\"}");                // 7 of the 8 promised
+    cmd("{\"c\":\"graph\",\"op\":\"end\"}");
+    CHECK(anyLine("\"t\":\"err\",\"c\":\"graph\""));
+    sim->outClear();
+    cmd("{\"c\":\"graph\",\"op\":\"begin\",\"len\":7}");
+    cmd("{\"c\":\"graph\",\"op\":\"data\",\"d\":\"UEZHAQEA+g==\"}");                // whole, and nonsense
+    cmd("{\"c\":\"graph\",\"op\":\"end\"}");
+    CHECK(anyLine("\"t\":\"err\",\"c\":\"graph\""));
+    cmd("{\"c\":\"graph\",\"op\":\"begin\",\"len\":99999}");
+    CHECK(sim->graph().active());
+    run(300);
+    CHECK(allValue(0, 300));
+  }
+}
+
 int main() {
   testCodec();
   testFollower();
@@ -1763,6 +2095,7 @@ int main() {
   testRelay();
   testNames();
   testSolo();
+  testGraph();
   std::printf("%s  %d checks, %d failed\n", g_failed ? "FAIL" : "PASS", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "pfe_conductor.h"
+#include "pfe_graph.h"
 
 namespace pfe {
 
@@ -203,6 +204,9 @@ class Console {
   Console(Conductor& c, const ConductorIo& io, const char* hubInfo)
       : c_(c), io_(io), hubInfo_(hubInfo) {}
 
+  // The node graph this console's "graph", "midi" and "mon" are about (pfe_graph.h).
+  void setGraph(Graph* g) { graph_ = g; }
+
   // One line from the console. Anything that is not a JSON object with a
   // "c" is ignored without a reply: the same port carries boot logs.
   ConsoleResult handle(const char* s, size_t n) {
@@ -357,6 +361,63 @@ class Console {
       return c_.setPanel(to, pattern, knob, glide) ? nullptr : "no such panel";
     }
 
+    // The node graph: a program for the hub, in pieces.
+    //   {"c":"graph","op":"begin","len":N}  {"c":"graph","op":"data","d":"<base64>"} ...  {"c":"graph","op":"end"}
+    //   {"c":"graph","op":"clear"}   {"c":"graph","op":"get"}   {"c":"graph","op":"on"} / "off": the switch
+    if (is("graph")) {
+      if (!graph_) return "this hub runs no graphs";
+      if (o.is("op", "begin")) {
+        int len = 0;
+        o.integer("len", &len);
+        if (len < 1 || (size_t)len > GRAPH_MAX_BYTES) return "too long for this hub";
+        graph_->stageStart((size_t)len);
+        return nullptr;
+      }
+      if (o.is("op", "data")) {
+        const JVal* d = o.get("d");
+        uint8_t bytes[400];
+        const long n = d && d->type == 's' ? base64Decode(d->p, d->n, bytes, sizeof(bytes)) : -1;
+        return n >= 0 && graph_->stageMore(bytes, (size_t)n) ? nullptr : "not the bytes that were promised";
+      }
+      if (o.is("op", "end")) return graph_->stageEnd(c_.nowMs());
+      if (o.is("op", "clear")) { graph_->clear(); return nullptr; }
+      if (o.is("op", "on")) { graph_->setEnabled(true, c_.nowMs()); return nullptr; }
+      if (o.is("op", "off")) { graph_->setEnabled(false, c_.nowMs()); return nullptr; }
+      if (o.is("op", "get")) {
+        Out out(line_, sizeof(line_));
+        out.str("{\"t\":\"graph\",\"on\":").u32(graph_->active() ? 1 : 0).str(",\"en\":").u32(graph_->enabled() ? 1 : 0).str(",\"len\":").u32((uint32_t)graph_->size()).str(",\"cc\":[");
+        for (int i = 0; i < graph_->controllers() && i < 24; i++) {
+          int ch = 0, number = 0;
+          graph_->controller(i, &ch, &number);
+          if (i) out.ch(',');
+          out.ch('[').i32(ch).ch(',').i32(number).ch(']');
+        }
+        out.str("]}");
+        if (!out.overflow && io_.line) io_.line(io_.ctx, out.buf, out.len);
+        return nullptr;
+      }
+      return "op: begin, data, end, clear, on, off or get";
+    }
+    // A MIDI controller moved from the console instead of from a MIDI port: for the graph.
+    if (is("midi")) {
+      int ch = 0, cc = -1, v = -1;
+      o.integer("ch", &ch);
+      o.integer("cc", &cc);
+      o.integer("v", &v);
+      if (ch < 1 || ch > 16 || cc < 0 || cc > 127 || v < 0 || v > 127) return "ch 1-16, cc and v 0-127";
+      if (graph_) graph_->onCC(ch, cc, v, c_.nowMs());
+      return nullptr;
+    }
+    // The console is looking at the graph (or no longer is): MIDI as it comes in, and one panel's registers.
+    if (is("mon")) {
+      if (!graph_) return "this hub runs no graphs";
+      bool on = false;
+      o.boolean("on", &on);
+      const int i = panelOf(o, "panel");
+      graph_->setMonitor(on, i >= 0 ? c_.panel(i).id : 0);
+      return nullptr;
+    }
+
     if (is("names")) {
       bool clear = false;
       if (o.boolean("clear", &clear) && clear) {
@@ -412,6 +473,7 @@ class Console {
   ConductorIo io_;
   const char* hubInfo_;
   char line_[256];
+  Graph* graph_ = nullptr;
 };
 
 }  // namespace pfe
