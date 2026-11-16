@@ -264,7 +264,7 @@ Check the device and the mappings first with the laptop alone, without the panel
 1. Install **loopMIDI** (Tobias Erichsen, free) and add a port called `PF Test`.
 2. Live settings: **In: PF Test** → Track ON, Remote ON. **Out: PF Test** → all OFF (prevents a loop).
 3. For now, switch the control track's MIDI From to `PF Test` and its MIDI To to **No Output**. A loopMIDI port is a loop: whatever you send into it comes straight back in. If MIDI From and MIDI To are the same loopMIDI port, the device's request comes back, and if Thru is on as well, messages go round forever.
-4. In a terminal (in the `exhibition_2026` folder — the repo root; needs `pip install python-rtmidi`):
+4. In a terminal (in the `exhibition_2026` folder; needs `pip install python-rtmidi`):
 
 ```bash
 python tools/send_test.py --list
@@ -404,7 +404,7 @@ This device was built without Live or Max, using the format of the earlier Bridg
 11. **CC 24–26 = knob position** (panel firmware, 2026-09-19; only host tests so far; the checklist on the panel side is root `README.md` [§8](../docs/setup-notes.en.md#8-not-yet-confirmed-on-hardware) item 15) — whether the Live parameters are set to the panel position by the 3 CCs right after the PC when the session connects, and by the 3 CCs that FlowLocal re-sends after the PC when only Live restarts. With **Takeover None** (§2), whether a parameter changed on the Live side (mouse, value saved in the set) goes to the panel position in one step on the next CC, whether that jump is acceptable to the ear, and whether Live applies a CC that arrives again with the same value. Whether the return to CC 64 at idle return sounds all right, and whether the middle of the mapped range is acceptable as the opening sound.
 12. **Footstep notes** (panel firmware, 2026-09-20; only host tests and a build; not flashed to the panel) — on HEOEUNBIN, whether `midi_monitor.py` shows `NoteOn ch10 36` and `38` alternating; whether the rate follows 3 × Speed per second when K3 turns (end 0.6 / middle 2.1 / end 7.2); whether the Drum Rack's C1 and D1 sound; whether the sound comes together with the moment the foot touches down on the LEDs (if it is a few ms off, §4 Track Delay). Whether the notes stop, with no note left hanging, when K4 goes to another pattern and when the panel goes to sleep. Whether footsteps that enter the control track (All Channels) do not fire scenes.
 
-Commands for checking during development (in the `exhibition_2026` folder — the repo root):
+Commands for checking during development (in the `exhibition_2026` folder):
 
 ```bash
 python -c "import json; json.load(open('ableton/pf-exhibit-scenes/pf_exhibit_scenes.maxpat', encoding='utf-8'))"

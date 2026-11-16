@@ -1,17 +1,21 @@
 # The shell tools must keep LF even with core.autocrlf on (bash rejects CRLF).
 *.sh text eol=lf
-# Pattern sources stay byte-identical to what goes into Pattern Lab.
-patterns/**/*.js text eol=lf
-patterns/**/*.json text eol=lf
-
 # Firmware images are binary.
 *.bin binary
-# sha256sum -c needs LF line ends.
-firmware_images/SHA256SUMS text eol=lf
-patterns/**/*.h text eol=lf
-# cmd.exe mis-reads labels in LF-only batch files; PowerShell 5.1 needs the ps1 BOM kept.
+# cmd.exe mis-reads labels in LF-only batch files.
 *.bat text eol=crlf
-tools/monitor/*.ps1 text eol=crlf
-# Ensemble: generated from ensemble/core and ensemble/console (tools/build_wasm.py, tools/build_console.py).
+
+# ── exhibition_2026 ─────────────────────────────────────────────────────
+# Pattern sources stay byte-identical to what goes into Pattern Lab.
+exhibition_2026/patterns/**/*.js text eol=lf
+exhibition_2026/patterns/**/*.json text eol=lf
+exhibition_2026/patterns/**/*.h text eol=lf
+# sha256sum -c needs LF line ends.
+exhibition_2026/firmware_images/SHA256SUMS text eol=lf
+# PowerShell 5.1 needs the ps1 BOM kept.
+exhibition_2026/tools/monitor/*.ps1 text eol=crlf
+
+# ── ensemble ────────────────────────────────────────────────────────────
+# Generated from ensemble/core and ensemble/console (tools/build_wasm.py, tools/build_console.py).
 ensemble/console/pfe_sim.wasm.js linguist-generated -diff
 ensemble/hub/src/console_page.h linguist-generated -diff

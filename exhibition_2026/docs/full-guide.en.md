@@ -108,7 +108,7 @@ Plan an afternoon: about an hour for the two firmware builds (most of it downloa
 
 ```bash
 git clone https://github.com/engmung/patternflow-exhibition-2026
-cd patternflow-exhibition-2026
+cd patternflow-exhibition-2026/exhibition_2026
 ```
 
 Choose one Wi-Fi password (8–63 characters, **not** `patternflow` — the FlowLocal build refuses that one). The hotspot name stays **`PatternflowLocal`**. You will write the same name and password into *both* boards' secrets files below; they are compiled into both images, so never publish those `.bin` files.

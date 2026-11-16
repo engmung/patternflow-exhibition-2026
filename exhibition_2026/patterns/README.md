@@ -32,7 +32,7 @@
    python tools/patterns/check_sync.py --accept <이름>        # OK일 때만: 지금 상태를 기록
    node tools/patterns/preview.mjs                           # 시뮬레이터 다시 만들기
    ```
-4. 패널 펌웨어 빌드와 굽기는 루트 `README.md` 4장. 굽기 전에 한 번:
+4. 패널 펌웨어 빌드와 굽기는 `exhibition_2026` 폴더의 `README.md` 4장. 굽기 전에 한 번:
    ```bash
    python tools/patterns/check_sync.py     # 전부 "in step"이어야 한다
    ```
@@ -43,4 +43,4 @@
 
 - `.js`, `.h`, `.json`은 어느 컴퓨터에서 받아도 줄바꿈이 LF로 유지된다(`.gitattributes`). 그래서 복사한 내용이 원본과 바이트까지 같다.
 - 시뮬레이터와 렌더 도구, 호스트 대조(`pfhost.py`)는 메인 레포(`../랜딩페이지_opensorce/web`)의 Pattern Lab 런타임을 쓴다. 다른 컴퓨터에서는 메인 레포를 옆에 받고 `web/`에서 `npm install`을 한 번 해야 한다. 복사·붙여넣기만 할 거면 필요 없다(`preview.html`은 그대로 열린다).
-- 노브·누르기·대기 복귀 규칙은 루트 `PATTERN_KNOBS.md`.
+- 노브·누르기·대기 복귀 규칙은 한 폴더 위의 `PATTERN_KNOBS.md`.

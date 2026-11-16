@@ -67,4 +67,4 @@ FlowLocal은 핫스팟 설정이 펌웨어에 박혀 있어서 지워도 잃는 
 
 ## 이미지를 새로 만들었을 때
 
-펌웨어를 고쳐 다시 빌드했으면 이 폴더의 파일도 바꾸고 `SHA256SUMS`를 다시 만든다(이 폴더에서 `sha256sum panel/*.bin flowlocal/*.bin > SHA256SUMS`). 이 노트북의 빌드 결과는 `C:/Users/user/pfx-exhibit-build/firmware/firmware.bin`(패널), `C:/Users/user/flx-pio/build/exhibit/firmware.bin`과 `firmware.factory.bin`(FlowLocal)이다. 그다음 `flasher.html`도 다시 만든다(레포 맨 위에서 `node tools/flasher/build.mjs`, 처음 한 번은 `cd tools/flasher && npm install`). 체크섬이 안 맞으면 만들기를 거부한다. 빌드 방법은 루트 `README.md` 4장과 `backups/README.md`.
+펌웨어를 고쳐 다시 빌드했으면 이 폴더의 파일도 바꾸고 `SHA256SUMS`를 다시 만든다(이 폴더에서 `sha256sum panel/*.bin flowlocal/*.bin > SHA256SUMS`). 이 노트북의 빌드 결과는 `C:/Users/user/pfx-exhibit-build/firmware/firmware.bin`(패널), `C:/Users/user/flx-pio/build/exhibit/firmware.bin`과 `firmware.factory.bin`(FlowLocal)이다. 그다음 `flasher.html`도 다시 만든다(레포 맨 위에서 `node tools/flasher/build.mjs`, 처음 한 번은 `cd tools/flasher && npm install`). 체크섬이 안 맞으면 만들기를 거부한다. 빌드 방법은 `exhibition_2026` 폴더의 `README.md` 4장과 `backups/README.md`.

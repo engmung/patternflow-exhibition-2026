@@ -2622,7 +2622,7 @@ class PowerSettingsTests(unittest.TestCase):
 # ------------------------------------------------ the one-click power settings file
 
 class PowerScriptTests(unittest.TestCase):
-    """노트북 전시용 전원 설정.bat at the repo root. Read, never run."""
+    """노트북 전시용 전원 설정.bat in the exhibition_2026 folder. Read, never run."""
 
     PATH = os.path.join(REPO, m.POWER_SCRIPT)
 

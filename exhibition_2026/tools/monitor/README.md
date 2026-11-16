@@ -199,7 +199,7 @@
 | USB 선택적 절전 | `2a737441…` / `48e6b7a6…` (이 노트북에는 별칭이 없다) | 0 = 사용 안 함 | 0 / 0 |
 | PCI Express 링크 상태 전원 관리 | SUB_PCIEXPRESS / ASPM | 0 = 해제 | **2 최대 절전 / 2 최대 절전** |
 
-**고치기**: 루트 폴더(레포 맨 위, `패턴플로우 모니터 열기.bat`이 있는 곳)의 **`노트북 전시용 전원 설정.bat`을 한 번 실행한다**(두 번 누르기). 지금 쓰는 전원 구성표의 위 다섯 가지를 전원 연결·배터리 둘 다 0으로 하고(`powercfg /setacvalueindex` / `/setdcvalueindex SCHEME_CURRENT <하위 그룹> <설정> 0`), `powercfg /setactive SCHEME_CURRENT`로 적용한 뒤 바뀐 값(모든 줄이 `0x00000000`이어야 한다)을 보여 주고 멈춘다. 화면 끄기 시간은 건드리지 않는다. 다시 실행해도 된다. 모니터 화면은 1분 안에 따라온다.
+**고치기**: `exhibition_2026` 폴더(`패턴플로우 모니터 열기.bat`이 있는 곳)의 **`노트북 전시용 전원 설정.bat`을 한 번 실행한다**(두 번 누르기). 지금 쓰는 전원 구성표의 위 다섯 가지를 전원 연결·배터리 둘 다 0으로 하고(`powercfg /setacvalueindex` / `/setdcvalueindex SCHEME_CURRENT <하위 그룹> <설정> 0`), `powercfg /setactive SCHEME_CURRENT`로 적용한 뒤 바뀐 값(모든 줄이 `0x00000000`이어야 한다)을 보여 주고 멈춘다. 화면 끄기 시간은 건드리지 않는다. 다시 실행해도 된다. 모니터 화면은 1분 안에 따라온다.
 
 - **관리자 권한이 필요 없다.** 전원 구성표의 권한이 사용자(BU)에게 읽기·쓰기(`KRKW`)를 준다: 이 노트북에서 관리자 권한 없이 `powercfg /getsecuritydescriptor SCHEME_CURRENT`와 `ActionSetActive`가 둘 다 `(A;CI;KRKW;;;BU)`였다. Microsoft의 powercfg 문서도 관리자 권한은 `/systemsleepdiagnostics`·`/systempowerreport`에만 적는다. 어떤 컴퓨터에서 "액세스가 거부"가 나오면 파일을 오른쪽 클릭 → 관리자 권한으로 실행한다. `powercfg /hibernate off`(관리자 필요)는 쓰지 않는다. 시간 설정 0이면 최대 절전으로 넘어가지 않는다.
 - 없는 설정은 `NOT CHANGED`로 알리고 넘어간다.
@@ -212,7 +212,7 @@
 - **언제**: 이 모니터가 켜진 뒤 Live가 도는 것을 본 적이 있고, Live 프로세스가 사라지고 **8초 뒤에도 없을 때**(그 사이 누가 손으로 켰을 수 있다). Windows가 꺼지는 중(`GetSystemMetrics(SM_SHUTTINGDOWN)`)이면 켜지 않는다. 노트북을 켤 때 Live를 여는 것은 모니터가 아니다(시작 프로그램, `ableton/README.md` 7장. 이 노트북의 시작 프로그램에는 2026-09-25 현재 Live 바로가기가 없다).
 - **어떻게**: `config.json`의 `live_set`(기본 `set Project/set.als`, 레포 맨 위 기준)을 파일 연결로 연다(`os.startfile`, 이 노트북의 `.als` = `Ableton.Live.AppLiveSuite.als.12`). 그게 안 되거나 켰는데 90초 안에 Live가 안 뜨면, 다음에는 Live가 돌던 실행 파일(예: `C:\ProgramData\Ableton\Live 12 Suite\Program\Ableton Live 12 Suite.exe`)에 세트를 넘겨 연다.
 - **몇 번**: 15분에 3번까지. 넷째로 꺼지면 더 켜지 않고 빨강 **Live가 계속 꺼져요 — 담당자에게 연락해 주세요**. Live가 다시 돌면(손으로 켬, 노트북 다시 시작) 풀린다. 스위치를 껐다 켜도 15분 안의 횟수는 그대로다.
-- **화면**: 꺼져서 켜는 동안 노랑 기다림 **음악 프로그램(Ableton Live)이 꺼져서 다시 켜는 중이에요… 1분쯤 걸려요**, 할 일은 "아무것도 누르지 말고 기다리기"와 복구 창에서 누를 버튼(`live_recovery_button`). 세트가 열린 것은 FlowLocal의 재동기화 요청 수(`rr`)가 느는 것으로 안다(Live 장치가 세트를 열고 0.5초 뒤 요청한다, 루트 `README.md` 3장. 소리 다시 맞추기 버튼을 누른 뒤에는 이것으로 치지 않는다). 확인하지 못하면 5분 동안 노랑 **음악 프로그램이 조금 전 다시 켜졌어요 — 소리가 나는지 봐 주세요**.
+- **화면**: 꺼져서 켜는 동안 노랑 기다림 **음악 프로그램(Ableton Live)이 꺼져서 다시 켜는 중이에요… 1분쯤 걸려요**, 할 일은 "아무것도 누르지 말고 기다리기"와 복구 창에서 누를 버튼(`live_recovery_button`). 세트가 열린 것은 FlowLocal의 재동기화 요청 수(`rr`)가 느는 것으로 안다(Live 장치가 세트를 열고 0.5초 뒤 요청한다, `exhibition_2026` 폴더의 `README.md` 3장. 소리 다시 맞추기 버튼을 누른 뒤에는 이것으로 치지 않는다). 확인하지 못하면 5분 동안 노랑 **음악 프로그램이 조금 전 다시 켜졌어요 — 소리가 나는지 봐 주세요**.
 - **기록**: 꺼짐, Windows 충돌 기록, 다시 켬(15분 안에 몇 번째), 떴음, 세트 열림 또는 모름, 멈춤이 모두 `logs`에 한 줄씩 남는다. 충돌 기록은 Windows 응용 프로그램 로그의 1000(Application Error), 1002(Application Hang), 1001(Windows Error Reporting APPCRASH·AppHang) 중 "Ableton Live"가 적힌 것을 `wevtutil qe Application /f:xml`로 읽는다(이벤트 ID와 데이터 값만 읽어서 한국어 Windows에서도 된다. 출력은 OEM 코드페이지다). **기록 없이 꺼지기도 한다**: 21:44에는 아무 기록이 없었고, 21:50의 1001 APPCRASH(`rthdasio64.dll`, `c0000005`)는 16:17 충돌의 보고서(ReportId `dd12d02c…` = 16:17 Application Error의 IntegratorReportId)를 늦게 보낸 것이다. 그래서 1001은 1000·1002가 없을 때만 쓰고, 기록이 없어도 다시 켠다. 이날 Live는 15:52와 16:17에도 `rthdasio64.dll`(Realtek ASIO 드라이버)에서 죽었다.
 
 ### 스위치 — Live를 일부러 닫기 전에 끈다

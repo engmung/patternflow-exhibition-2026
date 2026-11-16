@@ -308,7 +308,7 @@ STEP_REPLUG_TAPED = ("안 되면 작은 보드(FlowLocal) 케이블을 노트북
 STEP_RST_SHORT = ("작은 보드(FlowLocal)의 RST 버튼을 한 번 눌러요(BOOT 말고). "
                   "안 되면 뽑았다가 5초 뒤 같은 테이프 자리에 다시 꽂아요.")
 POWER_SCRIPT = "노트북 전시용 전원 설정.bat"
-STEP_POWER_SCRIPT = ("(담당자) 루트 폴더(레포 맨 위, '패턴플로우 모니터 열기.bat'이 있는 곳)의 "
+STEP_POWER_SCRIPT = ("(담당자) exhibition_2026 폴더('패턴플로우 모니터 열기.bat'이 있는 곳)의 "
                      "'%s'을 한 번 실행해요. 관리자 권한은 필요 없어요." % POWER_SCRIPT)
 # A panel that went dark cannot take the reboot command: the power comes first.
 STEP_REBOOT_PANEL_IF_ON = ("패널에 그림이 보이는지(전원이 켜져 있는지) 봐요. 그림이 보이면 화면의 [패널 다시 켜기] 버튼을 누르세요. "
@@ -3967,7 +3967,7 @@ SUB_PCIEXPRESS = "501a4d13-42af-4429-9fd1-a8218c268e20"     # SUB_PCIEXPRESS
 
 # key, subgroup, setting, label, kind. The show needs every one at 0 on the
 # charger (AC) and on battery (DC), so that pulling the charger out never stops
-# it; "노트북 전시용 전원 설정.bat" (repo root) sets exactly these. By GUID: the
+# it; "노트북 전시용 전원 설정.bat" (in the exhibition_2026 folder) sets exactly these. By GUID: the
 # aliases are not on every machine (USBSELECTIVESUSPEND is not on this laptop),
 # and LIDACTION is a hidden setting that only `powercfg /qh` lists.
 POWER_CHECKS = (
@@ -4111,7 +4111,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
 def live_set_path(cfg):
     """config.json "live_set": the exhibition set the monitor opens when it
-    starts Live again. Relative to the repo root; empty = set Project/set.als."""
+    starts Live again. Relative to the exhibition_2026 folder; empty = set Project/set.als."""
     v = os.path.expandvars(str((cfg or {}).get("live_set") or "").strip()) or DEFAULT_LIVE_SET
     return os.path.normpath(v if os.path.isabs(v) else os.path.join(REPO_ROOT, v))
 

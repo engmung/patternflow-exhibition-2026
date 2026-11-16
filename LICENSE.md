@@ -1,16 +1,13 @@
 # Licences
 
-This repository mixes code, designs, documentation, media and six artists' works. They do not all share one licence. This note says which applies where. Where a file states its own licence in its header, that header wins — except that the credit to the artist always applies to the six patterns.
+One folder a case, and each case says which licence applies to what in it. In short, for the whole repository:
 
-| What | Licence | Notes |
-|---|---|---|
-| **Patternflow code** in this repo: the Max for Live device ([`ableton/pf-exhibit-scenes/`](ableton/pf-exhibit-scenes/), the `.amxd` and its `.js` in [`set Project/Presets/`](set%20Project/Presets/)), the Python and Node tools in [`tools/`](tools/), the `.bat` helpers, and the panel firmware patch [`firmware/panel-exhibit-2026.patch`](firmware/panel-exhibit-2026.patch) | **MIT** | Patternflow's firmware and web code are MIT. `pf_exhibit_scenes.js` and the firmware files the patch adds say `License: MIT` in their headers. The patch applies to [Patternflow](https://github.com/engmung/Patternflow), whose own licence files govern the tree you build. |
-| **The six artists' patterns** — [`patterns/1_bakwan/`](patterns/1_bakwan/) to [`patterns/6_yujin/`](patterns/6_yujin/) and [`patterns/_original/`](patterns/_original/) (`.js`, `.h`, project JSON) | **CC BY-SA 4.0, with credit to each artist** | Each pattern is drawn from an artist's work in *Anbu*. The organiser (Ablind) allowed the creator, Seunghun Lee, to use the exhibition's work freely, and he publishes the patterns on these terms. CC BY-SA allows adaptation and commercial use, with credit and share-alike. When you reuse one, credit the artist by name (Korean and English; ready-made lines in [`CREDITS.md`](CREDITS.md#how-to-credit-a-pattern-when-you-reuse-it)) as well as Patternflow — even where a file's header names only the code's author (`Author: @engmung`, `SPDX-License-Identifier: CC-BY-SA-4.0`), and in files that carry no header. The licence covers the pattern code and the pictures it draws; it does **not** license the artists' original works (paintings, ceramics, sculptures) — for those, ask the artists through the organiser, Ablind. |
-| **FlowLocal firmware** — [`firmware/flowlocal/`](firmware/flowlocal/) | **MIT** | `flowlocal.ino` and the source files under `src/` say `License: MIT`. The libraries it downloads at build time keep their own licences. The case models (`3D_STL/`), photos (`build_pics/`) and bundled web content come with the FlowLocal project. |
-| **Documentation** — every `.md` file (English and Korean), and the patterns' web preview [`patterns/preview.html`](patterns/preview.html) | **CC BY-SA 4.0** | Patternflow's documentation, hardware and designs are CC BY-SA 4.0 (see the footer of [patternflow.work](https://patternflow.work)). |
-| **The Ableton Live set** — [`set Project/set.als`](set%20Project/set.als) | **CC BY-SA 4.0** (a Patternflow design) | It refers to Ableton's own devices, presets and pack samples (Mood Reel, Drone Lab, Granulator III). Those are not part of this repository and stay under Ableton's licence terms. You need your own Live 12 Suite. |
-| **Media** — [`media/`](media/): the demo video, GIF, poster and two exhibition photos (by the creator, Seunghun Lee), and screenshots of the tools | **CC BY-SA 4.0**, credit Patternflow / Seunghun Lee | The licence covers the photographs and recordings. The artists' works visible in them are not licensed and remain the artists'; neither is the likeness of the people shown. |
+- **Code is MIT.** Firmware, tools, the console, tests: a file that states its licence in its head means what it says.
+- **Documents, media, patterns and the Ableton Live set are CC BY-SA 4.0**: give credit and share alike. For the six artists' patterns of the Anbu exhibition, credit **the artist** as well.
 
-**In short:** reuse the code under MIT. For the patterns, documents, set and media, give credit and share alike under CC BY-SA 4.0. For the patterns, credit **the artist** as well.
+| Case | Where its licences are spelled out |
+|---|---|
+| [`exhibition_2026/`](exhibition_2026/) — Anbu | [`exhibition_2026/LICENSE.md`](exhibition_2026/LICENSE.md), with the artists in [`exhibition_2026/CREDITS.md`](exhibition_2026/CREDITS.md) |
+| [`ensemble/`](ensemble/) — Ensemble | Every source file says `License: MIT` in its head. The documents (`README.md`, `PROTOCOL.md`) are CC BY-SA 4.0. The panel image is built from [Patternflow](https://github.com/engmung/Patternflow)'s own source, under Patternflow's licences. |
 
 Licence texts: [MIT](https://opensource.org/license/mit) · [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).

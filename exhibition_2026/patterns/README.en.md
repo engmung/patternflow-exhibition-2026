@@ -45,4 +45,4 @@ One folder per pattern. The number is the K4 order (pattern 1 is the one the pan
 
 - `.js`, `.h` and `.json` files keep LF line endings on whatever computer you check them out (`.gitattributes`). So what you copy is identical to the original, byte for byte.
 - The simulator, the render tool and the host comparison (`pfhost.py`) use the Pattern Lab runtime from the main repo (`../랜딩페이지_opensorce/web`; the folder name **랜딩페이지** means "landing page"). On another computer, clone the main repo next to this one and run `npm install` once in its `web/`. If you only copy and paste, you do not need any of this (`preview.html` opens as it is).
-- The knob, press and idle-return rules are in [`PATTERN_KNOBS.en.md`](../PATTERN_KNOBS.en.md) at the repo root.
+- The knob, press and idle-return rules are in [`PATTERN_KNOBS.en.md`](../PATTERN_KNOBS.en.md), one folder up.
