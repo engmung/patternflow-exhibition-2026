@@ -84,6 +84,11 @@ h2 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: 
 .btn.quiet { background: transparent; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.small { padding: 3px 8px; font-size: 12.5px; }
+.btn.toggle[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--cream); }
+details.more { margin-top: 8px; }
+details.more > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; user-select: none; padding: 2px 0; }
+details.more > summary:hover { color: var(--ink); }
+details.more[open] > summary { margin-bottom: 8px; }
 
 /* ── Grid ────────────────────────────────────────────── */
 .grid { flex: 1; min-height: 0; display: grid; gap: 12px; grid-template-columns: 264px minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
@@ -223,6 +228,7 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 #ng-wires .cut { stroke: #B83C1C; stroke-width: 1.5; stroke-dasharray: 4 3; }
 .node-stage.cutting, .node-stage.cutting .gn, .node-stage.cutting .sock { cursor: crosshair; }
 #ng-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; z-index: 2; }
+#ng-mini { position: absolute; right: 10px; top: 10px; width: 320px; height: 190px; z-index: 3; pointer-events: none; background: rgba(255, 255, 255, 0.9); border: 1px solid var(--rule); border-radius: 8px; }
 .gn { position: absolute; width: 196px; background: #FFFCFA; color: #1A1814; border: 1px solid #B9B2A4; border-radius: 8px;
   box-shadow: 0 2px 6px rgba(26, 24, 20, 0.12); font-size: 12.5px; cursor: default; }
 .gn.sel { border-color: var(--led); box-shadow: 0 0 0 2px var(--led); }
@@ -309,6 +315,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
     <button type="button" id="page-patterns" aria-pressed="false">Patterns</button>
     <button type="button" id="page-shows" aria-pressed="false">Shows</button>
     <button type="button" id="page-nodes" aria-pressed="false">Nodes</button>
+    <button type="button" id="page-setup" aria-pressed="false">Setup</button>
   </div>
   <div class="conn">
     <div class="seg" role="group" aria-label="How to reach the hub">
@@ -389,6 +396,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
           <option value="ring">Ring</option>
           <option value="stagger">Staggered rows</option>
         </select>
+        <button type="button" class="btn toggle" id="map-wire" aria-pressed="false" title="Wires between panels. On: drag from one panel to another to join them (again to part them), drag across wires from empty space to cut them. Without this: the same with the right button (Ctrl + right button cuts), and F joins the selected panels">Wire</button>
         <button type="button" class="btn" id="map-identify">Show all marks</button>
         <button type="button" class="btn" id="map-addresses" title="Copies the address of every connected panel, one a line. For putting firmware on over Wi-Fi.">Copy addresses</button>
       </div>
@@ -425,6 +433,8 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
         <div><h3 id="insp-title" style="font-size:14px">Panel</h3><span class="note mono" id="insp-uid"></span></div>
         <span class="pill" id="insp-state">Connected</span>
       </div>
+      <details class="more" id="insp-more">
+      <summary>Number, name, position, links</summary>
       <div class="two">
         <label class="field"><span>Number</span><input type="number" id="p-id" min="1" max="250"></label>
         <label class="field"><span>Name</span><input type="text" id="p-name" maxlength="16" placeholder="By the door"></label>
@@ -438,14 +448,17 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
         <label class="field"><span>Rotation Z°</span><input type="number" id="p-rz" step="5"></label>
       </div>
       <label class="check"><input type="checkbox" id="p-linked"> Linked with the other panels</label>
+      <div class="row" style="margin-top:6px"><span class="note" id="p-wires" style="flex:1">No wires</span><button type="button" class="btn small quiet" id="p-unwire" hidden>Remove its wires</button></div>
+      </details>
     </div>
 
     <div id="insp-set" class="group" hidden>
       <h2>Set from the console</h2>
       <div class="seg small" role="group" aria-label="Which panels take the value">
-        <button type="button" id="scope-one" aria-pressed="true">Selected</button>
-        <button type="button" id="scope-wave" aria-pressed="false">Ripple from here</button>
-        <button type="button" id="scope-all" aria-pressed="false">All at once</button>
+        <button type="button" id="scope-one" aria-pressed="true" title="The selected panels and no other, whatever the rules on the left say">Selected</button>
+        <button type="button" id="scope-turn" aria-pressed="false" title="As if that panel's own knob had been turned: the rules on the left decide who else takes it - Solo, Sync or Ripple, and only along the wires when that is on">As a turn</button>
+        <button type="button" id="scope-wave" aria-pressed="false" title="Every panel, as a wave from the selected one">Ripple</button>
+        <button type="button" id="scope-all" aria-pressed="false" title="Every panel at once">All</button>
       </div>
       <div class="field"><span>Pattern</span><div class="step">
         <button type="button" class="btn" id="p-pattern-prev" aria-label="Previous pattern" title="Previous pattern">◀</button>
@@ -467,6 +480,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
         <label class="check"><input type="checkbox" id="p-show-loop" checked> Loop</label>
         <button type="button" class="btn small rec" id="p-show-rec" aria-pressed="false" title="Records what the selected panels do. When stopped, each of them loops its own recording at once">● Record</button>
       </div>
+      <label class="check" title="Off: a recording is knob moves only, and plays on whatever pattern a panel is showing. On: it also holds the pattern the panel was on and every change of it, and switches to them when it plays"><input type="checkbox" id="p-show-rec-pat"> Record patterns too</label>
       <p class="note" id="p-show-state" role="status"></p>
     </div>
 
@@ -525,6 +539,44 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
   </section>
 </main>
 
+<main class="pats" id="setup-page" hidden lang="en" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+  <section class="col" aria-label="New panels">
+    <div class="group">
+      <div class="pat-head"><h2>New panels</h2><button type="button" class="btn" id="su-scan">Look for new panels</button></div>
+      <p class="note">A panel that knows no Wi-Fi starts a hotspot of its own: <span class="mono">patternflow-</span> and four digits. The hub goes onto that hotspot, gives the panel the hub's Wi-Fi, and comes back. While it is away, some ten seconds for each panel, the panels already here lose the hub and find it again. So this is for before a show, not during one.</p>
+      <ul class="pat-panels" id="su-new"></ul>
+      <p class="empty" id="su-new-none">Nothing looked for yet.</p>
+      <details class="more">
+        <summary>The new panels' hotspot password</summary>
+        <label class="field"><span>Patternflow's own is "patternflow". Change it here only if the panels' was changed</span><input type="text" id="su-pass" value="patternflow" autocomplete="off" spellcheck="false"></label>
+      </details>
+      <button type="button" class="btn primary" id="su-go" disabled>Bring them in</button>
+      <p class="note" id="su-status" role="status"></p>
+    </div>
+    <div class="group">
+      <div class="pat-head"><h2>Panels on this computer's Wi-Fi</h2></div>
+      <p class="note">A panel that knows another Wi-Fi in its reach, the room's, joins that and starts no hotspot. The hub cannot see it there. If this computer is on that same Wi-Fi, it tells the panel the hub's Wi-Fi itself. Tick the ones that are on it (a panel the hub has met is listed by itself), or add one by the name on its own page: <span class="mono">patternflow-</span> and four digits. Needs the USB cable to the hub.</p>
+      <ul class="pat-panels" id="su-lan"></ul>
+      <form class="pat-add" id="su-lan-add">
+        <input type="text" id="su-lan-name" placeholder="patternflow-1a2b, or an address" autocomplete="off" spellcheck="false" aria-label="A panel's name or address on this computer's Wi-Fi">
+        <button type="submit" class="btn">Add</button>
+      </form>
+      <button type="button" class="btn primary" id="su-lan-go" disabled>Send them to the hub</button>
+    </div>
+  </section>
+  <section class="col" aria-label="Firmware">
+    <div class="group">
+      <div class="pat-head"><h2>Firmware</h2></div>
+      <p class="note">The ensemble's panel image, <span class="mono">firmware.bin</span>. Choose it once and this browser keeps it. A new panel running anything else gets it as it comes in, and the panels below can be updated with it. About two minutes a panel.</p>
+      <div class="row"><button type="button" class="btn" id="su-file-pick">Choose firmware.bin</button><span class="note" id="su-file-info" style="flex:1">None chosen</span></div>
+      <input type="file" id="su-file" accept=".bin,application/octet-stream" hidden>
+      <ul class="pat-panels" id="su-panels"></ul>
+      <p class="empty" id="su-panels-none">No panels connected</p>
+      <button type="button" class="btn primary" id="su-update" disabled>Update the ticked panels</button>
+    </div>
+  </section>
+</main>
+
 <main class="shows" id="show-page" hidden>
   <section class="col" aria-label="Show library">
     <div class="pat-head">
@@ -572,7 +624,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 
 <main class="nodes" id="node-page" hidden lang="en">
   <div class="node-bar">
-    <button type="button" class="btn power" id="ng-power" aria-pressed="false" title="Off: the hub keeps the graph but reads MIDI the plain way (CC 20-28, Program Change). On: the graph runs, and the controllers it names are its own">Nodes: Off</button>
+    <button type="button" class="btn power" id="ng-power" aria-pressed="false" title="Off: the hub keeps the graph but reads MIDI the plain way (CC 20-28, Program Change). On: the graph runs and the plain mapping is off, so MIDI moves only what is wired">Nodes: Off</button>
     <button type="button" class="btn" id="ng-add" title="Also Shift+A, right-click, or double-click on empty space">+ Add</button>
     <button type="button" class="btn" id="ng-fit" title="Home">Frame all</button>
     <select id="ng-preview" aria-label="The panel whose values the nodes show"></select>
@@ -593,6 +645,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
       <button type="button" class="btn" id="ng-hint-example">Start from an example</button>
     </div>
     <div class="node-menu" id="ng-menu" hidden></div>
+    <canvas id="ng-mini" aria-label="Where the panels are, and their numbers" hidden></canvas>
   </div>
 </main>
 
@@ -609,7 +662,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 
   <div class="help-body" id="help-midi">
     <p>Plug the hub's USB jack into the computer and a MIDI device named <b>Patternflow Ensemble</b> appears. It is the same cable as the console.</p>
-    <p>This is the plain mapping. It is what applies while <b>Nodes</b> is off; with Nodes on, the controllers the graph names go to the graph instead, and everything else still works this way.</p>
+    <p>This is the plain mapping. It applies while <b>Nodes</b> is off. With Nodes on, <b>Computer → panels</b> below is switched off altogether: MIDI then moves only what the graph wires. What the panels send back to the computer stays the same either way.</p>
     <section>
       <h3>Channels</h3>
       <table>
@@ -648,6 +701,17 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
       </table>
     </section>
     <section>
+      <h3>Wires (both views)</h3>
+      <p>A wire joins two panels. On the left, under <b>When a knob turns</b>, <b>Only along wires</b> is one switch for every knob and the pattern: on, a turn goes only to the panels that can be reached from that panel along wires. Sync reaches them at once; Ripple travels along the wires, round every corner they take, at the Ripple speed. A panel with no wire keeps the turn to itself. Off, it goes to every linked panel as before.</p>
+      <table>
+        <tr><th>Right-drag panel → panel</th><td>Join them with a wire. The same again takes the wire away</td></tr>
+        <tr><th><kbd>F</kbd></th><td>Wire the selection, as Blender joins vertices. Two panels: a wire between them (or away with it). More: a chain, each to its nearest</td></tr>
+        <tr><th><kbd>Ctrl</kbd> + right-drag</th><td>Cut every wire the stroke crosses</td></tr>
+        <tr><th><b>Wire</b> button</th><td>The same with the left button: drag panel → panel to join, drag from empty space to cut</td></tr>
+        <tr><th>The side column</th><td>Says what the selected panel is wired to, and removes its wires. Under <b>Set from the console</b>, <b>As a turn</b> sends a change the way a turn of that panel's own knob would go: to the panels its wires lead to when Only along wires is on</td></tr>
+      </table>
+    </section>
+    <section>
       <h3>3D (as in Blender)</h3>
       <table>
         <tr><th>Middle button drag</th><td>Orbit. With <kbd>Shift</kbd> pan, with <kbd>Ctrl</kbd> zoom. No middle button: <kbd>Alt</kbd> + left button</td></tr>
@@ -664,6 +728,9 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 
   <div class="help-body" id="help-patterns" hidden>
     <section>
+      <h3>New panels and firmware (Setup)</h3>
+      <p><b>Setup</b>, at the end of the page buttons. A panel that knows no Wi-Fi starts a hotspot of its own (<span class="mono">patternflow-</span> and four digits). <b>Look for new panels</b> finds those; <b>Bring them in</b> sends the hub onto each hotspot to give the panel the hub's Wi-Fi. While the hub is away, about ten seconds a panel, the panels already attached lose it and find it again, so do this before a show. Choose the ensemble's <span class="mono">firmware.bin</span> once on the right: a new panel running anything else gets it as it comes in, and attached panels can be updated with it (about two minutes each). Afterwards: place the panel on the Stage, give it the set on Patterns.</p>
+      <p>A panel that knows another Wi-Fi in its reach (the room's) joins that and starts no hotspot, and the hub cannot see it. <b>Panels on this computer's Wi-Fi</b> is for those: with this computer on that same Wi-Fi and the USB cable to the hub, tick the panel (or add it by its name, <span class="mono">patternflow-</span> and four digits) and <b>Send them to the hub</b>.</p>
       <h3>Patterns</h3>
       <ol>
         <li>Open <b>Patterns</b> at the top.</li>
@@ -677,7 +744,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
     <section>
       <h3>Shows (performances)</h3>
       <p>A show is a recorded loop of patterns and knob moves that a panel plays by itself. A deck with a performance attached brings it along, and <b>Install</b> stores it on the panels too. A <code>.pfs</code> file can be dropped in as well. On the Stage, select a panel and use <b>Shows</b> on the right: play (▶), stop (■), loop. With several panels selected it goes to all of them.</p>
-      <p><b>● Record</b>: select panels, press it, play (by hand, the console or MIDI), then <b>■ Stop</b>. Each selected panel loops what it did, at once. A recording can be ten minutes long; very busy ones are stored a little coarser. A panel keeps four recordings and drops the oldest. The ✕ beside the list deletes the chosen show from the panel.</p>
+      <p><b>● Record</b>: select panels, press it, play (by hand, the console or MIDI), then <b>■ Stop</b>. Each selected panel loops what it did, at once. A recording is knob moves only, so it can go on any panel showing any pattern; tick <b>Record patterns too</b> and it also holds the pattern and its changes. A recording can be ten minutes long; very busy ones are stored a little coarser. A panel keeps four recordings and drops the oldest. The ✕ beside the list deletes the chosen show from the panel.</p>
       <p>The <b>Shows</b> page keeps every recording and imported show. Choose one to see its four knob curves and where the pattern changes, then cut it (start, end), stretch it (longer is slower), swap or invert knobs, or put it on another pattern. The recording itself is never changed, so it can always be reset. <b>Put on and play</b> sends it to the ticked panels.</p>
       <p>A panel playing a show is out of the ensemble for that long: its knobs move no other panel, and it takes no values from the others. Stop the show and it returns to what the ensemble is showing.</p>
     </section>
@@ -685,7 +752,7 @@ dialog.help::backdrop { background: rgba(10, 9, 7, 0.45); }
 
   <div class="help-body" id="help-nodes" hidden lang="en">
     <p>Wire the way from a MIDI controller to the panels. Every edit goes to the hub, which then runs the graph by itself, with or without this page. The hub evaluates the graph <b>once for every panel</b>: mix in a Panel Info output (order, position, random) and each panel gets a different value from the same signal.</p>
-    <p><b>Nodes: On / Off</b> is the switch. Off, the hub keeps the graph but ignores it, and MIDI works the plain way (the MIDI tab). On, the controllers the graph names belong to the graph; everything else still works the plain way.</p>
+    <p><b>Nodes: On / Off</b> is the switch. Off, the hub keeps the graph but ignores it, and MIDI works the plain way (the MIDI tab). On, the plain way is off and MIDI reaches the panels through wires only: a controller no wire uses moves nothing, and so does a Program Change (wire Pattern and Brightness on a Panel Output instead). It is one or the other, never both.</p>
     <section>
       <h3>Controls</h3>
       <table>

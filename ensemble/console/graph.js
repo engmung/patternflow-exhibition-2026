@@ -366,8 +366,12 @@
       if (!byTarget.has(key)) byTarget.set(key, { ids, outs: [] });
       (ins[s.id] || []).forEach((r, i) => { if (r >= 0) byTarget.get(key).outs.push([r, TYPES.out.ins[i].drive]); });
     }
-    for (const t of byTarget.values()) {
-      if (!t.outs.length) continue;
+    // Every panel first, then the chosen ones, the smaller group later: what
+    // is written later is what a panel takes, so an output for panels 2 and
+    // 3 outranks one for every panel whichever node was put down first.
+    const groups = [...byTarget.values()].filter((t) => t.outs.length)
+      .sort((a, b) => (a.ids.length ? 1 : 0) - (b.ids.length ? 1 : 0) || b.ids.length - a.ids.length);
+    for (const t of groups) {
       e.target(t.ids);
       for (const [r, what] of t.outs) { e.out(r, what); driven++; }
     }

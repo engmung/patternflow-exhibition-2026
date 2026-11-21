@@ -46,6 +46,8 @@
 #include <WiFiClient.h>
 #include <WiFiUdp.h>
 #include <esp_wifi.h>
+#include <esp_netif.h>
+#include <esp_netif_sta_list.h>  // who is on the hub's hotspot, and at which address (Setup)
 #include <freertos/FreeRTOS.h>
 #include <freertos/message_buffer.h>
 #include <freertos/semphr.h>
@@ -105,6 +107,7 @@ uint32_t restartAtMs = 0;
 uint32_t linesDropped = 0;
 volatile uint32_t usbStalls = 0;
 volatile uint32_t usbBytes = 0;    // bytes handed to the USB console since start
+volatile uint32_t usbRxLost = 0;   // bytes from the computer the port had no room for (onUsbRxOverflow)
 constexpr uint8_t USB_CDC_EP_IN = 0x84;   // where the core puts the serial port's data to the computer (USBCDC.cpp)
 uint8_t midiEpIn = 0;              // the endpoint the hub's MIDI leaves by
 volatile uint32_t midiWritten = 0, midiRefused = 0;   // messages the MIDI port took / had no room for
@@ -240,6 +243,16 @@ void onUsbSent(void*, esp_event_base_t, int32_t, void*) {
   if (usbWriterTask) xTaskNotifyGive(usbWriterTask);
 }
 
+// The computer sent more than the port's buffer holds before loop() read it:
+// the core drops what does not fit, and a line arrives with a hole in it.
+// Counted, and said in the log, because it looks like anything but this from
+// outside (2026-11-21: uploads to four panels at once failed "not the bytes
+// that were promised", one request in twenty, with a buffer of 4096).
+void onUsbRxOverflow(void*, esp_event_base_t, int32_t, void* data) {
+  const arduino_usb_cdc_event_data_t* e = (const arduino_usb_cdc_event_data_t*)data;
+  usbRxLost += e ? e->rx_overflow.dropped_bytes : 1;
+}
+
 // The one way into the bootloader over USB: the port set to 1200 baud, the
 // Arduino convention (PlatformIO's use_1200bps_touch, platformio.ini). The
 // core's own detector is switched off in setup(): besides this it restarts
@@ -307,7 +320,25 @@ bool relayLine(const char* text, size_t len) {
   }
   if (!o.is("c", "http")) return false;
   const int i = console->panelOf(o, "to");
-  const uint32_t ip = i >= 0 && conductor.panel(i).online ? conductor.panel(i).ep.ip : 0;
+  uint32_t ip = i >= 0 && conductor.panel(i).online ? conductor.panel(i).ep.ip : 0;
+#ifndef HUB_STA_SSID
+  // Or a device on the hub's own hotspot by its address: a panel that has
+  // just been brought in and does not run the ensemble's firmware yet, so
+  // the hub knows no panel by that name. Setup puts the firmware on it this
+  // way. Nothing outside the hotspot's own network.
+  if (i < 0) {
+    const pfe::JVal* a = o.get("ip");
+    unsigned b[4] = {0, 0, 0, 0};
+    char at[20] = "";
+    if (a && a->type == 's' && a->n < sizeof(at)) {
+      memcpy(at, a->p, a->n);
+      const uint8_t home[4] = {HUB_AP_IP};
+      if (sscanf(at, "%u.%u.%u.%u", &b[0], &b[1], &b[2], &b[3]) == 4 && b[0] == home[0] && b[1] == home[1] &&
+          b[2] == home[2] && b[3] >= 2 && b[3] <= 254)
+        ip = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | b[3];
+    }
+  }
+#endif
   pfe::Relay* use = &relays[0];        // with all of them busy the first says so
   for (pfe::Relay& r : relays)
     if (!r.busy()) { use = &r; break; }
@@ -316,7 +347,331 @@ bool relayLine(const char* text, size_t len) {
   return true;
 }
 
+// ── Setup: bringing a new panel in ──────────────────────────────────────
+// A panel that knows no Wi-Fi starts a hotspot of its own, "patternflow-"
+// and the last four digits of its address. To join the ensemble it has to
+// be told the hub's network, and somebody has to be on its hotspot to tell
+// it. That used to be a laptop (tools/panels.py). Here the hub goes itself:
+//
+//   {"c":"setup","op":"scan"}                 look for such hotspots
+//   {"c":"setup","op":"join","ssid":"patternflow-1a2b","pass":"..."}
+//                                             go onto that hotspot, give the
+//                                             panel the hub's network, make
+//                                             it the one the panel starts
+//                                             from, send it there, come back
+//   {"c":"setup","op":"stations"}             who is on the hub's hotspot
+//   {"c":"setup","op":"net"}                  the hub's own network, name and
+//                                             password - for a console that
+//                                             sends a panel there itself (one
+//                                             on the room's Wi-Fi, which the
+//                                             hub cannot see). Answered on a
+//                                             serial port only, and only to
+//                                             the port that asked: whoever is
+//                                             on the hub's Wi-Fi knows it, and
+//                                             nobody else is to be told.
+//
+// and answers in {"t":"setup",...} lines. The hub has one radio: while it is
+// on a panel's hotspot its own hotspot is on that hotspot's channel, and the
+// panels of the ensemble lose it for those seconds and find it again. Setup
+// is for before a show. Hotspot mode only (a hub on a router would have to
+// leave the router).
+#ifndef HUB_STA_SSID
+namespace setup_ {
+
+enum Phase : uint8_t { IDLE, SCANNING, JOINING };
+Phase phase = IDLE;
+char ssid[33] = "";
+char pass[65] = "";
+uint32_t sinceMs = 0;
+
+void say(pfe::Out& o) {
+  if (!o.overflow) consoleLine(nullptr, o.buf, o.len);
+}
+void step(const char* op, const char* what, const char* why = nullptr) {
+  char line[360];
+  pfe::Out o(line, sizeof(line));
+  o.str("{\"t\":\"setup\",\"op\":").json(op).str(",\"ssid\":").json(ssid).str(",\"step\":").json(what);
+  if (why) o.str(",\"m\":").json(why, 200);
+  o.ch('}');
+  say(o);
+}
+
+bool isPanelHotspot(const char* name) {
+  static const char want[] = "patternflow-";
+  for (size_t i = 0; i < sizeof(want) - 1; i++) {
+    char c = name[i];
+    if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+    if (c != want[i]) return false;
+  }
+  return name[sizeof(want) - 1] != 0;
+}
+
+// One request to the panel whose hotspot the hub is on. -> its status (0: no
+// answer), the answer's body in `reply`.
+int ask(const char* method, const char* path, const char* form, char* reply, size_t cap) {
+  static char raw[4096];
+  WiFiClient c;
+  if (!c.connect(WiFi.gatewayIP(), 80, 3000)) return 0;
+  c.setNoDelay(true);
+  char head[260];
+  const size_t bodyLen = form ? strlen(form) : 0;
+  const int n = snprintf(head, sizeof(head), "%s %s HTTP/1.1\r\nHost: panel\r\nConnection: close\r\n%sContent-Length: %u\r\n\r\n",
+                         method, path, form ? "Content-Type: application/x-www-form-urlencoded\r\n" : "", (unsigned)bodyLen);
+  c.write((const uint8_t*)head, (size_t)n);
+  if (bodyLen) c.write((const uint8_t*)form, bodyLen);
+  size_t got = 0;
+  uint32_t moved = millis();
+  while (millis() - moved < 3000 && got < sizeof(raw) - 1) {
+    if (c.available() > 0) {
+      const int r = c.read((uint8_t*)raw + got, sizeof(raw) - 1 - got);
+      if (r > 0) { got += (size_t)r; moved = millis(); }
+    } else if (!c.connected()) {
+      break;
+    } else {
+      delay(5);
+    }
+  }
+  c.stop();
+  raw[got] = 0;
+  if (got < 12 || memcmp(raw, "HTTP/1.", 7) != 0) return 0;
+  const char* body = strstr(raw, "\r\n\r\n");
+  if (reply && cap) strlcpy(reply, body ? body + 4 : "", cap);
+  return atoi(raw + 9);
+}
+
+// "key":"value" out of a panel's JSON, as far as it fits.
+void field(const char* json, const char* key, char* out, size_t cap) {
+  out[0] = 0;
+  char find[40];
+  snprintf(find, sizeof(find), "\"%s\":\"", key);
+  const char* at = strstr(json, find);
+  if (!at) return;
+  at += strlen(find);
+  size_t n = 0;
+  while (at[n] && at[n] != '"' && n + 1 < cap) { out[n] = at[n]; n++; }
+  out[n] = 0;
+}
+
+size_t urlEncode(const char* in, char* out, size_t cap) {
+  static const char hex[] = "0123456789ABCDEF";
+  size_t n = 0;
+  for (; *in && n + 4 < cap; in++) {
+    const unsigned char c = (unsigned char)*in;
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') out[n++] = (char)c;
+    else { out[n++] = '%'; out[n++] = hex[c >> 4]; out[n++] = hex[c & 15]; }
+  }
+  out[n] = 0;
+  return n;
+}
+
+// Back to being only the ensemble's hotspot, on its own channel.
+void leave() {
+  WiFi.disconnect(false, true);
+  esp_wifi_set_channel(HUB_AP_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  phase = IDLE;
+}
+
+// On the panel's hotspot: what it is, then the hub's network - stored, made
+// the one it starts from, and joined now (tools/panels.py move_to has the
+// reason for the order).
+void talk() {
+  static char reply[4096];
+  char variant[24], variantVersion[20], version[20], host[40];
+  if (ask("GET", "/api/status", nullptr, reply, sizeof(reply)) != 200) {
+    step("join", "failed", "the panel does not answer on its hotspot");
+    return;
+  }
+  field(reply, "variant", variant, sizeof(variant));
+  field(reply, "variantVersion", variantVersion, sizeof(variantVersion));
+  field(reply, "version", version, sizeof(version));
+  field(reply, "hostAlias", host, sizeof(host));
+  step("join", "saving");
+  char name[110], word[200], form[340];
+  urlEncode(HUB_AP_SSID, name, sizeof(name));
+  urlEncode(HUB_AP_PASS, word, sizeof(word));
+  snprintf(form, sizeof(form), "ssid=%s&pass=%s", name, word);
+  int status = ask("POST", "/api/wifi", form, reply, sizeof(reply));
+  if (status != 200) {
+    char why[80];
+    snprintf(why, sizeof(why), "the panel did not take the hub's Wi-Fi (HTTP %d)", status);
+    step("join", "failed", why);
+    return;
+  }
+  int index = -1;
+  if (ask("GET", "/api/wifi", nullptr, reply, sizeof(reply)) == 200) {
+    const char* at = strstr(reply, "\"networks\":[");
+    char find[80];
+    snprintf(find, sizeof(find), "\"ssid\":\"%s\"", HUB_AP_SSID);
+    const char* mine = at ? strstr(at, find) : nullptr;
+    for (int n = 0; at && mine; n++) {
+      at = strstr(at + 1, "\"ssid\":\"");
+      if (!at || at > mine) break;
+      if (at == mine) { index = n; break; }
+    }
+  }
+  if (index < 0) {
+    step("join", "failed", "the panel says it stored the network, but it is not in its list");
+    return;
+  }
+  snprintf(form, sizeof(form), "bootIdx=%d", index);
+  if (ask("POST", "/api/wifi/boot", form, reply, sizeof(reply)) != 200) {
+    step("join", "failed", "could not make the hub's network the one the panel starts from");
+    return;
+  }
+  snprintf(form, sizeof(form), "ssid=%s&pass=%s&connect=1", name, word);
+  ask("POST", "/api/wifi", form, reply, sizeof(reply));      // it leaves its hotspot to do so: the answer may not come
+  char line[360];
+  pfe::Out o(line, sizeof(line));
+  o.str("{\"t\":\"setup\",\"op\":\"join\",\"ssid\":").json(ssid).str(",\"step\":\"done\",\"host\":").json(host);
+  o.str(",\"variant\":").json(variant).str(",\"ver\":").json(variantVersion).str(",\"fw\":").json(version).ch('}');
+  say(o);
+}
+
+void stations() {
+  static char line[HUB_LINE_MAX];
+  pfe::Out o(line, sizeof(line));
+  o.str("{\"t\":\"setup\",\"op\":\"stations\",\"list\":[");
+  wifi_sta_list_t on;
+  esp_netif_sta_list_t with;
+  if (esp_wifi_ap_get_sta_list(&on) == ESP_OK && esp_netif_get_sta_list(&on, &with) == ESP_OK) {
+    for (int i = 0; i < with.num; i++) {
+      const uint8_t* m = with.sta[i].mac;
+      const uint32_t a = with.sta[i].ip.addr;                // as it goes on the wire: the first number lowest
+      if (i) o.ch(',');
+      o.str("{\"mac\":\"");
+      for (int b = 0; b < 6; b++) o.hex8(m[b]);
+      o.str("\",\"ip\":\"").u32(a & 255).ch('.').u32((a >> 8) & 255).ch('.').u32((a >> 16) & 255).ch('.').u32(a >> 24).str("\"}");
+    }
+  }
+  o.str("]}");
+  say(o);
+}
+
+void tick() {
+  if (phase == SCANNING) {
+    // The core's own count of what was found: there once the scan is done, negative until then.
+    const int16_t n = WiFi.scanComplete();
+    if (n < 0 && millis() - sinceMs < 12000) return;
+    static char line[HUB_LINE_MAX];
+    pfe::Out o(line, sizeof(line));
+    o.str("{\"t\":\"setup\",\"op\":\"scan\",\"nets\":[");
+    int found = 0;
+    for (int i = 0; i < n && found < 12; i++) {
+      const String name = WiFi.SSID(i);
+      if (!isPanelHotspot(name.c_str())) continue;
+      bool again = false;                                    // one hotspot heard on two channels is one hotspot
+      for (int j = 0; j < i && !again; j++) again = WiFi.SSID(j) == name;
+      if (again) continue;
+      if (found++) o.ch(',');
+      o.str("{\"ssid\":").json(name.c_str()).str(",\"rssi\":").i32(WiFi.RSSI(i)).str(",\"ch\":").i32(WiFi.channel(i)).ch('}');
+    }
+    // How many networks it heard in all: none at all is a scan that went wrong, not a room without new panels.
+    o.str("],\"seen\":").i32(n < 0 ? 0 : n);
+    if (n < 0) o.str(",\"m\":\"the scan did not finish\"");
+    o.ch('}');
+    say(o);
+    WiFi.scanDelete();
+    esp_wifi_set_channel(HUB_AP_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    phase = IDLE;
+    return;
+  }
+  if (phase == JOINING) {
+    if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.gatewayIP() != 0) {
+      step("join", "asking");
+      talk();
+      leave();
+    } else if (millis() - sinceMs > 15000) {
+      step("join", "failed", "could not get onto its hotspot (gone, or another password)");
+      leave();
+    }
+  }
+}
+
+// {"c":"setup",...}; false for any other line. `port`: the serial port it came by, null for a WebSocket.
+bool line(const char* text, size_t len, Port* port) {
+  if (len < 13 || memcmp(text, "{\"c\":\"setup\"", 12) != 0) return false;
+  pfe::JObject o;
+  if (!o.parse(text, len)) return true;
+  if (o.is("op", "stations")) { stations(); return true; }
+  if (o.is("op", "net")) {
+    char said[300];
+    pfe::Out out(said, sizeof(said));
+    if (!port) {
+      out.str("{\"t\":\"setup\",\"op\":\"net\",\"m\":\"only over the cable to the hub\"}");
+      say(out);
+      return true;
+    }
+    out.str("{\"t\":\"setup\",\"op\":\"net\",\"ssid\":").json(HUB_AP_SSID).str(",\"pass\":").json(HUB_AP_PASS).ch('}');
+    const MessageBufferHandle_t asked = port == &usbPort ? toUsb : toUart;      // to the one who asked, not to every console
+    if (!out.overflow) xMessageBufferSend(asked, out.buf, out.len, 0);
+    return true;
+  }
+  if (phase != IDLE) {
+    char said[120];
+    pfe::Out out(said, sizeof(said));
+    out.str("{\"t\":\"setup\",\"op\":\"busy\",\"m\":\"the hub is still ").str(phase == SCANNING ? "looking" : "with a panel").str("\"}");
+    say(out);
+    return true;
+  }
+  if (o.is("op", "scan")) {
+    ssid[0] = 0;
+    // Started here and not through WiFi.scanNetworks(): the core gives an
+    // asynchronous scan twenty times its per-channel time and then calls it
+    // failed, and beside a running hotspot (the radio goes home between
+    // channels) a scan of thirteen takes longer than that - three seconds
+    // were not enough (2026-11-21). The core still collects the result.
+    WiFi.scanDelete();
+    wifi_scan_config_t how = {};
+    how.show_hidden = false;
+    how.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    how.scan_time.active.min = 60;
+    how.scan_time.active.max = 120;
+    if (esp_wifi_scan_start(&how, false) != ESP_OK) {
+      step("scan", "failed", "the scan did not start");
+      return true;
+    }
+    phase = SCANNING;
+    sinceMs = millis();
+    return true;
+  }
+  if (o.is("op", "join")) {
+    const pfe::JVal* name = o.get("ssid");
+    const pfe::JVal* word = o.get("pass");
+    ssid[0] = 0;
+    if (name && name->type == 's' && name->n < sizeof(ssid)) { memcpy(ssid, name->p, name->n); ssid[name->n] = 0; }
+    strlcpy(pass, "patternflow", sizeof(pass));              // Patternflow's own default for a panel's hotspot
+    if (word && word->type == 's' && word->n >= 8 && word->n < sizeof(pass)) { memcpy(pass, word->p, word->n); pass[word->n] = 0; }
+    if (!isPanelHotspot(ssid)) { step("join", "failed", "not a panel's hotspot (patternflow-....)"); return true; }
+    hubLog("setup: visiting \"%s\" - the ensemble's panels lose the hub for a few seconds", ssid);
+    step("join", "connecting");
+    WiFi.begin(ssid, pass);
+    phase = JOINING;
+    sinceMs = millis();
+    return true;
+  }
+  return true;
+}
+
+}  // namespace setup_
+#endif
+
 // ── Lines in ────────────────────────────────────────────────────────────
+// {"c":"usb"}: the USB controller's registers as they are, as one line. For
+// the day a pipe to the computer has stopped: the hub can be asked what it
+// sees without being rebuilt for it (seen 2026-11-21: MIDI to the computer
+// stood still from the first message after a start until the hub restarted,
+// and nothing here could say why).
+bool usbLine(const char* text, size_t len) {
+  if (len < 11 || memcmp(text, "{\"c\":\"usb\"", 10) != 0) return false;
+  static char line[HUB_LINE_MAX];
+  const size_t head = (size_t)snprintf(line, sizeof(line), "{\"t\":\"usb\",\"d\":");
+  const size_t n = usb_s3::dump(line + head, sizeof(line) - head - 2);
+  if (!n || head + n + 2 >= sizeof(line) || line[head + n - 1] != '}') return true;   // it did not fit: say nothing
+  line[head + n] = '}';
+  consoleLine(nullptr, line, head + n + 1);
+  return true;
+}
+
 void handleLine(Port* port, const char* text, size_t len) {
   if (!len || text[0] != '{') return;     // typing in a serial monitor, or noise
   if (port) {
@@ -328,6 +683,10 @@ void handleLine(Port* port, const char* text, size_t len) {
     port->heardMs = millis();
   }
   if (relayLine(text, len)) return;
+  if (usbLine(text, len)) return;
+#ifndef HUB_STA_SSID
+  if (setup_::line(text, len, port)) return;
+#endif
   const pfe::ConsoleResult res = console->handle(text, len);
   if (res.rebootHub && !restartAsked) {
     restartAsked = true;
@@ -393,7 +752,13 @@ void onSocket(AsyncWebSocket*, AsyncWebSocketClient*, AwsEventType type, void* a
 #ifndef HUB_STA_SSID
 void startHotspot() {
   const IPAddress ip(HUB_AP_IP);
-  WiFi.mode(WIFI_AP);
+  // A station side beside the hotspot, idle except in Setup: it looks for
+  // new panels' hotspots and goes onto one for a moment. Nothing it joins is
+  // kept, and it never joins anything by itself.
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.setAutoReconnect(false);
+  WiFi.setSleep(false);
   WiFi.softAPConfig(ip, ip, IPAddress(255, 255, 255, 0));
   const bool up = WiFi.softAP(HUB_AP_SSID, HUB_AP_PASS, HUB_AP_CHANNEL, /*hidden=*/0, HUB_AP_MAX_CONN);
   // 20 MHz: channels 1, 6 and 11 only stay clear of each other at that
@@ -426,13 +791,14 @@ void startServices() {
     const pfe::Stats& st = conductor.stats();
     snprintf(body, sizeof(body),
              "{\"fw\":\"%s\",\"proto\":%u,\"uptime_s\":%lu,\"mode\":\"%s\",\"panels\":%d,\"online\":%d,"
-             "\"stations\":%d,\"heap\":%lu,\"rx\":%lu,\"tx\":%lu,\"bad\":%lu,\"lines_dropped\":%lu,"
+             "\"stations\":%d,\"heap\":%lu,\"rx\":%lu,\"tx\":%lu,\"bad\":%lu,\"lines_dropped\":%lu,\"usb_rx_lost\":%lu,"
              "\"usb_stalls\":%lu,\"usb\":{\"ready\":%d,\"open\":%d,\"space\":%lu,\"busy\":%d,\"sent\":%lu,"
              "\"rearmed\":%lu,\"unstuck\":%lu},\"midi\":{\"mounted\":%d,\"busy\":%d,\"sent\":%lu,\"pending\":%d}}",
              HUB_VERSION, (unsigned)pfe::PROTO_VERSION, (unsigned long)(millis() / 1000),
              ROUTER_MODE ? "router" : "hotspot", conductor.panelCount(), conductor.onlineCount(),
              ROUTER_MODE ? 0 : (int)WiFi.softAPgetStationNum(), (unsigned long)ESP.getFreeHeap(),
              (unsigned long)st.rx, (unsigned long)st.tx, (unsigned long)st.bad, (unsigned long)linesDropped,
+             (unsigned long)usbRxLost,
              (unsigned long)usbStalls,
              // The USB console's sending side, as TinyUSB sees it: is the device
              // configured, has a program the port open, room in the 64-byte
@@ -448,14 +814,12 @@ void startServices() {
              (unsigned long)midiWritten, midi.pending());
     req->send(200, "application/json", body);
   });
-#if HUB_USB_DEBUG
   // The USB controller's registers as they are, for when the jack misbehaves.
   web.on("/api/usb", HTTP_GET, [](AsyncWebServerRequest* req) {
     static char body[1500];
     usb_s3::dump(body, sizeof(body));
     req->send(200, "application/json", body);
   });
-#endif
   web.on("/api/panels", HTTP_GET, [](AsyncWebServerRequest* req) {
     static char copy[sizeof(panelsJson) + 16];
     xSemaphoreTake(panelsLock, portMAX_DELAY);
@@ -597,7 +961,7 @@ void readMidi() {
     const uint8_t cin = packet[0] & 0x0F;
     if (cin < 0x8 || cin > 0xE) continue;            // channel messages only
     const size_t len = (cin == 0xC || cin == 0xD) ? 2 : 3;
-    // A controller the graph names is the graph's, and not also a knob the plain way.
+    // The graph's switch on: MIDI goes through the wires only, and none of it the plain way.
     if (graph.onMidi(packet + 1, len, millis())) continue;
     midi.onMessage(packet + 1, len);
   }
@@ -618,7 +982,11 @@ void setup() {
   USB.PID(HUB_USB_PID);
   USB.productName(HUB_USB_NAME);
   USB.manufacturerName("Patternflow");
-  usbConsole.setRxBufferSize(4096);  // a pattern file for a panel comes in 1.5 KB lines (pfe_relay.h)
+  // A file for a panel comes in 1.5 KB lines (pfe_relay.h), one in flight
+  // for each of the four relays, and loop() reads none of them while it is
+  // passing a piece on to a panel: room for all four and then some. 4096
+  // overflowed (onUsbRxOverflow).
+  usbConsole.setRxBufferSize(16384);
   usbConsole.begin();
   usbConsole.enableReboot(false);    // see onUsbLineCoding
 #if HUB_USB_MIDI
@@ -662,6 +1030,7 @@ void setup() {
   xTaskCreatePinnedToCore(usbWriter, "pfe-usb", 4096, nullptr, 2, &usbWriterTask,
                           HUB_USB_ONE_CORE ? xPortGetCoreID() : 0);
   usbConsole.onEvent(ARDUINO_USB_CDC_TX_EVENT, onUsbSent);
+  usbConsole.onEvent(ARDUINO_USB_CDC_RX_OVERFLOW_EVENT, onUsbRxOverflow);
   usbConsole.onEvent(ARDUINO_USB_CDC_LINE_CODING_EVENT, onUsbLineCoding);
   xTaskCreatePinnedToCore(uartWriter, "pfe-uart", 4096, nullptr, 2, nullptr, 0);
 
@@ -695,9 +1064,38 @@ void loop() {
   conductor.tick(millis());
   graph.tick(millis());
   for (pfe::Relay& r : relays) r.tick(millis());
+#ifndef HUB_STA_SSID
+  setup_::tick();
+#endif
   midi.flush();      // what the MIDI port had no room for a moment ago
   saveSetupIfDue();
   saveGraphIfDue();
+
+  // How the MIDI pipe to the computer is doing, for a console that is
+  // listening: for how long a message has been waiting to be taken, and how
+  // many values are queued behind it. A computer that reads the port takes a
+  // message within a millisecond or two (measured 2026-11-21); seconds mean
+  // that nothing is reading, or that the pipe has stopped.
+#if HUB_USB_MIDI
+  {
+    static bool waiting = false;
+    static uint32_t waitingSinceMs = 0, saidMs = 0;
+    const uint32_t now = millis();
+    const bool mounted = usb_s3::ready() && tud_midi_mounted();
+    const bool busy = mounted && midiEpIn && usbd_edpt_busy(0, midiEpIn);
+    if (busy && !waiting) waitingSinceMs = now;
+    waiting = busy;
+    if (now - saidMs >= 2000 && (usbPort.listening || uartPort.listening || socket.count() > 0)) {
+      saidMs = now;
+      char line[160];
+      const int n = snprintf(line, sizeof(line),
+                             "{\"t\":\"midiout\",\"on\":%d,\"wait\":%lu,\"queued\":%d,\"sent\":%lu,\"refused\":%lu}",
+                             (int)mounted, (unsigned long)(busy ? now - waitingSinceMs : 0), midi.pending(),
+                             (unsigned long)midiWritten, (unsigned long)midiRefused);
+      if (n > 0 && (size_t)n < sizeof(line)) consoleLine(nullptr, line, (size_t)n);
+    }
+  }
+#endif
 
   static uint32_t lastCleanup = 0;
   if (millis() - lastCleanup > 1000) {
@@ -711,6 +1109,15 @@ void loop() {
       memcpy(panelsJson, fresh, out.len + 1);
       xSemaphoreGive(panelsLock);
     }
+  }
+
+  // Bytes lost on the way in are worth a line too, at most one every ten seconds.
+  static uint32_t rxLostSaid = 0, rxLostSaidMs = 0;
+  if (usbRxLost != rxLostSaid && millis() - rxLostSaidMs > 10000) {
+    hubLog("USB: %lu bytes from the computer were lost on the way in (it sent more at once than the hub had room for); "
+           "a request under way then fails and is asked again", (unsigned long)(usbRxLost - rxLostSaid));
+    rxLostSaid = usbRxLost;
+    rxLostSaidMs = millis();
   }
 
   // A repair of the USB jack is worth a line in the log: with everything on

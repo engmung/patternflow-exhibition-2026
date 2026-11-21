@@ -751,6 +751,7 @@ static void testConsoleSets() {
   sim->power(4, false);
   run(3500);
   CHECK_EQ(sim->conductor().onlineCount(), 4);
+  sim->outClear();           // this test has said a great deal by now, and nobody was reading
   cmd("{\"c\":\"forget\",\"uid\":\"" + uidOf(4) + "\"}");
   CHECK_EQ(sim->conductor().panelCount(), 4);
   CHECK(anyLine("\"t\":\"gone\""));
@@ -1303,7 +1304,7 @@ static void testDepth() {
   // Saved and loaded, the depth and the turn are there.
   static uint8_t blob[SAVE_MAX];
   const size_t n = sim->conductor().save(blob, sizeof(blob));
-  CHECK(n > 0 && n <= SAVE_MAX && blob[4] == 3);
+  CHECK(n > 0 && n <= SAVE_MAX && blob[4] == 4);
   static Conductor other;
   other.reset();
   CHECK(other.load(blob, n));
@@ -1325,8 +1326,9 @@ static void testDepth() {
       at += 6 + 2 + 18 + NAME_LEN;
       to += 6 + 2 + keep + NAME_LEN;
     }
-    std::memcpy(old + to, blob + at, n - at);                                // the scenes
-    const size_t oldLen = to + (n - at);
+    const size_t wires = 1 + 3 * (size_t)count;                              // what version 4 put after the scenes
+    std::memcpy(old + to, blob + at, n - at - wires);                        // the scenes
+    const size_t oldLen = to + (n - at - wires);
     static Conductor before;
     before.reset();
     CHECK(before.load(old, oldLen));
@@ -1338,7 +1340,7 @@ static void testDepth() {
     CHECK(!before.load(old, oldLen - 2));
   }
   // The full house still fits.
-  CHECK(5 + CHANNELS + 11 + MAX_PANELS * (6 + 2 + 18 + NAME_LEN) + SCENES * (1 + MAX_PANELS * 15) <= SAVE_MAX);
+  CHECK(5 + CHANNELS + 11 + MAX_PANELS * (6 + 2 + 18 + NAME_LEN) + SCENES * (1 + MAX_PANELS * 15) + 1 + MAX_PANELS * 3 <= SAVE_MAX);
 }
 
 static void testK4AsKnob() {
@@ -1994,6 +1996,61 @@ static void testGraph() {
     CHECK(!anyLine("\"t\":\"mi\"") && !anyLine("\"t\":\"nv\""));
   }
 
+  // A controller's message is an event, not only a value.
+  {
+    // Two pads: one to K1 of panels 2 and 3, one to K2 of every panel.
+    Prog g;
+    const int a = g.op(G_CC, {g.ctl(2, 30, 0)}), b = g.op(G_CC, {g.ctl(2, 31, 0)});
+    g.target({});
+    g.out(b, GO_K2);
+    g.target({2, 3});
+    g.out(a, GO_K1);
+    sendGraph(g);
+    run(300);
+    const uint16_t idle = val(0, 0);
+    // The same value at every press, as a pad that says 127 and nothing on release: the first one moves the knobs ...
+    midiCC(2, 30, 127);
+    run(300);
+    CHECK_EQ(val(1, 0), 1000);
+    CHECK_EQ(val(2, 0), 1000);
+    CHECK_EQ(val(0, 0), idle);                       // panel 1 is not one of the chosen
+    // ... a hand turns one of them away, and it stays: the program's value has not moved ...
+    sim->hand(1, 0, -8);
+    run(400);
+    CHECK_EQ(val(1, 0), 750);
+    // ... the other pad speaks (K2, another controller): that is not this knob's business ...
+    midiCC(2, 31, 64);
+    run(300);
+    CHECK_EQ(val(1, 1), 504);
+    CHECK_EQ(val(1, 0), 750);
+    // ... and the first pad says 127 again: the knob is put back, though the value is the one it last gave.
+    midiCC(2, 30, 127);
+    run(300);
+    CHECK_EQ(val(1, 0), 1000);
+    CHECK_EQ(val(2, 0), 1000);
+    CHECK_EQ(val(0, 0), idle);
+
+    // A tap: the press and its release inside one step of the graph. The panel is taken up and let down
+    // again, not left untouched. (Without it the release overwrote the press before any step ran.)
+    midiCC(2, 30, 0);
+    run(400);
+    CHECK_EQ(val(1, 0), 0);
+    uint16_t peak = 0;
+    midiCC(2, 30, 127);
+    run(8);
+    midiCC(2, 30, 0);
+    for (int step = 0; step < 60; step++) {
+      run(5);
+      if (val(1, 0) > peak) peak = val(1, 0);
+    }
+    CHECK_EQ(peak, 1000);
+    CHECK_EQ(val(1, 0), 0);
+    // And a fader going one way is not held up by it: the last value of a sweep is there a step later.
+    for (int v = 0; v <= 100; v += 5) { midiCC(2, 31, v); run(2); }
+    run(120);
+    CHECK_EQ(val(0, 1), (uint16_t)(100 * 1000 / 127.0f + 0.5f));
+  }
+
   // The switch. Off: the program is kept, drives nothing and takes no
   // controller (MIDI is then read the plain way); on again, it sends afresh.
   {
@@ -2006,6 +2063,9 @@ static void testGraph() {
     cmd("{\"c\":\"graph\",\"op\":\"off\"}");
     CHECK(sim->graph().active() && !sim->graph().enabled() && !sim->graph().running());
     CHECK(!sim->graph().onCC(4, 50, 0, T));                                       // not the graph's now
+    // Which way a port's MIDI goes is the switch's say, whatever is wired. Off: all of it the plain way.
+    const uint8_t named[3] = {0xB3, 50, 100}, unwired[3] = {0xB0, 21, 9}, program[2] = {0xC0, 2}, note[3] = {0x90, 60, 100};
+    CHECK(!sim->graph().onMidi(named, 3, T) && !sim->graph().onMidi(unwired, 3, T) && !sim->graph().onMidi(program, 2, T));
     cmd("{\"c\":\"set\",\"to\":\"all\",\"k\":[250,null,null,null]}");
     run(600);
     CHECK(allValue(0, 250));                                                    // and nothing puts it back
@@ -2016,12 +2076,20 @@ static void testGraph() {
     run(400);
     CHECK(allValue(0, driven));                                                 // on: what it says, again
     CHECK(sim->graph().onCC(4, 50, 100, T));
-    // A hub that has never been told starts with the switch off.
+    // On: none of it the plain way. A controller no wire uses (channel 1, CC 21: panel 1's K2 the plain way)
+    // is kept from the plain mapping like the one the program names, and so are a Program Change and a note.
+    CHECK(sim->graph().onMidi(named, 3, T) && sim->graph().onMidi(unwired, 3, T));
+    CHECK(sim->graph().onMidi(program, 2, T) && sim->graph().onMidi(note, 3, T));
+    run(400);
+    CHECK(allValue(0, driven));                                                 // and the unwired one fed nothing
+    // A hub that has never been told starts with the switch off, and its MIDI goes the plain way.
     Graph cold;
     CHECK(!cold.enabled() && !cold.running());
+    CHECK(!cold.onMidi(unwired, 3, T) && !cold.onMidi(program, 2, T));
   }
 
-  // No program: nothing is driven, and a controller is nobody's.
+  // No program: nothing is driven, and a controller is nobody's. The switch is still on, so a port's MIDI
+  // still does not go the plain way: on means wires only, and here there are none.
   {
     cmd("{\"c\":\"graph\",\"op\":\"clear\"}");
     CHECK(!sim->graph().active());
@@ -2030,6 +2098,11 @@ static void testGraph() {
     run(500);
     CHECK_EQ(val(0, 0), before);
     CHECK(!sim->graph().onCC(3, 40, 1, T));
+    const uint8_t any[3] = {0xB0, 20, 64};
+    CHECK(sim->graph().enabled() && sim->graph().onMidi(any, 3, T));
+    cmd("{\"c\":\"graph\",\"op\":\"off\"}");
+    CHECK(!sim->graph().onMidi(any, 3, T));
+    cmd("{\"c\":\"graph\",\"op\":\"on\"}");
   }
 
   // What is not a program is refused whole, and what was running goes on.
@@ -2072,6 +2145,236 @@ static void testGraph() {
   }
 }
 
+// Wires: panels joined two by two on the map, and channels that keep to them.
+static void testWires() {
+  g_test = "wires";
+  fresh(6);                                   // in a row, a unit apart
+  links("sync", "sync");
+  cmd("{\"c\":\"cfg\",\"speed\":2,\"glide\":0}");
+  run(500);
+  Conductor& c = sim->conductor();
+  auto wire = [&](int a, int b, const char* more = "") {
+    cmd("{\"c\":\"wire\",\"a\":\"" + uidOf(a) + "\",\"b\":\"" + uidOf(b) + "\"" + more + "}");
+  };
+
+  // Joining and parting. Three wires: 0-1-2, and 4-5; 3 has none.
+  sim->outClear();
+  wire(0, 1);
+  wire(1, 2);
+  wire(4, 5);
+  CHECK(c.wire(hub(0), hub(1)) && c.wire(hub(1), hub(0)) && c.wire(hub(1), hub(2)) && c.wire(hub(5), hub(4)));
+  CHECK(!c.wire(hub(2), hub(3)) && !c.wire(hub(0), hub(2)));
+  CHECK_EQ(c.wireCount(), 3);
+  CHECK(c.persistDirty());
+  run(50);
+  CHECK(anyLine("\"t\":\"wires\",\"m\":["));
+  wire(0, 1);                                 // said again: it changes over
+  CHECK(!c.wire(hub(0), hub(1)));
+  wire(0, 1, ",\"on\":true");
+  wire(0, 1, ",\"on\":true");                 // joined stays joined
+  CHECK(c.wire(hub(0), hub(1)));
+  wire(1, 0, ",\"on\":false");
+  wire(1, 0, ",\"on\":false");                // and parted stays parted, from either end
+  CHECK(!c.wire(hub(0), hub(1)));
+  wire(0, 1);
+  CHECK_EQ(c.wireCount(), 3);
+  sim->outClear();
+  cmd("{\"c\":\"wire\",\"a\":\"" + uidOf(0) + "\",\"b\":\"" + uidOf(0) + "\"}");    // no panel is wired to itself
+  CHECK(anyLine("\"t\":\"err\",\"c\":\"wire\""));
+  sim->outClear();
+  cmd("{\"c\":\"wire\",\"a\":\"" + uidOf(0) + "\",\"b\":\"0000000000aa\"}");         // nor to nobody
+  CHECK(anyLine("\"t\":\"err\",\"c\":\"wire\""));
+  CHECK_EQ(c.wireCount(), 3);
+
+  // The way along the wires.
+  CHECK(std::fabs(c.wireDistance(hub(0), hub(2)) - 2.0f) < 1e-4f);
+  CHECK(std::fabs(c.wireDistance(hub(5), hub(4)) - 1.0f) < 1e-4f);
+  CHECK(c.wireDistance(hub(0), hub(3)) < 0 && c.wireDistance(hub(2), hub(4)) < 0);
+  CHECK(c.wireDistance(hub(3), hub(3)) == 0.0f);
+
+  // A channel that does not keep to the wires goes on as before: K1, sync, everybody.
+  sim->hand(0, 0, 4);
+  run(300);
+  CHECK(allValue(0, 625));
+
+  // K2 keeps to the wires. Sync: the panels its wires lead to, at once, and no others.
+  sim->outClear();
+  cmd("{\"c\":\"cfg\",\"wired\":[null,true,null,null]}");
+  CHECK(c.config().wired[1] && !c.config().wired[0] && !c.config().wired[CH_PATTERN]);
+  run(50);
+  CHECK(anyLine("\"t\":\"cfg\"", "\"wired\":[false,true,false,false],\"pwired\":false"));
+  sim->outClear();
+  sim->hand(1, 1, 4);
+  run(300);
+  CHECK_EQ(val(0, 1), 625);
+  CHECK_EQ(val(1, 1), 625);
+  CHECK_EQ(val(2, 1), 625);
+  CHECK_EQ(val(3, 1), 500);
+  CHECK_EQ(val(4, 1), 500);
+  CHECK_EQ(val(5, 1), 500);
+  CHECK(anyLine("\"t\":\"w\"", "\"wr\":1"));
+  // A panel no wire touches keeps its turn to itself.
+  sim->hand(3, 1, -4);
+  run(300);
+  CHECK_EQ(val(3, 1), 375);
+  CHECK_EQ(val(2, 1), 625);
+  CHECK_EQ(val(4, 1), 500);
+  // The other group is its own.
+  sim->hand(5, 1, 8);
+  run(300);
+  CHECK_EQ(val(4, 1), 750);
+  CHECK_EQ(val(5, 1), 750);
+  CHECK_EQ(val(2, 1), 625);
+  CHECK_EQ(val(3, 1), 375);
+  // From the console "as a turn": the way a hand's turn at that panel goes, wires and all ...
+  cmd("{\"c\":\"set\",\"to\":\"" + uidOf(2) + "\",\"turn\":true,\"kn\":1,\"v\":800}");
+  run(400);
+  CHECK_EQ(val(0, 1), 800);
+  CHECK_EQ(val(1, 1), 800);
+  CHECK_EQ(val(2, 1), 800);
+  CHECK_EQ(val(3, 1), 375);
+  CHECK_EQ(val(4, 1), 750);
+  // ... and without it one panel and no other, as ever.
+  cmd("{\"c\":\"set\",\"to\":\"" + uidOf(2) + "\",\"kn\":1,\"v\":600}");
+  run(400);
+  CHECK_EQ(val(2, 1), 600);
+  CHECK_EQ(val(1, 1), 800);
+  // A panel no wire touches: its "turn" from the console is its own too.
+  cmd("{\"c\":\"set\",\"to\":\"" + uidOf(3) + "\",\"turn\":true,\"kn\":1,\"v\":375}");
+  cmd("{\"c\":\"set\",\"to\":\"" + uidOf(1) + "\",\"turn\":true,\"kn\":1,\"v\":625}");      // and the row back where it was
+  run(400);
+  CHECK_EQ(val(0, 1), 625);
+  CHECK_EQ(val(2, 1), 625);
+  CHECK_EQ(val(3, 1), 375);
+  CHECK_EQ(val(5, 1), 750);
+
+  // K1 still reaches everyone while K2 keeps to the wires.
+  sim->hand(4, 0, -4);
+  run(300);
+  CHECK(allValue(0, 500));
+
+  // Ripple goes round the corner the wires go round. Panel 2 moves to sit
+  // under panel 0: a unit from it through the air, but 1 + 1.41 along 0-1-2.
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(2) + "\",\"x\":0,\"y\":1}");
+  CHECK(std::fabs(c.wireDistance(hub(0), hub(2)) - 2.41421f) < 1e-3f);
+  links("ripple", "ripple");
+  run(300);
+  sim->hand(0, 1, -4);                        // 625 -> 500
+  const uint32_t t0 = T;
+  uint32_t got[6] = {0, 0, 0, 0, 0, 0};
+  for (int step = 0; step < 250; step++) {
+    run(10);
+    for (int i = 0; i < 3; i++)
+      if (!got[i] && val(i, 1) == 500) got[i] = T - t0;
+  }
+  CHECK(got[0] > 0 && got[0] <= 60);                         // the hand's own panel: at once
+  CHECK(got[1] >= 495 && got[1] <= 590);                     // a unit along the wire, at two units a second
+  CHECK(got[2] >= 1202 && got[2] <= 1300);                   // round the corner, not the 500 ms of the straight line
+  CHECK_EQ(val(3, 1), 375);
+  CHECK_EQ(val(4, 1), 750);
+  CHECK_EQ(c.inFlight(), 0);
+
+  // An unlinked panel on the way takes nothing and lets the value through.
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(1) + "\",\"linked\":false}");
+  sim->hand(0, 1, 4);                         // 500 -> 625
+  run(2000);
+  CHECK_EQ(val(0, 1), 625);
+  CHECK_EQ(val(1, 1), 500);
+  CHECK_EQ(val(2, 1), 625);
+  cmd("{\"c\":\"panel\",\"uid\":\"" + uidOf(1) + "\",\"linked\":true}");
+
+  // A wire cut: the two sides are their own from then on.
+  wire(1, 2, ",\"on\":false");
+  sim->hand(0, 1, 4);                         // 625 -> 750
+  run(2000);
+  CHECK_EQ(val(0, 1), 750);
+  CHECK_EQ(val(1, 1), 750);
+  CHECK_EQ(val(2, 1), 625);
+  // Joined again, nothing moves by itself; the next turn is everybody's.
+  wire(1, 2, ",\"on\":true");
+  run(500);
+  CHECK_EQ(val(2, 1), 625);
+  sim->hand(2, 1, 4);                         // 625 -> 750, from the far end
+  run(2500);
+  CHECK_EQ(val(0, 1), 750);
+  CHECK_EQ(val(1, 1), 750);
+  CHECK_EQ(val(2, 1), 750);
+
+  // The pattern can keep to the wires as well.
+  links("sync", "sync");
+  cmd("{\"c\":\"cfg\",\"pwired\":true}");
+  CHECK(c.config().wired[CH_PATTERN]);
+  sim->hand(4, 3, 3);                         // K4 steps the pattern, on a panel of the 4-5 group
+  run(400);
+  CHECK_EQ(sim->panel(4).actual, 1);
+  CHECK_EQ(sim->panel(5).actual, 1);
+  CHECK_EQ(sim->panel(0).actual, 0);
+  CHECK_EQ(sim->panel(3).actual, 0);
+
+  // Kept across a restart: the wires, and which channels keep to them. A panel that joins a hub that has
+  // just started takes what its wires lead to, and one with no wires keeps what it has: nobody jumps.
+  static uint8_t blob[SAVE_MAX];
+  const size_t n = c.save(blob, sizeof(blob));
+  CHECK(n > 0 && n <= SAVE_MAX);
+  static Conductor other;
+  other.reset();
+  CHECK(other.load(blob, n));
+  CHECK_EQ(other.wireCount(), 3);
+  CHECK(other.config().wired[1] && other.config().wired[CH_PATTERN] && !other.config().wired[0]);
+  const int a = other.findPanel(sim->panel(4).uid), z = other.findPanel(sim->panel(5).uid);
+  CHECK(a >= 0 && z >= 0 && other.wire(a, z) && other.wire(z, a));
+  CHECK(!other.wire(other.findPanel(sim->panel(2).uid), other.findPanel(sim->panel(3).uid)));
+  static uint8_t blob2[SAVE_MAX];
+  CHECK_EQ(other.save(blob2, sizeof(blob2)), n);
+  CHECK(std::memcmp(blob, blob2, n) == 0);
+  CHECK(!other.load(blob, n - 2));            // a blob cut in its wires changes nothing
+  CHECK_EQ(other.wireCount(), 3);
+  // A setup saved before there were wires (version 3: the same without its tail) loads, with none.
+  std::memcpy(blob2, blob, n);
+  blob2[4] = 3;
+  CHECK(other.load(blob2, n - (1 + 3 * 6)));
+  CHECK_EQ(other.panelCount(), 6);
+  CHECK_EQ(other.wireCount(), 0);
+  CHECK(!other.config().wired[1] && !other.config().wired[CH_PATTERN]);
+
+  const uint16_t before[6] = {val(0, 1), val(1, 1), val(2, 1), val(3, 1), val(4, 1), val(5, 1)};
+  // A hub that restarts is silent for a couple of seconds (its Wi-Fi comes
+  // up again), and that silence is how a panel knows the STATE numbers have
+  // begun again. The simulated restart takes no time, so the air is shut for it.
+  sim->network(3, 4, 1000);
+  sim->restartHub();
+  run(2000);
+  sim->network(3, 4, 0);
+  run(1500);
+  CHECK_EQ(sim->conductor().onlineCount(), 6);
+  CHECK_EQ(sim->conductor().wireCount(), 3);
+  for (int i = 0; i < 6; i++) CHECK_EQ(val(i, 1), before[i]);
+  sim->hand(5, 1, -4);                        // and the groups still are groups
+  run(400);
+  CHECK_EQ(val(4, 1), before[4] - 125);
+  CHECK_EQ(val(3, 1), before[3]);
+  CHECK_EQ(val(0, 1), before[0]);
+
+  // A panel forgotten takes its wires with it; "clear" takes one panel's, or all.
+  Conductor& now = sim->conductor();
+  sim->power(5, false);
+  run(4000);
+  cmd("{\"c\":\"forget\",\"uid\":\"" + uidOf(5) + "\"}");
+  CHECK_EQ(now.wireCount(), 2);
+  CHECK_EQ(now.wiresOf(hub(4)), 0u);
+  cmd("{\"c\":\"wire\",\"clear\":true,\"a\":\"" + uidOf(1) + "\"}");
+  CHECK_EQ(now.wireCount(), 0);               // both of the row's wires were panel 1's
+  wire(0, 1);
+  wire(2, 3);
+  cmd("{\"c\":\"wire\",\"clear\":true}");
+  CHECK_EQ(now.wireCount(), 0);
+  // With no wires at all, a channel that keeps to them is every panel on its own.
+  links("sync", "sync");
+  sim->hand(0, 1, -4);
+  run(300);
+  CHECK_EQ(val(1, 1), before[1]);
+}
+
 int main() {
   testCodec();
   testFollower();
@@ -2096,6 +2399,7 @@ int main() {
   testNames();
   testSolo();
   testGraph();
+  testWires();
   std::printf("%s  %d checks, %d failed\n", g_failed ? "FAIL" : "PASS", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

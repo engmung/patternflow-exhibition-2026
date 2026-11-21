@@ -316,6 +316,20 @@ function oneValue(type, p, inputs = {}) {                  // the node's output 
   check(made3.bytes === null && made3.errors.some((e) => e.text.includes('Smooth')), 'more nodes that remember than the hub has room for');
 }
 
+// ── Chosen panels outrank every panel, whichever node came first ───────────
+for (const allFirst of [true, false]) {
+  const G = g();
+  const wide = node(G, 'value', { v: 0.2 }), narrow = node(G, 'value', { v: 0.9 });
+  const outs = allFirst ? [node(G, 'out'), node(G, 'out', { to: [2] })] : [node(G, 'out', { to: [2] }), node(G, 'out')];
+  const [all, some] = allFirst ? outs : [outs[1], outs[0]];
+  wire(G, wide, 0, all, KN.K3);
+  wire(G, narrow, 0, some, KN.K3);
+  check(send(G) === '', 'an output for every panel and one for panel 2, on the same knob');
+  run(600);
+  check(knob(1, 2) === 900, `panel 2 takes the output that names it (${allFirst ? 'put down second' : 'put down first'})`);
+  check(knob(0, 2) === 200 && knob(2, 2) === 200, 'and the others the one for every panel');
+}
+
 // ── What the console watches ───────────────────────────────────────────────
 {
   const G = g();

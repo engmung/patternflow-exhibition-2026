@@ -278,9 +278,22 @@ class Console {
       }
       const JVal* plink = o.get("plink");
       if (plink && !parseLink(*plink, &cfg.link[CH_PATTERN])) return "plink: solo, sync or ripple";
+      // Which channels keep to the wires: four of true / false / null (leave), and the pattern's own.
+      const JVal* wired = o.get("wired");
+      if (wired) {
+        if (wired->type != 'a') return "wired must be an array of four";
+        size_t i = 0;
+        JVal e;
+        for (int k = 0; k < KNOBS && nextElement(*wired, &i, &e); k++) {
+          if (e.type == 'z') continue;
+          if (e.type != 'b') return "wired: true, false or null";
+          cfg.wired[k] = e.p[0] == 't';
+        }
+      }
       float f;
       int n;
       bool b;
+      if (o.boolean("pwired", &b)) cfg.wired[CH_PATTERN] = b;
       if (o.number("speed", &f)) cfg.speed = f;
       if (o.integer("glide", &n)) cfg.glideMs = (uint16_t)clampTo<int>(n, 0, 60000);
       if (o.boolean("k4", &b)) cfg.k4Pattern = b;
@@ -317,6 +330,24 @@ class Console {
 
     if (is("forget")) {
       return c_.forgetPanel(panelOf(o, "uid")) ? nullptr : "no such panel";
+    }
+
+    // A wire between two panels: "on" true joins them, false parts them,
+    // left out changes it over. "clear": true takes every wire away, or
+    // with "a" the wires of that panel.
+    if (is("wire")) {
+      bool b = false;
+      if (o.boolean("clear", &b) && b) {
+        const int only = o.get("a") ? panelOf(o, "a") : -1;
+        if (o.get("a") && only < 0) return "no such panel";
+        c_.clearWires(only);
+        return nullptr;
+      }
+      const int a = panelOf(o, "a"), z = panelOf(o, "b");
+      if (a < 0 || z < 0) return "no such panel";
+      if (a == z) return "a wire joins two panels";
+      const int on = o.boolean("on", &b) ? (b ? 1 : 0) : -1;
+      return c_.setWire(a, z, on) ? nullptr : "no such panel";
     }
 
     if (is("set")) {
@@ -358,6 +389,9 @@ class Console {
       if (br >= 0 && !c_.setBrightness(to, br)) return "no such panel";
       if (sleepOrder && !c_.setSleep(to, asleep)) return "no such panel";
       if (!values) return br >= 0 || sleepOrder ? nullptr : "nothing to set";
+      // "turn": true - as a hand's turn at that panel, so the links and the wires decide who else takes it.
+      bool turn = false;
+      if (o.boolean("turn", &turn) && turn) return c_.actAsHand(to, pattern, knob) ? nullptr : "no such panel";
       return c_.setPanel(to, pattern, knob, glide) ? nullptr : "no such panel";
     }
 

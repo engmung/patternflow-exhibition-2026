@@ -46,6 +46,9 @@
     scenes: [],
     hub: null,
     waves: [],               // rings being drawn
+    wires: [],               // hub index -> a bit for every panel it is wired to
+    wireMode: false,         // the Wire tool: the left button pulls wires instead of moving panels
+    midiOut: null,           // how the hub's MIDI pipe to the computer is doing
     sel: null,               // hub index of the chosen panel the side shows
     picked: new Set(),       // every chosen panel (the one above among them)
     scope: 'one',
@@ -159,6 +162,7 @@
     send(text) {
       if (!this.x) return;
       if (fakeRelay(text)) return;          // HTTP for a panel: the demo's panels have no web server
+      if (fakeSetup(text)) return;          // and no radio to look for new panels with
       const bytes = this.enc.encode(text);
       if (bytes.length >= this.x.pfe_io_size()) return;
       new Uint8Array(this.x.memory.buffer, this.x.pfe_io(), bytes.length).set(bytes);
@@ -303,6 +307,8 @@
     S.scenes = [];
     S.hub = null;
     S.waves = [];
+    S.wires = [];
+    S.midiOut = null;
     S.sel = null;
     S.picked = new Set();
     S.flash.clear();
@@ -372,7 +378,7 @@
     if (text[0] !== '{') { log('raw', text); return; }   // the hub's own boot log on the same port
     let m;
     try { m = JSON.parse(text); } catch (_) { log('raw', text); return; }
-    if ($('log-raw').checked && m.t !== 'p' && m.t !== 'hub' && m.t !== 'hb' && m.t !== 'hk' && m.t !== 'nv' && m.t !== 'mi') log('raw', '← ' + text);
+    if ($('log-raw').checked && m.t !== 'p' && m.t !== 'hub' && m.t !== 'hb' && m.t !== 'hk' && m.t !== 'nv' && m.t !== 'mi' && m.t !== 'midiout' && !(m.t === 'setup' && m.op === 'net')) log('raw', '← ' + text);
     switch (m.t) {
       case 'hello':
         log('', `Hub: protocol ${m.proto}${m.fw ? ', firmware ' + m.fw : ''}${m.ssid ? ', Wi-Fi ' + m.ssid : ''}`);
@@ -395,6 +401,10 @@
         break;
       }
       case 'scenes': S.scenes = m.u || []; break;   // kept by the hub; this console has no buttons for them
+      case 'wires': S.wires = m.m || []; renderInspector(); break;
+      case 'setup': suLine(m); break;
+      case 'midiout': S.midiOut = m; renderStats(); break;
+      case 'usb': log('', 'USB: ' + JSON.stringify(m.d)); break;
       case 'hub':
         S.hub = m;
         S.lastHubLineAt = performance.now();
@@ -414,7 +424,9 @@
         // It started or stopped a show: what the side column says of its player is from before.
         if (prev && ((prev.fl ^ m.fl) & RF_SOLO) && shows.has(m.uid)) loadShows(m.uid);
         if (S.page === 'nodes' && (!prev || prev.on !== m.on)) throttled('ngPanels', ngRender, 600);
+        if (S.page === 'nodes' && (!prev || prev.on !== m.on || prev.x !== m.x || prev.y !== m.y || prev.id !== m.id)) throttled('ngMini', ngMini, 300);
         if (S.page === 'shows' && (!prev || prev.on !== m.on || prev.n !== m.n || ((prev.fl ^ m.fl) & RF_SOLO))) throttled('libPanels', renderLib, 300);
+        if (S.page === 'setup' && (!prev || prev.on !== m.on || prev.var !== m.var || prev.n !== m.n)) throttled('suPanels', suRender, 300);
         if (S.page === 'patterns' && (!prev || prev.on !== m.on || prev.n !== m.n)) {
           renderGo();
           if (m.on) throttled('patCompare', compareAll, 1500);
@@ -436,7 +448,9 @@
         const at = performance.now();
         const last = S.waves[S.waves.length - 1];
         if (last && last.o === m.o && last.c === m.c && at - last.at < 250) break;
-        S.waves.push({ x: m.x, y: m.y, z: m.z || 0, c: m.c, at, now: !!m.now, d: m.d, speed: S.cfg ? S.cfg.speed : 2, o: m.o });
+        // One that keeps to the wires is drawn along them: the ways it takes, as the wires lie now.
+        S.waves.push({ x: m.x, y: m.y, z: m.z || 0, c: m.c, at, now: !!m.now, d: m.d, speed: S.cfg ? S.cfg.speed : 2, o: m.o,
+                       wr: !!m.wr, tree: m.wr && m.o >= 0 ? wireTree(m.o) : null });
         if (S.waves.length > 60) S.waves.shift();
         break;
       }
@@ -478,6 +492,28 @@
       row.append(lab, seg);
       box.append(row);
     }
+    // Whether a turn keeps to the wires drawn on the map. One switch for all
+    // of them: the hub can be told knob by knob, and that was a row of five
+    // more buttons nobody needed (2026-11-21).
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.marginTop = '10px';
+    row.innerHTML = '<span class="lab" style="width:auto;flex:1" title="On: a turn goes only to the panels joined to that panel by wires on the map, and a ripple travels along the wires. Off: to every linked panel. Wires: right-drag from panel to panel, or F with panels selected">Only along wires</span>';
+    const seg = document.createElement('div');
+    seg.className = 'seg small';
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Whether a turn goes only along the wires on the map');
+    for (const on of [false, true]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.id = on ? 'wired-on' : 'wired-off';
+      b.textContent = on ? 'On' : 'Off';
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => send({ c: 'cfg', wired: [on, on, on, on], pwired: on }));
+      seg.append(b);
+    }
+    row.append(seg);
+    box.append(row);
   }
 
   function busy(el) { return document.activeElement === el; }
@@ -510,6 +546,9 @@
       const cur = c < 4 ? cfg.link[c] : cfg.plink;
       for (const l of LINKS) $(`link-${c}-${l}`).setAttribute('aria-pressed', String(l === cur));
     }
+    // On when every one of them keeps to the wires (a hub set knob by knob before shows Off until switched).
+    const wired = Array.isArray(cfg.wired) && cfg.wired.every(Boolean) && !!cfg.pwired;
+    setPressed(['wired-off', 'wired-on'], wired ? 'wired-on' : 'wired-off');
     $(`link-3-solo`).closest('.row').hidden = !!cfg.k4;   // K4 has no value to share while it switches patterns
     if (!busy($('cfg-speed'))) $('cfg-speed').value = cfg.speed;
     $('cfg-speed-v').textContent = `${cfg.speed} units/s`;
@@ -571,7 +610,24 @@
       `<span>In flight <b>${h.fly}</b></span>` +
       `<span>Received <b>${h.rx}</b> · sent <b>${h.tx}</b></span>` +
       `<span>Bad packets <b>${h.bad}</b> · late reports <b>${h.stale}</b></span>` +
-      `<span>Hub up <b>${time}</b></span>`;
+      `<span>Hub up <b>${time}</b></span>` + midiOutNote();
+  }
+
+  // The hub's MIDI to the computer. A computer that reads the port takes a
+  // message within a millisecond or two; one waiting for seconds means that
+  // nothing is reading, or that the pipe has stopped (seen once, 2026-11-21:
+  // it stood still until the hub restarted).
+  let midiOutSaid = false;
+  function midiOutNote() {
+    const mo = S.midiOut;
+    if (!mo || !mo.on) return '';
+    const stuck = mo.wait > 3000;
+    if (stuck && mo.queued > 0 && !midiOutSaid) {
+      midiOutSaid = true;
+      log('err', `MIDI out: the computer has not taken a message for ${Math.round(mo.wait / 1000)} s and ${mo.queued} more are waiting. If a program is listening and hears nothing, restart the hub`);
+    }
+    if (!stuck) { midiOutSaid = false; return `<span>MIDI out <b>${mo.sent}</b></span>`; }
+    return `<span style="color:var(--bad)" title="The hub has had a MIDI message waiting for the computer this long. That is normal while no program has the MIDI port open. If one is open and hears nothing, restart the hub.">MIDI out <b style="color:var(--bad)">waiting ${Math.round(mo.wait / 1000)} s</b></span>`;
   }
 
   // ── The inspector ──────────────────────────────────────────────────────
@@ -662,6 +718,8 @@
     const uid = selUid();
     if (!uid) return;
     if (S.scope === 'one') for (const p of pickedPanels()) send({ c: 'set', to: p.uid, ...what });
+    // As a turn of that panel's own knob: the rules on the left (solo, sync, ripple, only along wires) say who else takes it.
+    else if (S.scope === 'turn') for (const p of pickedPanels()) send({ c: 'set', to: p.uid, turn: true, ...what });
     else if (S.scope === 'wave') send({ c: 'set', to: 'all', mode: 'ripple', from: uid, ...what });
     else send({ c: 'set', to: 'all', ...what });
   }
@@ -692,6 +750,9 @@
                            ['p-rx', turn[0]], ['p-ry', turn[1]], ['p-rz', turn[2]]])
       if (!busy($(id))) $(id).value = v;
     $('p-linked').checked = !!p.l;
+    const to = wiredTo(S.sel).map((j) => S.panels.get(j).id).sort((a, b) => a - b);
+    $('p-wires').textContent = to.length ? `Wired to ${to.join(', ')}` : 'No wires';
+    $('p-unwire').hidden = !to.length;
     $('p-sleep').textContent = p.sl ? 'Wake' : 'Sleep';
 
     // Patterns: as many as this panel says it has, named where a name is known.
@@ -981,6 +1042,7 @@
     // Values on their way: a ring from where the turn was made.
     S.waves = S.waves.filter((w) => now - w.at < (w.now ? 500 : w.d + 500));
     for (const w of S.waves) {
+      if (w.wr) continue;                  // one that keeps to the wires is drawn along them
       const age = (now - w.at) / 1000;
       const [sx, sy] = toScreen(w.x, w.y);
       const radius = (w.now ? age * 14 : age * w.speed) * z;
@@ -993,6 +1055,8 @@
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
+
+    drawWires((i) => { const p = S.panels.get(i); return p ? toScreen(p.x, p.y) : null; }, now);
 
     const tw = TILE_W * z, th = TILE_H * z;
     for (const [i, p] of S.panels) {
@@ -1030,6 +1094,193 @@
       if (Math.abs(sx - cx) <= tw / 2 + 3 && Math.abs(sy - cy) <= th / 2 + 3) hit = i;
     }
     return hit;
+  }
+
+  // ── Wires: panels joined two by two ────────────────────────────────────
+  // The hub keeps them (core/pfe_conductor.h) and says which there are; a
+  // channel whose "Wires" switch is on spreads along them only.
+  const wiredTo = (i) => [...S.panels.keys()].filter((j) => j !== i && (((S.wires[i] || 0) >>> j) & 1));
+  function wireList() {            // [i, j], i < j, both on the map
+    const out = [];
+    for (const i of S.panels.keys())
+      for (const j of S.panels.keys())
+        if (i < j && (((S.wires[i] || 0) >>> j) & 1)) out.push([i, j]);
+    return out;
+  }
+  function setWire(i, j, on) {     // on: true or false, or left out to change it over
+    const a = S.panels.get(i), b = S.panels.get(j);
+    if (!a || !b || i === j) return;
+    const m = { c: 'wire', a: a.uid, b: b.uid };
+    if (on != null) m.on = !!on;
+    send(m);
+  }
+  const apart = (p, q) => Math.hypot(p.x - q.x, p.y - q.y, (p.z || 0) - (q.z || 0));
+
+  // The ways a value takes from panel `o` along the wires, for drawing it:
+  // every wire that lies on a shortest way, from its nearer end (a) to its
+  // farther (b), and how far along the way each end is.
+  function wireTree(o) {
+    const dist = new Map([[o, 0]]), done = new Set();
+    for (;;) {
+      let u = null;
+      for (const [k, d] of dist) if (!done.has(k) && (u == null || d < dist.get(u))) u = k;
+      if (u == null) break;
+      done.add(u);
+      const pu = S.panels.get(u);
+      if (!pu) continue;
+      for (const v of wiredTo(u)) {
+        const d = dist.get(u) + apart(pu, S.panels.get(v));
+        if (!dist.has(v) || d < dist.get(v)) dist.set(v, d);
+      }
+    }
+    const segs = [];
+    for (const [i, j] of wireList()) {
+      if (!dist.has(i) || !dist.has(j)) continue;
+      const [a, b] = dist.get(i) <= dist.get(j) ? [i, j] : [j, i];
+      if (Math.abs(dist.get(a) + apart(S.panels.get(a), S.panels.get(b)) - dist.get(b)) > 1e-6) continue;
+      segs.push({ a, b, d0: dist.get(a), d1: dist.get(b) });
+    }
+    return segs;
+  }
+
+  // The wires, and what is travelling along them. `at(i)` is where panel i
+  // is on the canvas in the view being drawn, or null.
+  function drawWires(at, now) {
+    const list = wireList();
+    ctx.lineCap = 'round';
+    for (const [i, j] of list) {
+      const a = at(i), b = at(j);
+      if (!a || !b) continue;
+      const mine = S.picked.has(i) || S.picked.has(j);
+      ctx.strokeStyle = mine ? colors.led : ROOM.line;
+      ctx.globalAlpha = mine ? 0.95 : 0.75;
+      ctx.lineWidth = mine ? 3 : 2;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+    }
+    for (const w of S.waves) {
+      if (!w.wr || !w.tree) continue;
+      const age = (now - w.at) / 1000, gone = age * w.speed;
+      ctx.fillStyle = ctx.strokeStyle = w.c === 4 || w.c === 5 ? ROOM.dark : colors.led;
+      for (const s of w.tree) {
+        const a = at(s.a), b = at(s.b);
+        if (!a || !b) continue;
+        if (w.now) {                       // at once: the whole way lights up, and fades
+          ctx.globalAlpha = 0.85 * clamp(1 - age / 0.5, 0, 1);
+          ctx.lineWidth = 4.5;
+          ctx.beginPath();
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
+          ctx.stroke();
+        } else if (s.d1 > s.d0 && gone >= s.d0 && gone <= s.d1) {
+          const t = (gone - s.d0) / (s.d1 - s.d0);      // a dot where the value is now
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          ctx.arc(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+  }
+
+  // Pulling a wire from a panel to another, or drawing a cut across wires.
+  let wireDrag = null;             // { kind: 'wire', from, x, y } or { kind: 'cut', pts }
+  const tileUnder = (sx, sy) => (S.view === '3d' ? tileAt3(sx, sy) : tileAt(sx, sy));
+  function wireAt(i) {             // where panel i is on the canvas, in the view shown
+    const p = S.panels.get(i);
+    if (!p) return null;
+    return S.view === '3d' ? project(place(p), basis()) : toScreen(p.x, p.y);
+  }
+  function segCross(p, q, a, b) {  // do the segments p-q and a-b meet
+    const o = (u, v, w) => (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]);
+    const d1 = o(p, q, a), d2 = o(p, q, b), d3 = o(a, b, p), d4 = o(a, b, q);
+    return d1 * d2 <= 0 && d3 * d4 <= 0 && !(d1 === 0 && d2 === 0 && d3 === 0 && d4 === 0);
+  }
+  function startWire(ev) {
+    const [sx, sy] = pointerAt(ev);
+    const i = tileUnder(sx, sy);
+    // A cut: Ctrl with the right button, as in the node editor; with the Wire tool, a drag that starts on nothing.
+    const cut = ev.button === 2 ? ev.ctrlKey : i == null;
+    if (!cut && i == null) return false;                // the right button on nothing does nothing
+    ev.preventDefault();
+    canvas.focus({ preventScroll: true });
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_) { /* a pointer made by a script */ }
+    wireDrag = cut ? { kind: 'cut', pts: [[sx, sy]] } : { kind: 'wire', from: i, x: sx, y: sy };
+    return true;
+  }
+  function endWire() {
+    const w = wireDrag;
+    wireDrag = null;
+    if (w.kind === 'wire') {
+      const to = tileUnder(w.x, w.y);
+      if (to != null && to !== w.from) setWire(w.from, to);          // one there already: it is taken away
+      return;
+    }
+    let cut = 0;
+    for (const [i, j] of wireList()) {
+      const a = wireAt(i), b = wireAt(j);
+      if (!a || !b) continue;
+      for (let n = 1; n < w.pts.length; n++) {
+        if (!segCross(w.pts[n - 1], w.pts[n], a, b)) continue;
+        setWire(i, j, false);
+        cut++;
+        break;
+      }
+    }
+    if (cut) toast(`${nOf(cut, 'wire')} cut`);
+  }
+  function drawWireTool() {
+    if (!wireDrag) return;
+    if (wireDrag.kind === 'wire') {
+      const a = wireAt(wireDrag.from);
+      if (!a) return;
+      const over = tileUnder(wireDrag.x, wireDrag.y);
+      const b = over != null && over !== wireDrag.from ? wireAt(over) : null;
+      ctx.strokeStyle = colors.led;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash(b ? [] : [6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b ? b[0] : wireDrag.x, b ? b[1] : wireDrag.y);
+      ctx.stroke();
+    } else if (wireDrag.pts.length > 1) {
+      ctx.strokeStyle = colors.bad;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      wireDrag.pts.forEach((q, n) => (n ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  // F, as Blender joins what is selected. Two panels: a wire between them,
+  // or away with the one they have. More: a chain from an end, each to the
+  // nearest not yet on it (and the same again takes the chain away).
+  function wirePicked() {
+    const ids = [...S.picked].filter((i) => S.panels.has(i));
+    if (ids.length < 2) { toast('Select two or more panels to wire them'); return; }
+    if (ids.length === 2) { setWire(ids[0], ids[1]); return; }
+    const ps = ids.map((i) => S.panels.get(i));
+    const mid = { x: ps.reduce((s, p) => s + p.x, 0) / ps.length, y: ps.reduce((s, p) => s + p.y, 0) / ps.length,
+                  z: ps.reduce((s, p) => s + (p.z || 0), 0) / ps.length };
+    let at = ids.reduce((best, i) => (apart(S.panels.get(i), mid) > apart(S.panels.get(best), mid) ? i : best), ids[0]);
+    const left = new Set(ids);
+    left.delete(at);
+    const pairs = [];
+    while (left.size) {
+      let next = null;
+      for (const j of left) if (next == null || apart(S.panels.get(at), S.panels.get(j)) < apart(S.panels.get(at), S.panels.get(next))) next = j;
+      pairs.push([at, next]);
+      left.delete(next);
+      at = next;
+    }
+    const all = pairs.every(([a, b]) => ((S.wires[a] || 0) >>> b) & 1);
+    for (const [a, b] of pairs) setWire(a, b, !all);
+    toast(all ? 'Wires between them removed' : `${ids.length} panels wired in a chain`);
   }
 
   // ── The map as a room (3D) ─────────────────────────────────────────────
@@ -1363,6 +1614,7 @@
     // Values on their way: a sphere from where the turn was made, seen as its outline.
     S.waves = S.waves.filter((w) => now - w.at < (w.now ? 500 : w.d + 500));
     for (const w of S.waves) {
+      if (w.wr) continue;
       const c = project([w.x, w.z || 0, -w.y], B);
       if (!c) continue;
       const age = (now - w.at) / 1000;
@@ -1376,6 +1628,8 @@
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
+
+    drawWires((i) => { const p = S.panels.get(i); return p ? project(place(p), B) : null; }, now);
 
     // The far panels first.
     const list = [];
@@ -1418,6 +1672,7 @@
   function draw(now) {
     if (S.view === '3d') draw3d(now);
     else draw2d(now);
+    drawWireTool();
   }
 
   function tileAt3(sx, sy) {
@@ -1715,6 +1970,7 @@
       return;
     }
     if (key === 'escape') { pickNone(); return; }
+    if (key === 'f' && !ev.ctrlKey && !ev.altKey) { wirePicked(); ev.preventDefault(); return; }
     if (S.view !== '3d') return;
     if (ev.altKey) {
       // Alt + R: no turn at all, as in Blender.
@@ -1759,7 +2015,7 @@
   // The middle button moves the view; the browser's own scrolling by it would take it away.
   canvas.addEventListener('mousedown', (ev) => { if (ev.button === 1) ev.preventDefault(); });
   canvas.addEventListener('auxclick', (ev) => ev.preventDefault());
-  canvas.addEventListener('contextmenu', (ev) => { if (S.view === '3d') ev.preventDefault(); });
+  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());    // the right button pulls wires and cancels grabs
 
   function setView(view) {
     if (grab) endGrab(false);
@@ -1779,6 +2035,9 @@
   // middle button (or Alt, or a finger) slides the map, the wheel zooms.
   let drag = null;
   canvas.addEventListener('pointerdown', (ev) => {
+    // Wires, in either view: the right button from a panel to a panel, Ctrl
+    // + right button to cut; with the Wire tool on, the left button does both.
+    if (!grab && (ev.button === 2 || (S.wireMode && ev.button === 0 && !ev.altKey)) && startWire(ev)) return;
     if (S.view === '3d') { down3(ev); return; }
     const [sx, sy] = pointerAt(ev);
     canvas.focus({ preventScroll: true });
@@ -1802,6 +2061,12 @@
     drag = { kind: 'tile', i, sx, sy, from, moved: false };
   });
   canvas.addEventListener('pointermove', (ev) => {
+    if (wireDrag) {
+      const [sx, sy] = pointerAt(ev);
+      if (wireDrag.kind === 'wire') { wireDrag.x = sx; wireDrag.y = sy; }
+      else wireDrag.pts.push([sx, sy]);
+      return;
+    }
     if (S.view === '3d') { move3(ev); return; }
     if (!drag) return;
     const [sx, sy] = pointerAt(ev);
@@ -1826,6 +2091,7 @@
     showPlace();
   });
   const endDrag = () => {
+    if (wireDrag) { endWire(); return; }
     if (S.view === '3d') { up3(); return; }
     if (drag && drag.kind === 'tile' && drag.moved) {
       for (const j of drag.from.keys()) {
@@ -1897,7 +2163,27 @@
   // Wi-Fi, so HTTP for a panel goes as lines: the hub passes it on and sends
   // the answer back (core/pfe_relay.h). Up to four panels at once.
   const RELAY_SLOTS = 4;
-  const relay = { next: 1, open: new Map(), busy: 0, waiting: [] };
+  const relay = { next: 1, open: new Map(), busy: 0, waiting: [], again: 0, flying: 0, turns: [] };
+
+  // Pieces of request bodies on their way to the hub at once, all requests
+  // together. The hub reads its USB port into a buffer of 4096 bytes, and
+  // while it is passing one piece on to a panel it reads nothing: with four
+  // uploads each allowed a 1.5 KB line in flight, the buffer overflowed and
+  // the hub got lines with holes in them ("not the bytes that were
+  // promised"). Measured 2026-11-21 on five panels and a set of twenty
+  // modules: 13 of 266 requests lost and four of five panels failed without
+  // this; none of 225 with it, and no slower - the hub passes one piece on
+  // at a time whatever is waiting.
+  const BODY_LINES = 2;
+  function bodyLineTurn() {
+    return new Promise((go) => {
+      if (relay.flying < BODY_LINES) { relay.flying++; go(); } else relay.turns.push(go);
+    });
+  }
+  function bodyLineDone() {
+    const next = relay.turns.shift();
+    if (next) next(); else relay.flying = Math.max(0, relay.flying - 1);
+  }
 
   function b64(bytes) {
     let s = '';
@@ -1912,7 +2198,28 @@
   }
 
   // -> { status, bytes, text, json }, or throws with what went wrong.
+  //
+  // A request that was lost on the way (not answered, cut off, damaged, the
+  // hub's slots full) is asked again, twice, a little later each time.
+  // Putting a set of twenty modules on a panel is forty-five requests, and
+  // with one in twenty lost four panels of five failed and had to be done
+  // over by hand (2026-11-21; what lost them is at BODY_LINES below).
+  // GET, PUT and DELETE say the same thing however often they are said; a
+  // POST is asked again only where the caller says it may be (opt.retry).
+  const RELAY_AGAIN = /does not answer|closed the connection|busy with another request|reached the hub damaged/;
   async function panelHttp(uid, method, path, opt = {}) {
+    const again = opt.retry != null ? opt.retry : (method === 'POST' ? 0 : 2);
+    for (let n = 0; ; n++) {
+      try {
+        return await panelHttpOnce(uid, method, path, opt);
+      } catch (e) {
+        if (n >= again || !RELAY_AGAIN.test(e.message) || !S.connected) throw e;
+        relay.again++;
+        await sleep(600 * (n + 1));
+      }
+    }
+  }
+  async function panelHttpOnce(uid, method, path, opt = {}) {
     if (!S.transport || !S.connected) throw new Error('Not connected to a hub');
     if (relay.busy >= RELAY_SLOTS) await new Promise((go) => relay.waiting.push(go));
     relay.busy++;
@@ -1922,22 +2229,33 @@
     const tmo = opt.timeout || 15000;
     try {
       return await new Promise((resolve, reject) => {
-        const r = { status: 0, parts: [], sent: 0, timer: 0 };
-        const fail = (why) => { clearTimeout(r.timer); relay.open.delete(id); reject(new Error(why)); };
+        const r = { status: 0, parts: [], sent: 0, timer: 0, holding: false, asking: false, over: false };
+        const letGo = () => { if (r.holding) { r.holding = false; bodyLineDone(); } };
+        const fail = (why) => { r.over = true; letGo(); clearTimeout(r.timer); relay.open.delete(id); reject(new Error(why)); };
         const arm = () => { clearTimeout(r.timer); r.timer = setTimeout(() => fail('The hub does not answer'), tmo + 4000); };
+        // The next piece of the body, when it is this request's turn to have one on its way (bodyLineTurn).
         const more = () => {
-          if (r.sent >= body.length) return;
-          const part = body.subarray(r.sent, r.sent + piece);
-          r.sent += part.length;
-          relayLine({ c: 'hb', id, d: b64(part) });
+          if (r.sent >= body.length || r.asking || r.over) return;
+          r.asking = true;
+          bodyLineTurn().then(() => {
+            r.asking = false;
+            if (r.over) { bodyLineDone(); return; }
+            r.holding = true;
+            const part = body.subarray(r.sent, r.sent + piece);
+            r.sent += part.length;
+            relayLine({ c: 'hb', id, d: b64(part) });
+            arm();
+          });
         };
         r.on = (m) => {
           arm();
-          if (m.t === 'hk') { if (m.n === r.sent) more(); }
+          if (m.t === 'hk') { letGo(); if (opt.progress) opt.progress(m.n, body.length); if (m.n === r.sent) more(); }
           else if (m.t === 'http') r.status = m.s;
           else if (m.t === 'hb') r.parts.push(unb64(m.d));
           else if (m.t === 'he') {
             if (m.err) { fail(RELAY_ERRORS[m.err] || m.err); return; }
+            r.over = true;
+            letGo();
             clearTimeout(r.timer);
             relay.open.delete(id);
             const bytes = new Uint8Array(r.parts.reduce((n, p) => n + p.length, 0));
@@ -1951,7 +2269,8 @@
         };
         relay.open.set(id, r);
         arm();
-        relayLine({ c: 'http', id, to: uid, m: method, path, h: opt.headers || {}, len: body.length, tmo });
+        // A panel by its uid; or, for a device on the hub's Wi-Fi that is no panel of the ensemble yet, { ip }.
+        relayLine({ c: 'http', id, ...(uid && typeof uid === 'object' ? { ip: uid.ip } : { to: uid }), m: method, path, h: opt.headers || {}, len: body.length, tmo });
         more();
       });
     } finally {
@@ -1967,6 +2286,7 @@
     'the panel closed the connection': 'The panel closed the connection',
     'the panel closed the connection without answering': 'The panel closed the connection without answering',
     'busy with another request': 'The hub is busy with another request',
+    'd: not the bytes that were promised': 'A piece of the file reached the hub damaged',
   };
   function relayDropped() {       // the link to the hub went: nothing under way will be answered
     for (const [, r] of relay.open) r.on({ t: 'he', err: 'The connection to the hub dropped' });
@@ -1987,6 +2307,7 @@
     const p = fakePanel(m.to);
     const json = (status, obj) => ({ status, text: JSON.stringify(obj) });
     const path = m.path.split('?')[0];
+    if (m.m === 'POST' && path === '/update') return json(200, { ok: true });
     if (m.m === 'GET' && path === '/api/status')
       return json(200, { uptime: Math.round((performance.now() - p.born) / 1000), heapLargest: 150000, variant: 'ensemble' });
     if (m.m === 'GET' && path === '/api/patterns') {
@@ -2585,8 +2906,8 @@
     row.text = 'Clearing …';
     renderGo();
     for (let tries = 0; ; tries++) {
-      const res = await panelHttp(p.uid, 'POST', '/api/patterns/delete', {
-        headers: { 'Content-Type': 'text/plain' }, body: new TextEncoder().encode('*'), timeout: 30000 });
+      const res = await panelHttp(p.uid, 'POST', '/api/patterns/delete', {       // clearing twice clears once
+        headers: { 'Content-Type': 'text/plain' }, body: new TextEncoder().encode('*'), timeout: 30000, retry: 2 });
       if (res.status === 200) break;
       if (res.status === 503 && tries < 3) { await sleep(1500); continue; }
       throw new Error(`Could not clear it (HTTP ${res.status})`);
@@ -2600,12 +2921,21 @@
     }
     row.text = 'The panel is loading them …';
     renderGo();
-    const until = performance.now() + 40000;
+    // It reads them in one after another, and a panel busy with that answers
+    // slowly or not at all. Forty seconds, and more for as long as its list
+    // is still growing: a long set on a busy hub is not a failure.
+    let until = performance.now() + 40000, seen = -1;
     for (;;) {
       await sleep(1200);
       const now = await panelList(p.uid).catch(() => null);
       if (now && sameList(now.modules, order)) { row.have = now.modules; P.presets = now.presets.length; break; }
-      if (performance.now() > until) throw new Error(now ? `Sent, but the panel's list differs (${nOf(now.modules.length, 'module')})` : 'No answer after sending');
+      if (now && now.modules.length > seen) {
+        seen = now.modules.length;
+        until = Math.max(until, performance.now() + 25000);
+        row.text = `The panel is loading them … ${seen}/${order.length}`;
+        renderGo();
+      }
+      if (performance.now() > until) throw new Error(now ? `Sent, but the panel's list differs (${now.modules.length} of ${nOf(order.length, 'module')} loaded)` : 'No answer after sending');
     }
     row.done = files.length + 2;
   }
@@ -2637,7 +2967,7 @@
       }
       if (order.length) files.push({ name: 'catalog.txt', data: new TextEncoder().encode(order.map((s) => s + '\n').join('')) });
       let failed = 0;
-      const started = performance.now();
+      const started = performance.now(), againBefore = relay.again;
       await mapLimit(panels, RELAY_SLOTS, async (p) => {
         const row = panelRow(p.uid);
         try {
@@ -2660,7 +2990,8 @@
       if (!failed && order.length) sendNames();
       const what = [order.length ? nOf(order.length, 'pattern') : '', tables.length ? nOf(tables.length, 'show') : ''].filter(Boolean).join(' and ');
       setPatStatus(failed ? `${panels.length - failed} done, ${failed} failed` : `Put ${what} on ${nOf(panels.length, 'panel')} (${secs} s)`, failed ? 'bad' : '');
-      log(failed ? 'err' : '', `Install: ${panels.length - failed} done${failed ? `, ${failed} failed` : ''} (${secs} s)`);
+      const again = relay.again - againBefore;
+      log(failed ? 'err' : '', `Install: ${panels.length - failed} done${failed ? `, ${failed} failed` : ''} (${secs} s${again ? `, ${nOf(again, 'request')} asked again` : ''})`);
     } catch (e) {
       setPatStatus(e.message, 'bad');
     } finally {
@@ -2683,12 +3014,14 @@
   function setPage(page) {
     if (S.page === 'nodes' && page !== 'nodes') ngWatch(false);
     S.page = page;
-    setPressed(['page-stage', 'page-patterns', 'page-shows', 'page-nodes'], 'page-' + page);
+    setPressed(['page-stage', 'page-patterns', 'page-shows', 'page-nodes', 'page-setup'], 'page-' + page);
     $('stage-page').hidden = page !== 'stage';
     $('pat-page').hidden = page !== 'patterns';
     $('show-page').hidden = page !== 'shows';
     $('node-page').hidden = page !== 'nodes';
-    if (page === 'nodes') { ngOpen(); return; }
+    $('setup-page').hidden = page !== 'setup';
+    if (page === 'nodes') { ngOpen(); ngMini(); return; }
+    if (page === 'setup') { suOpen(); return; }
     if (page === 'shows') {
       if (!L.sel && L.shows.length) L.sel = L.shows[0].id;
       L.touched = false;
@@ -2705,6 +3038,485 @@
       resize();
       S.cam.fitted = false;
     }
+  }
+
+
+  // ── Setup: new panels brought in, and the panels' firmware ─────────────
+  // A panel that knows no Wi-Fi sits on a hotspot of its own. The hub goes
+  // onto that hotspot, gives the panel the hub's network and comes back
+  // (hub/src/main.cpp, "Setup"); if the panel runs some other firmware, the
+  // ensemble's image is then sent to it through the hub, as files for a
+  // panel are. Nothing here needs a second computer or a script.
+  const SU = { nets: [], rows: new Map(), busy: false, image: null, waitJoin: null, stations: [], looking: false, recalled: false,
+               net: null, waitNet: null, lanExtra: [] };
+  const suRow = (key, ticked = true) => {
+    if (!SU.rows.has(key)) SU.rows.set(key, { checked: ticked, text: '', tone: '', done: 0, total: 0 });
+    return SU.rows.get(key);
+  };
+  const suTail = (ssid) => ssid.slice(-4).toLowerCase();        // the four digits a hotspot's name ends in are the panel's address's
+  const suPanel = (tail) => [...S.panels.values()].find((p) => p.on && p.uid.toLowerCase().endsWith(tail));
+
+  // The image, as the browser keeps it between visits.
+  function suDb() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('pfe-setup', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('files');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  async function suKeep(image) {
+    try { (await suDb()).transaction('files', 'readwrite').objectStore('files').put({ name: image.name, bytes: image.bytes }, 'firmware'); } catch (_) { /* then it is chosen again next time */ }
+  }
+  async function suRecall() {
+    try {
+      const db = await suDb();
+      return await new Promise((res) => {
+        const q = db.transaction('files').objectStore('files').get('firmware');
+        q.onsuccess = () => res(q.result || null);
+        q.onerror = () => res(null);
+      });
+    } catch (_) { return null; }
+  }
+  // Why a file may not go on a panel (tools/panels.py inspect_image has the same checks), or what it is.
+  function suInspect(bytes, name) {
+    if (bytes.length < 65536 || bytes[0] !== 0xE9 || bytes[0x20] !== 0x32 || bytes[0x21] !== 0x54 || bytes[0x22] !== 0xCD || bytes[0x23] !== 0xAB)
+      throw new Error('Not an ESP32 app image. It has to be firmware.bin, not bootloader.bin or a .zip');
+    if ((bytes[12] | (bytes[13] << 8)) !== 9) throw new Error('Not an image for the ESP32-S3');
+    if (bytes.length > 3 * 1024 * 1024) throw new Error('Larger than a panel\'s app slot (3 MB)');
+    const text = new TextDecoder('latin1').decode(bytes);
+    if (!text.includes('/update/status')) throw new Error('This image has no /update: once on a panel it could not be replaced over Wi-Fi. Is it the hub\'s firmware?');
+    const m = /ensemble v\d+\.\d+\.\d+/.exec(text);
+    if (!m) throw new Error('Not the ensemble\'s panel image (it does not call itself "ensemble v…")');
+    return { bytes, name, version: m[0], size: bytes.length };
+  }
+  async function suTake(file) {
+    try {
+      SU.image = suInspect(new Uint8Array(await file.arrayBuffer()), file.name);
+      suKeep(SU.image);
+      for (const p of patPanels()) suRow(p.uid).checked = p.var !== SU.image.version;
+    } catch (e) {
+      toast(e.message);
+    }
+    suRender();
+  }
+
+  function suSay(text, tone) {
+    const el = $('su-status');
+    el.textContent = text || '';
+    el.style.color = tone === 'bad' ? 'var(--bad)' : tone === 'ok' ? 'var(--ok)' : '';
+  }
+
+  // The image onto one panel, through the hub. `target`: a panel's uid, or { ip } for one that is no panel of the ensemble yet.
+  async function suFlash(target, row) {
+    const bytes = SU.image.bytes;
+    const boundary = '----pfe' + Math.random().toString(16).slice(2) + Date.now().toString(16);
+    const enc = new TextEncoder();
+    const head = enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="firmware"; filename="firmware.bin"\r\nContent-Type: application/octet-stream\r\n\r\n`);
+    const tail = enc.encode(`\r\n--${boundary}--\r\n`);
+    const body = new Uint8Array(head.length + bytes.length + tail.length);
+    body.set(head, 0);
+    body.set(bytes, head.length);
+    body.set(tail, head.length + bytes.length);
+    row.total = body.length;
+    row.done = 0;
+    let pct = -1;
+    const res = await panelHttp(target, 'POST', '/update?size=' + bytes.length, {
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body, timeout: 90000, retry: 0,
+      progress: (sent) => {
+        row.done = sent;
+        const now = Math.floor(sent * 100 / body.length);
+        if (now !== pct) { pct = now; row.text = `Sending firmware ${now}%`; suRender(); }
+      } });
+    row.total = 0;
+    if (res.status === 403) throw new Error('The panel refuses updates. On the panel: hold K2 for NETWORK, turn K4 to UPDATE, then try again');
+    if (res.status !== 200) throw new Error(`The panel refused the image: ${(res.json && res.json.error) || 'HTTP ' + res.status}`);
+  }
+  // After an image, or after it was sent to the hub's Wi-Fi: the panel with these four digits, there and (if asked) on this version.
+  async function suAwait(tail, version, secs) {
+    const until = performance.now() + secs * 1000;
+    while (performance.now() < until) {
+      await sleep(1500);
+      const p = suPanel(tail);
+      if (p && (!version || p.var === version)) return p;
+    }
+    return null;
+  }
+  async function suStation(tail) {         // its address on the hub's network, if it is there
+    send({ c: 'setup', op: 'stations' });
+    await sleep(1200);
+    const s = SU.stations.find((x) => x.mac.toLowerCase().endsWith(tail));
+    return s ? s.ip : null;
+  }
+
+  function suJoin(ssid, row) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { SU.waitJoin = null; resolve({ step: 'failed', m: 'The hub does not answer' }); }, 45000);
+      const words = { connecting: 'The hub is going onto its hotspot …', asking: 'Asking the panel what it is …', saving: 'Giving it the hub\'s Wi-Fi …' };
+      SU.waitJoin = { ssid, resolve: (m) => { clearTimeout(timer); resolve(m); }, step: (s) => { row.text = words[s] || s; suRender(); } };
+      send({ c: 'setup', op: 'join', ssid, pass: $('su-pass').value || 'patternflow' });
+    });
+  }
+
+  // One new panel, from its hotspot to a panel of the ensemble.
+  async function suBring(net) {
+    const row = suRow(net.ssid), tail = suTail(net.ssid);
+    row.tone = '';
+    const said = await suJoin(net.ssid, row);
+    if (said.step !== 'done') throw new Error(said.m || 'It did not work');
+    if (S.mode === 'demo') return 'Done (the demo changes nothing)';
+    row.text = 'Waiting for it on the hub\'s Wi-Fi …';
+    suRender();
+    const who = await suArrival(tail, new Set(), 75);
+    if (!who) throw new Error('It was sent to the hub\'s Wi-Fi but has not shown up. Is the hub\'s Wi-Fi in its reach?');
+    return suFirmware(who, row);
+  }
+
+  async function suBringAll() {
+    if (SU.busy) return;
+    const nets = SU.nets.filter((n) => suRow(n.ssid).checked);
+    if (!nets.length) return;
+    SU.busy = true;
+    suSay('');
+    let ok = 0;
+    for (const net of nets) {
+      const row = suRow(net.ssid);
+      try {
+        row.text = await suBring(net);
+        row.tone = 'ok';
+        row.checked = false;
+        ok++;
+      } catch (e) {
+        row.text = e.message;
+        row.tone = 'bad';
+        log('err', `Setup, ${net.ssid}: ${e.message}`);
+      }
+      row.total = 0;
+      suRender();
+      await sleep(S.mode === 'demo' ? 200 : 2500);       // the ensemble finds the hub again before it leaves once more
+    }
+    SU.busy = false;
+    suSay(`${ok} of ${nOf(nets.length, 'panel')} brought in` + (ok ? '. Place them on the Stage, and give them the set on Patterns' : ''), ok === nets.length ? 'ok' : 'bad');
+    log(ok === nets.length ? '' : 'err', `Setup: ${ok} of ${nets.length} brought in`);
+    suRender();
+  }
+
+  async function suUpdateAll() {
+    if (SU.busy || !SU.image) return;
+    const panels = patPanels().filter((p) => suRow(p.uid).checked);
+    if (!panels.length) return;
+    SU.busy = true;
+    let ok = 0;
+    for (const p of panels) {
+      const row = suRow(p.uid);
+      row.tone = '';
+      try {
+        await suFlash(p.uid, row);
+        row.text = 'Restarting with the new firmware …';
+        suRender();
+        if (S.mode !== 'demo' && !(await suAwait(p.uid.slice(-4).toLowerCase(), SU.image.version, 120))) throw new Error('The image was sent, but the panel has not come back with it');
+        row.text = S.mode === 'demo' ? 'Done (the demo changes nothing)' : 'Updated';
+        row.tone = 'ok';
+        row.checked = false;
+        ok++;
+      } catch (e) {
+        row.text = e.message;
+        row.tone = 'bad';
+        log('err', `Setup, panel ${p.id}: ${e.message}`);
+      }
+      row.total = 0;
+      suRender();
+    }
+    SU.busy = false;
+    log(ok === panels.length ? '' : 'err', `Firmware: ${ok} of ${panels.length} updated`);
+    suRender();
+  }
+
+
+  // ── Setup: panels on this computer's Wi-Fi ─────────────────────────────
+  // A panel that knows another Wi-Fi it can reach (the room's) joins that
+  // and starts no hotspot, so the hub never sees it. This computer does, if
+  // it is on that Wi-Fi too: the page tells the panel the hub's network
+  // itself. A panel's Wi-Fi settings answer no page but its own, so nothing
+  // can be read back - the request is sent blind, and the rest (making the
+  // hub's network the one the panel starts from, its firmware) is done
+  // through the hub once the panel has arrived there.
+  const SU_LAN_KEY = 'pfe-setup-lan';
+  const suHost = (text) => {
+    let h = String(text || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (/^[0-9a-f]{4}$/.test(h)) h = 'patternflow-' + h;
+    if (/^patternflow-[0-9a-f]{4}$/.test(h)) h += '.local';
+    return /^[a-z0-9.-]+$/.test(h) && h.length > 3 ? h : '';
+  };
+  const suHostTail = (host) => { const m = /^patternflow-([0-9a-f]{4})\.local$/.exec(host); return m ? m[1] : ''; };
+  function suLanList() {
+    const known = [...S.panels.values()].filter((p) => !p.on).sort((a, b) => a.id - b.id)
+      .map((p) => ({ host: `patternflow-${p.uid.slice(-4).toLowerCase()}.local`, label: `Panel ${p.id} (not here now)` }));
+    const extra = SU.lanExtra.filter((h) => !known.some((k) => k.host === h)).map((h) => ({ host: h, label: 'Added here' }));
+    return [...known, ...extra];
+  }
+  // The hub's own network, from the hub (over the cable only).
+  function suNet() {
+    if (SU.net) return Promise.resolve(SU.net);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { SU.waitNet = null; reject(new Error('The hub did not say what its Wi-Fi is. This needs the USB cable to the hub')); }, 5000);
+      SU.waitNet = (m) => {
+        clearTimeout(timer);
+        SU.waitNet = null;
+        if (!m.ssid) { reject(new Error('The hub says its Wi-Fi ' + (m.m || 'to nobody') + '. Connect with the USB cable')); return; }
+        SU.net = { ssid: m.ssid, pass: m.pass || '' };
+        resolve(SU.net);
+      };
+      send({ c: 'setup', op: 'net' });
+    });
+  }
+  // Blind requests to a panel on this computer's network: whether it is there, and a form for it.
+  async function suReach(host) {
+    try { await fetch(`http://${host}/api/status`, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(6000) }); return true; } catch (_) { return false; }
+  }
+  function suPost(host, path, fields) {
+    return fetch(`http://${host}${path}`, { method: 'POST', mode: 'no-cors', cache: 'no-store', body: new URLSearchParams(fields), signal: AbortSignal.timeout(8000) });
+  }
+  // Who is on the hub's Wi-Fi now: the ensemble's panels and everything else, by the twelve digits of their addresses.
+  async function suPresent() {
+    send({ c: 'setup', op: 'stations' });
+    await sleep(1200);
+    return new Set([...[...S.panels.values()].filter((p) => p.on).map((p) => p.uid.toLowerCase()), ...SU.stations.map((x) => x.mac.toLowerCase())]);
+  }
+  // A panel that was sent to the hub's Wi-Fi: there as one of the ensemble's, or (after a while with no sign of that) as a device with an address.
+  async function suArrival(tail, before, secs) {
+    const until = performance.now() + secs * 1000;
+    let station = null, since = 0;
+    while (performance.now() < until) {
+      await sleep(1500);
+      const p = tail ? suPanel(tail) : [...S.panels.values()].find((q) => q.on && !before.has(q.uid.toLowerCase()));
+      if (p) return { panel: p };
+      send({ c: 'setup', op: 'stations' });
+      await sleep(900);
+      const s = SU.stations.find((x) => (tail ? x.mac.toLowerCase().endsWith(tail) : !before.has(x.mac.toLowerCase())));
+      if (!s) continue;
+      if (!station) { station = s; since = performance.now(); }
+      if (performance.now() - since > 12000) return { ip: s.ip, mac: s.mac };       // here for a while and no panel of the ensemble: another firmware
+    }
+    return station ? { ip: station.ip, mac: station.mac } : null;
+  }
+  // On the hub's Wi-Fi: the ensemble's firmware if it runs another, and it is a panel of the ensemble.
+  async function suFirmware(who, row) {
+    const tail = (who.panel ? who.panel.uid : who.mac).slice(-4).toLowerCase();
+    if (who.panel && (!SU.image || who.panel.var === SU.image.version)) return `Panel ${who.panel.id} · ${who.panel.var}`;
+    if (!SU.image) throw new Error(`It is on the hub's Wi-Fi (${who.ip}) but runs another firmware. Choose firmware.bin on the right and try again`);
+    row.text = who.panel ? `Panel ${who.panel.id}: updating ${who.panel.var} to ${SU.image.version}` : 'Sending the ensemble\'s firmware …';
+    suRender();
+    if (!who.panel) await sleep(1500);
+    await suFlash(who.panel ? who.panel.uid : { ip: who.ip }, row);
+    row.text = 'Restarting with the new firmware …';
+    suRender();
+    const p = await suAwait(tail, SU.image.version, 120);
+    if (!p) throw new Error('The image was sent, but the panel has not come back with it');
+    return `Panel ${p.id} · ${p.var}`;
+  }
+
+  async function suLanOne(item) {
+    const row = suRow('lan:' + item.host);
+    row.tone = '';
+    row.text = 'Looking for it on this computer\'s Wi-Fi …';
+    suRender();
+    if (S.mode === 'demo') { await sleep(600); return 'Done (the demo changes nothing)'; }
+    const net = await suNet();
+    if (!(await suReach(item.host))) throw new Error(`Not found on this computer's Wi-Fi (${item.host}). Is it switched on, and is this computer on the same Wi-Fi?`);
+    const before = await suPresent();
+    row.text = 'Giving it the hub\'s Wi-Fi …';
+    suRender();
+    await suPost(item.host, '/api/wifi', { ssid: net.ssid, pass: net.pass });
+    await sleep(700);
+    await suPost(item.host, '/api/wifi', { ssid: net.ssid, pass: net.pass, connect: '1' }).catch(() => {});      // it leaves this Wi-Fi to do so: the answer may not come
+    row.text = 'Waiting for it on the hub\'s Wi-Fi …';
+    suRender();
+    const who = await suArrival(suHostTail(item.host), before, 75);
+    if (!who) throw new Error('It was told the hub\'s Wi-Fi but has not shown up there. Is the hub in its reach?');
+    // The hub's network is to be the one it starts from, or the next restart takes it back to the room's Wi-Fi.
+    const target = who.panel ? who.panel.uid : { ip: who.ip };
+    const list = await panelHttp(target, 'GET', '/api/wifi', { timeout: 8000 });
+    const names = ((list.json && list.json.networks) || []).map((n) => n && n.ssid);
+    const at = names.indexOf(net.ssid);
+    if (at < 0) throw new Error('It is on the hub\'s Wi-Fi, but the network is not in its list: after a restart it may go back');
+    const boot = await panelHttp(target, 'POST', '/api/wifi/boot', {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new TextEncoder().encode('bootIdx=' + at), timeout: 8000, retry: 2 });
+    if (boot.status !== 200) throw new Error('It is on the hub\'s Wi-Fi, but could not be told to start from it (HTTP ' + boot.status + ')');
+    return suFirmware(who, row);
+  }
+
+  async function suLanAll() {
+    if (SU.busy) return;
+    const items = suLanList().filter((it) => suRow('lan:' + it.host).checked);
+    if (!items.length) return;
+    SU.busy = true;
+    let ok = 0;
+    for (const item of items) {
+      const row = suRow('lan:' + item.host);
+      try {
+        row.text = await suLanOne(item);
+        row.tone = 'ok';
+        row.checked = false;
+        ok++;
+      } catch (e) {
+        row.text = e.message;
+        row.tone = 'bad';
+        log('err', `Setup, ${item.host}: ${e.message}`);
+      }
+      row.total = 0;
+      suRender();
+    }
+    SU.busy = false;
+    log(ok === items.length ? '' : 'err', `Setup: ${ok} of ${items.length} sent to the hub from this computer's Wi-Fi`);
+    suRender();
+  }
+
+  // The hub's lines about Setup.
+  function suLine(m) {
+    if (m.op === 'net') { if (SU.waitNet) SU.waitNet(m); return; }
+    if (m.op === 'scan') {
+      SU.looking = false;
+      SU.nets = (m.nets || []).filter((n) => n && typeof n.ssid === 'string').sort((a, b) => b.rssi - a.rssi);
+      // A panel that lost the hub for a while (the hub restarted) starts its hotspot too, and keeps it a
+      // little after it is back: one that is here already is not a new panel.
+      for (const n of SU.nets) {
+        const here = suPanel(suTail(n.ssid)), row = suRow(n.ssid);
+        if (here) { row.checked = false; row.text = `Already here: panel ${here.id}`; row.tone = 'ok'; }
+        else if (row.tone === 'ok') { row.checked = true; row.text = ''; row.tone = ''; }
+      }
+      if (m.step === 'failed' || m.m) suSay(m.m || 'The scan failed', 'bad');
+      else if (m.seen === 0) suSay('The hub heard no network at all. Look again', 'bad');
+      else suSay(SU.nets.length ? '' : 'No new panels found. Look again if one was just switched on: its hotspot takes about half a minute to appear. A panel that already knows a Wi-Fi it can reach does not start one');
+      suRender();
+    } else if (m.op === 'stations') {
+      SU.stations = m.list || [];
+    } else if (m.op === 'join') {
+      const w = SU.waitJoin;
+      if (!w || w.ssid !== m.ssid) return;
+      if (m.step === 'done' || m.step === 'failed') { SU.waitJoin = null; w.resolve(m); } else w.step(m.step);
+    } else if (m.op === 'busy') {
+      toast('The hub is busy: ' + (m.m || ''));
+      SU.looking = false;
+      if (SU.waitJoin) { const w = SU.waitJoin; SU.waitJoin = null; w.resolve({ step: 'failed', m: m.m }); }
+      suRender();
+    }
+  }
+
+  function suRender() {
+    if (S.page !== 'setup') return;
+    const fill = (ul, items, key, label) => {
+      ul.textContent = '';
+      for (const it of items) {
+        const row = suRow(key(it), !String(key(it)).startsWith('lan:'));      // one on the room's Wi-Fi is ticked by whoever knows it is there
+        const li = document.createElement('li');
+        const lab = document.createElement('label');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = row.checked;
+        box.disabled = SU.busy;
+        box.addEventListener('change', () => { row.checked = box.checked; suRender(); });
+        lab.append(box);
+        lab.insertAdjacentHTML('beforeend', label(it));
+        const state = document.createElement('span');
+        state.className = 'state ' + (row.tone || '');
+        state.textContent = row.text;
+        li.append(lab, state);
+        if (row.total) {
+          const bar = document.createElement('progress');
+          bar.max = row.total;
+          bar.value = row.done;
+          li.append(bar);
+        }
+        ul.append(li);
+      }
+    };
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    fill($('su-new'), SU.nets, (n) => n.ssid, (n) => `<b class="mono">${esc(n.ssid)}</b><span class="name">signal ${n.rssi}</span>`);
+    $('su-new-none').hidden = SU.nets.length > 0;
+    $('su-new-none').textContent = SU.looking ? 'Looking … (a few seconds)' : 'Nothing looked for yet.';
+    const ticked = SU.nets.filter((n) => suRow(n.ssid).checked).length;
+    $('su-go').disabled = SU.busy || !ticked || !S.connected;
+    $('su-go').textContent = SU.busy ? 'Working …' : ticked ? `Bring ${nOf(ticked, 'panel')} in` : 'Bring them in';
+    $('su-scan').disabled = SU.busy || SU.looking || !S.connected;
+
+    const lan = suLanList();
+    fill($('su-lan'), lan, (it) => 'lan:' + it.host, (it) => `<b class="mono">${esc(it.host.replace(/\.local$/, ''))}</b><span class="name">${esc(it.label)}</span>`);
+    const sending = lan.filter((it) => suRow('lan:' + it.host).checked).length;
+    $('su-lan-go').disabled = SU.busy || !sending || !S.connected;
+    $('su-lan-go').textContent = sending ? `Send ${nOf(sending, 'panel')} to the hub` : 'Send them to the hub';
+
+    const panels = patPanels();
+    for (const p of panels) {
+      const row = suRow(p.uid);
+      if (!row.text || row.tone === '') { if (!row.total && !SU.busy) row.text = p.var || 'firmware not known yet'; }
+      if (!SU.image) row.checked = false;
+    }
+    fill($('su-panels'), panels, (p) => p.uid, (p) => `<b>${p.id}</b><span class="name">${esc(p.n || 'Panel ' + p.id)}</span>`);
+    $('su-panels-none').hidden = panels.length > 0;
+    $('su-file-info').textContent = SU.image ? `${SU.image.version} · ${(SU.image.size / 1024).toFixed(0)} KB · ${SU.image.name}` : 'None chosen';
+    const due = panels.filter((p) => suRow(p.uid).checked).length;
+    $('su-update').disabled = SU.busy || !SU.image || !due || !S.connected;
+    $('su-update').textContent = !SU.image ? 'Choose firmware.bin first' : due ? `Put ${SU.image.version} on ${nOf(due, 'panel')}` : 'Update the ticked panels';
+  }
+
+  async function suOpen() {
+    if (!SU.recalled) {
+      SU.recalled = true;
+      const kept = await suRecall();
+      if (kept && kept.bytes) {
+        try { SU.image = suInspect(new Uint8Array(kept.bytes), kept.name || 'firmware.bin'); } catch (_) { /* what was kept is no image any more */ }
+        if (SU.image) for (const p of patPanels()) suRow(p.uid).checked = p.var !== SU.image.version;
+      }
+    }
+    suRender();
+  }
+
+  // The demo has no radio: two hotspots that are not there, and a hub that says it went.
+  function fakeSetup(text) {
+    if (!text.startsWith('{"c":"setup"')) return false;
+    let m;
+    try { m = JSON.parse(text); } catch (_) { return true; }
+    const later = (ms, obj) => setTimeout(() => onLine(JSON.stringify(obj)), ms);
+    if (m.op === 'scan') later(900, { t: 'setup', op: 'scan', nets: [{ ssid: 'patternflow-a1b2', rssi: -48, ch: 11 }, { ssid: 'patternflow-c3d4', rssi: -63, ch: 1 }] });
+    else if (m.op === 'stations') later(100, { t: 'setup', op: 'stations', list: [] });
+    else if (m.op === 'net') later(50, { t: 'setup', op: 'net', ssid: 'PatternflowEnsemble', pass: '' });
+    else if (m.op === 'join') {
+      later(100, { t: 'setup', op: 'join', ssid: m.ssid, step: 'connecting' });
+      later(700, { t: 'setup', op: 'join', ssid: m.ssid, step: 'asking' });
+      later(1100, { t: 'setup', op: 'join', ssid: m.ssid, step: 'saving' });
+      later(1600, { t: 'setup', op: 'join', ssid: m.ssid, step: 'done', host: m.ssid, variant: 'ensemble', ver: 'v0.2.0', fw: '3.12.0' });
+    }
+    return true;
+  }
+
+  function wireSetup() {
+    $('page-setup').addEventListener('click', () => setPage('setup'));
+    $('su-scan').addEventListener('click', () => {
+      if (SU.busy || SU.looking) return;
+      SU.looking = true;
+      SU.nets = [];
+      suSay('');
+      suRender();
+      send({ c: 'setup', op: 'scan' });
+      setTimeout(() => { if (SU.looking) { SU.looking = false; suSay('The hub did not answer. Is its firmware new enough for Setup?', 'bad'); suRender(); } }, 16000);
+    });
+    $('su-go').addEventListener('click', suBringAll);
+    try { SU.lanExtra = (JSON.parse(localStorage.getItem(SU_LAN_KEY) || '[]') || []).map(suHost).filter(Boolean); } catch (_) { SU.lanExtra = []; }
+    $('su-lan-add').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const host = suHost($('su-lan-name').value);
+      if (!host) { toast('A panel\'s name (patternflow-1a2b, or just the four digits) or its address'); return; }
+      if (!SU.lanExtra.includes(host)) SU.lanExtra.push(host);
+      try { localStorage.setItem(SU_LAN_KEY, JSON.stringify(SU.lanExtra)); } catch (_) { /* no storage here */ }
+      suRow('lan:' + host, true).checked = true;
+      $('su-lan-name').value = '';
+      suRender();
+    });
+    $('su-lan-go').addEventListener('click', suLanAll);
+    $('su-update').addEventListener('click', suUpdateAll);
+    $('su-file-pick').addEventListener('click', () => $('su-file').click());
+    $('su-file').addEventListener('change', (ev) => { if (ev.target.files[0]) suTake(ev.target.files[0]); ev.target.value = ''; });
   }
 
   function wirePatterns() {
@@ -2910,16 +3722,23 @@
 
   // ── Recording: what the chosen panels do, looped on them at once ───────
   // While it records, every report of a chosen panel is a sample: its four
-  // knob positions and its pattern (console/pfs.js). At the end each panel
-  // gets its own table - what that panel itself did, so a wave is recorded
-  // as the wave it was - and plays it in a loop.
-  const REC = { on: false, startedAt: 0, panels: new Map(), timer: 0, busy: false };
+  // knob positions (console/pfs.js). At the end each panel gets its own
+  // table - what that panel itself did, so a wave is recorded as the wave
+  // it was - and plays it in a loop.
+  //
+  // The pattern a panel is on, and its changes, go into the table only when
+  // "With patterns" is ticked. Without it a recording is knob moves and
+  // nothing else, to be put on any panel showing any pattern - which is what
+  // recordings are for at this stage (2026-11-21). One made with patterns
+  // can still be played without them: the Shows page's "Leave the pattern
+  // alone".
+  const REC = { on: false, startedAt: 0, panels: new Map(), timer: 0, busy: false, patterns: false };
   const REC_KEEP = 4;             // recordings a panel keeps; older ones are deleted when a new one arrives
 
   function recSample(m) {
     const r = REC.panels.get(m.uid);
     if (!REC.on || !r || !Array.isArray(m.k)) return;
-    r.rec.sample((performance.now() - REC.startedAt) / 100, m.k, r.names[m.pat] || '');
+    r.rec.sample((performance.now() - REC.startedAt) / 100, m.k, REC.patterns ? (r.names[m.pat] || '') : '');
   }
 
   // What a panel calls each of its patterns, for a player to find it by: a
@@ -2945,9 +3764,12 @@
         await sleep(700);
       }
       REC.panels.clear();
+      REC.patterns = $('p-show-rec-pat').checked;       // as it stood when the recording began
       await mapLimit(panels, RELAY_SLOTS, async (p) => {
         let names = [];
-        try { names = await patternKeys(p.uid); } catch (_) { /* then the table says nothing about patterns */ }
+        if (REC.patterns) {
+          try { names = await patternKeys(p.uid); } catch (_) { /* then the table says nothing about patterns */ }
+        }
         REC.panels.set(p.uid, { id: p.id, rec: PFS.recorder(), names });
       });
       REC.startedAt = performance.now();
@@ -2960,7 +3782,7 @@
         if ((performance.now() - REC.startedAt) / 100 >= PFS.MAX_TICKS) stopRecording();
         else renderShow();
       }, 200);
-      log('', `Recording panel ${panels.map((p) => p.id).join(', ')}`);
+      log('', `Recording panel ${panels.map((p) => p.id).join(', ')} (${REC.patterns ? 'knobs and patterns' : 'knobs only'})`);
     } finally {
       REC.busy = false;
       renderShow();
@@ -3043,6 +3865,10 @@
     $('p-show-stop').addEventListener('click', () => showControl({ op: 'stop' }));
     $('p-show-delete').addEventListener('click', deleteShow);
     $('p-show-rec').addEventListener('click', () => (REC.on ? stopRecording() : startRecording()));
+    try { $('p-show-rec-pat').checked = localStorage.getItem('pfe-rec-patterns') === '1'; } catch (_) { /* no storage here */ }
+    $('p-show-rec-pat').addEventListener('change', (ev) => {
+      try { localStorage.setItem('pfe-rec-patterns', ev.target.checked ? '1' : '0'); } catch (_) { /* no storage here */ }
+    });
     $('p-show-loop').addEventListener('change', (ev) => {
       const p = S.sel != null ? S.panels.get(S.sel) : null;
       if (isSolo(p)) showControl({ op: 'loop', loop: ev.target.checked ? '1' : '0' });
@@ -3557,11 +4383,14 @@
     const power = $('ng-power');
     power.setAttribute('aria-pressed', String(NG.on));
     power.textContent = NG.on ? 'Nodes: On' : 'Nodes: Off';
-    if (!made.bytes) ngStatus(NG.graph.nodes.length ? 'Nothing is wired to a Panel Output yet' : '');
-    else if (!NG.on) ngStatus(`Off: the hub reads MIDI the plain way. Turn Nodes on to run this graph (${made.size} bytes)`);
-    else ngStatus(`Running on the hub · ${made.size} bytes · ${made.controllers.length} MIDI controller${made.controllers.length === 1 ? '' : 's'}`, 'ok');
+    if (!made.bytes) {
+      // On with nothing wired is a state MIDI does nothing in, and it should say so.
+      if (NG.on) ngStatus('Nodes is on and nothing is wired to a Panel Output: MIDI moves nothing. Off brings the plain MIDI map back');
+      else ngStatus(NG.graph.nodes.length ? 'Nothing is wired to a Panel Output yet' : '');
+    } else if (!NG.on) ngStatus(`Off: the hub reads MIDI the plain way. Turn Nodes on to run this graph (${made.size} bytes)`);
+    else ngStatus(`Running on the hub · ${made.size} bytes · ${made.controllers.length} MIDI controller${made.controllers.length === 1 ? '' : 's'} · plain MIDI map off`, 'ok');
   }
-  // The switch: off, the hub keeps the graph and reads MIDI the plain way.
+  // The switch: off, the hub keeps the graph and reads MIDI the plain way; on, MIDI goes through the wires only.
   function ngPower(on) {
     if (!S.connected) { toast('Not connected to a hub'); return; }
     NG.on = on;
@@ -3630,6 +4459,54 @@
       }
     }
   }
+  // The stage, small, in the corner: where the panels are and their
+  // numbers, for choosing them in a Panel Output without going back to look.
+  function ngMini() {
+    const cv = $('ng-mini');
+    const ps = [...S.panels.values()];
+    cv.hidden = !ps.length;
+    if (!ps.length) return;
+    const w = cv.clientWidth || 320, h = cv.clientHeight || 190, r = Math.min(window.devicePixelRatio || 1, 2);
+    if (cv.width !== Math.round(w * r) || cv.height !== Math.round(h * r)) { cv.width = Math.round(w * r); cv.height = Math.round(h * r); }
+    const c = cv.getContext('2d');
+    c.setTransform(r, 0, 0, r, 0, 0);
+    c.clearRect(0, 0, w, h);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of ps) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+    const pad = 28;
+    const z = Math.min((w - pad * 2) / Math.max(x1 - x0, 0.01), (h - pad * 2) / Math.max(y1 - y0, 0.01), 90);
+    const ox = w / 2 - (x0 + x1) / 2 * z, oy = h / 2 - (y0 + y1) / 2 * z;
+    // Each panel as its number on a dark chip, as large as its neighbours leave room for: the numbers are what this is for.
+    const at = ps.map((p) => [ox + p.x * z, oy + p.y * z]);
+    let near = Infinity;
+    for (let a = 0; a < at.length; a++)
+      for (let b = a + 1; b < at.length; b++) near = Math.min(near, Math.hypot(at[a][0] - at[b][0], (at[a][1] - at[b][1]) * 1.6));
+    const size = clamp(Math.round((Number.isFinite(near) ? near : 60) * 0.5), 12, 30);
+    c.lineCap = 'round';
+    c.strokeStyle = '#8F877A';
+    c.lineWidth = 1.5;
+    for (const [i, j] of wireList()) {
+      const a = S.panels.get(i), b = S.panels.get(j);
+      c.beginPath();
+      c.moveTo(ox + a.x * z, oy + a.y * z);
+      c.lineTo(ox + b.x * z, oy + b.y * z);
+      c.stroke();
+    }
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = `700 ${size}px ${css('--sans') || 'sans-serif'}`;
+    ps.forEach((p, n) => {
+      const [cx, cy] = at[n];
+      const text = String(p.id), cw = Math.max(c.measureText(text).width + size * 0.7, size * 1.5), ch = size * 1.35;
+      c.fillStyle = p.on ? '#1B1813' : '#B9B3A7';
+      c.beginPath();
+      if (c.roundRect) c.roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 4); else c.rect(cx - cw / 2, cy - ch / 2, cw, ch);
+      c.fill();
+      c.fillStyle = '#EDE7DB';
+      c.fillText(text, cx, cy + 1);
+    });
+  }
+
   function ngWatch(on) {
     if (!S.connected) return;
     const id = +$('ng-preview').value || 0;
@@ -4293,11 +5170,13 @@
       }
     });
 
-    for (const sc of ['one', 'wave', 'all'])
+    for (const sc of ['one', 'turn', 'wave', 'all'])
       $('scope-' + sc).addEventListener('click', () => {
         S.scope = sc;
-        setPressed(['scope-one', 'scope-wave', 'scope-all'], 'scope-' + sc);
+        setPressed(['scope-one', 'scope-turn', 'scope-wave', 'scope-all'], 'scope-' + sc);
       });
+    // Wires switched on is somebody about to play along them: the side column then acts as a turn.
+    $('wired-on').addEventListener('click', () => $('scope-turn').click());
     $('p-pattern').addEventListener('change', (ev) => { stepHeld.delete('p-pattern'); setFromConsole({ pat: +ev.target.value }); });
     $('all-pattern').addEventListener('change', (ev) => { stepHeld.delete('all-pattern'); send({ c: 'set', to: 'all', pat: +ev.target.value }); });
     for (const [id, by] of [['prev', -1], ['next', 1]]) {
@@ -4317,6 +5196,17 @@
     $('p-z').addEventListener('change', (ev) => edit({ z: +ev.target.value || 0 }));
     for (const a of ['rx', 'ry', 'rz']) $('p-' + a).addEventListener('change', (ev) => edit({ [a]: +ev.target.value || 0 }));
     $('p-linked').addEventListener('change', (ev) => edit({ linked: ev.target.checked }));
+    $('p-unwire').addEventListener('click', () => { const uid = selUid(); if (uid) send({ c: 'wire', clear: true, a: uid }); });
+    // Number, name, place and turn: seldom looked at, so folded away, and as they were left.
+    try { $('insp-more').open = localStorage.getItem('pfe-insp-more') === '1'; } catch (_) { /* no storage here */ }
+    $('insp-more').addEventListener('toggle', () => {
+      try { localStorage.setItem('pfe-insp-more', $('insp-more').open ? '1' : '0'); } catch (_) { /* no storage here */ }
+    });
+    $('map-wire').addEventListener('click', () => {
+      S.wireMode = !S.wireMode;
+      $('map-wire').setAttribute('aria-pressed', String(S.wireMode));
+      canvas.style.cursor = S.wireMode ? 'crosshair' : '';
+    });
     // What is asked of the chosen panel is asked of every chosen one; forgetting is for one at a time.
     $('p-identify').addEventListener('click', () => {
       const p = S.panels.get(S.sel);
@@ -4354,6 +5244,7 @@
     });
 
     wirePatterns();
+    wireSetup();
     wireShows();
     wireShowPage();
     wireNodes();

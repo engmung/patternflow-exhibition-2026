@@ -17,12 +17,25 @@
 //          program says, and sent on only when the value changes: a hand on
 //          a knob keeps it until the program's value for it moves again
 //
-// A controller a program names is the program's: it is not also read the
-// plain way (pfe_midi.h). Everything else goes on as before.
+// A controller's message is an event, not only a value. Two things follow.
+// The same value said again is given again, to the outputs that controller
+// feeds: a pad that says 127 at every press puts the knob back each time,
+// whatever a hand or another panel did to it in between (and a hand keeps a
+// knob only until its own controller speaks, not until any does). And a
+// press and its release inside one step of the graph (forty milliseconds)
+// are not lost: the program is run on the press, and on the release the
+// step after.
 //
-// The graph has a switch, and it starts off: a program that is there but
-// switched off drives nothing and takes no controller, and MIDI is read the
-// plain way throughout. Nodes are for when somebody wants them.
+// The graph has a switch, and it starts off. The switch says which of two
+// ways a host's MIDI goes, and it is never both:
+//   off   the plain way (pfe_midi.h: a panel's channel is its number). A
+//         program that is there is kept, drives nothing and takes no
+//         controller.
+//   on    through the wires only. A controller the program names feeds it;
+//         one no wire uses moves nothing, and neither does a Program Change.
+//         (Read the plain way behind the graph's back, a controller on
+//         channel 1 was panel 1's knob the moment its wire was cut.)
+// Nodes are for when somebody wants them.
 //
 // The program (bytes, from console/graph.js):
 //   'P' 'F' 'G' 1, registers, controllers, then per controller
@@ -162,7 +175,8 @@ class Graph {
     len_ = n;
     regs_ = code_[4];
     ccCount_ = code_[5];
-    for (int i = 0; i < ccCount_; i++) cc_[i] = (float)code_[6 + i * 3 + 2] / 127.0f;
+    for (int i = 0; i < ccCount_; i++) cc_[i] = ccSeen_[i] = (float)code_[6 + i * 3 + 2] / 127.0f;
+    ccFresh_ = ccWaiting_ = heard_ = 0;
     start_ = 6 + (size_t)ccCount_ * 3;
     restart(nowMs);
     changed_ = true;
@@ -193,22 +207,33 @@ class Graph {
   }
 
   // ── MIDI in ───────────────────────────────────────────────────────────
-  // A controller's value, 0..127. True if the program names it (and so it
-  // is not for anybody else).
+  // A controller's value, 0..127. True if the program names it.
   bool onCC(int channel, int number, int value, uint32_t nowMs) {
     bool mine = false;
     for (int i = 0; len_ && enabled_ && i < ccCount_; i++) {
       if (code_[6 + i * 3] != channel || code_[6 + i * 3 + 1] != number) continue;
-      cc_[i] = (float)clampTo<int>(value, 0, 127) / 127.0f;
+      const float v = (float)clampTo<int>(value, 0, 127) / 127.0f;
+      const uint32_t bit = 1u << i;
+      // A value the program has not been run on yet, and now one that turns
+      // back from it (up and down again, a tap): that one waits a step, so
+      // the first is seen. Going on the same way just goes on.
+      const float seen = ccSeen_[i], unseen = cc_[i];
+      const bool turnsBack = (ccFresh_ & bit) && ((unseen > seen && v < unseen) || (unseen < seen && v > unseen));
+      if ((ccWaiting_ & bit) || turnsBack) { ccNext_[i] = v; ccWaiting_ |= bit; }
+      else { cc_[i] = v; ccFresh_ |= bit; }
+      heard_ |= bit;
       mine = true;
     }
     if (monitor_) sayMidi(channel, number, value, nowMs);
     return mine;
   }
-  // A raw message from a MIDI port. Only controllers are a graph's business.
+  // A raw message from a MIDI port. True: it is not for the plain mapping.
+  // That is the switch's say and not the wiring's: with the graph on, nothing
+  // a host sends is read the plain way, whether the program names it or not
+  // (and whether there is a program or not). Only controllers feed a graph.
   bool onMidi(const uint8_t* m, size_t len, uint32_t nowMs) {
-    if (len < 3 || (m[0] & 0xF0) != 0xB0) return false;
-    return onCC((m[0] & 0x0F) + 1, m[1] & 0x7F, m[2] & 0x7F, nowMs);
+    if (len >= 3 && (m[0] & 0xF0) == 0xB0) onCC((m[0] & 0x0F) + 1, m[1] & 0x7F, m[2] & 0x7F, nowMs);
+    return enabled_;
   }
 
   // The console is looking: say what comes in over MIDI, and what the
@@ -239,15 +264,18 @@ class Graph {
       int order = 0;                                   // how many panels have a lower number
       for (int j = 0; j < MAX_PANELS; j++) order += c_->panel(j).used && c_->panel(j).id < p.id ? 1 : 0;
       float out[GO_WHAT_COUNT];
+      uint32_t from[GO_WHAT_COUNT];                    // the controllers each output's value comes from
       uint8_t wrote = 0;
-      run(i, p, order, count, time, dt, out, &wrote);
+      run(i, p, order, count, time, dt, out, from, &wrote);
 
+      // Given when the value has changed - or when a controller it comes
+      // from has spoken since the last step, the same value or not.
       int knob[KNOBS] = {-1, -1, -1, -1};
       bool any = false;
       for (int k = 0; k < KNOBS; k++) {
         if (!(wrote & (1 << k))) continue;
         const int v = clampTo<int>((int)(out[k] * (float)KNOB_MAX + 0.5f), 0, KNOB_MAX);
-        if (v == sent_[i][k]) continue;
+        if (v == sent_[i][k] && !(from[k] & heard_)) continue;
         sent_[i][k] = (int16_t)v;
         knob[k] = v;
         any = true;
@@ -255,12 +283,12 @@ class Graph {
       int pattern = -1;
       if (wrote & (1 << GO_PATTERN)) {
         const int v = clampTo<int>((int)gmath::floorF(out[GO_PATTERN] + 0.5f), 0, NO_PATTERN - 1);
-        if (v != sent_[i][GO_PATTERN]) { sent_[i][GO_PATTERN] = (int16_t)v; pattern = v; any = true; }
+        if (v != sent_[i][GO_PATTERN] || (from[GO_PATTERN] & heard_)) { sent_[i][GO_PATTERN] = (int16_t)v; pattern = v; any = true; }
       }
       if (any) c_->setPanel(i, pattern, knob, GRAPH_GLIDE_MS);
       if (wrote & (1 << GO_BRIGHT)) {
         const int v = BRIGHTNESS_MIN + (int)(clampTo<float>(out[GO_BRIGHT], 0.0f, 1.0f) * (float)(255 - BRIGHTNESS_MIN) + 0.5f);
-        if (v != sent_[i][GO_BRIGHT]) { sent_[i][GO_BRIGHT] = (int16_t)v; c_->setBrightness(i, v); }
+        if (v != sent_[i][GO_BRIGHT] || (from[GO_BRIGHT] & heard_)) { sent_[i][GO_BRIGHT] = (int16_t)v; c_->setBrightness(i, v); }
       }
 
       if (monitorDue && !monitored && (monitorId_ == 0 || p.id == monitorId_)) {
@@ -269,6 +297,18 @@ class Graph {
       }
     }
     if (monitorDue) monitorMs_ = nowMs;
+
+    // The controllers: what the program has now been run on, and the values
+    // that waited for this step to be over (a tap's release) come up.
+    for (int i = 0; i < ccCount_; i++) ccSeen_[i] = cc_[i];
+    ccFresh_ = heard_ = 0;
+    for (int i = 0; i < ccCount_; i++) {
+      if (!(ccWaiting_ & (1u << i))) continue;
+      cc_[i] = ccNext_[i];
+      ccFresh_ |= 1u << i;
+      heard_ |= 1u << i;
+    }
+    ccWaiting_ = 0;
   }
 
   // What is wrong with a program, or nullptr. Nothing that passes can read
@@ -336,9 +376,13 @@ class Graph {
   }
 
   // The program once, for one panel.
-  void run(int index, const Panel& p, int order, int count, float time, float dt, float* out, uint8_t* wrote) {
+  // `from`: for each output written, a bit for every controller its value
+  // was worked out from (carried along register by register, in `via_`).
+  void run(int index, const Panel& p, int order, int count, float time, float dt, float* out, uint32_t* from,
+           uint8_t* wrote) {
     float* r = reg_;
-    for (int i = 0; i < regs_; i++) r[i] = 0.0f;
+    uint32_t* m = via_;
+    for (int i = 0; i < regs_; i++) { r[i] = 0.0f; m[i] = 0; }
     const uint8_t* b = code_;
     size_t pc = start_;
     int state = 0;
@@ -348,9 +392,9 @@ class Graph {
       const uint8_t* a = b + pc + 1;
       switch (op) {
         case G_END: return;
-        case G_CONST: { float v; __builtin_memcpy(&v, a + 1, 4); r[a[0]] = v; pc += 6; break; }
-        case G_CC: r[a[0]] = cc_[a[1]]; pc += 3; break;
-        case G_TIME: r[a[0]] = time; pc += 2; break;
+        case G_CONST: { float v; __builtin_memcpy(&v, a + 1, 4); r[a[0]] = v; m[a[0]] = 0; pc += 6; break; }
+        case G_CC: r[a[0]] = cc_[a[1]]; m[a[0]] = 1u << a[1]; pc += 3; break;
+        case G_TIME: r[a[0]] = time; m[a[0]] = 0; pc += 2; break;
         case G_PANEL: {
           float v = 0.0f;
           switch (a[1]) {
@@ -364,55 +408,83 @@ class Graph {
             default: v = (float)count; break;
           }
           r[a[0]] = v;
+          m[a[0]] = 0;
           pc += 3;
           break;
         }
-        case G_KNOB: r[a[0]] = (float)p.rep.knob[a[1]] / (float)KNOB_MAX; pc += 3; break;
-        case G_ADD: r[a[0]] = r[a[1]] + r[a[2]]; pc += 4; break;
-        case G_SUB: r[a[0]] = r[a[1]] - r[a[2]]; pc += 4; break;
-        case G_MUL: r[a[0]] = r[a[1]] * r[a[2]]; pc += 4; break;
-        case G_DIV: r[a[0]] = r[a[2]] != 0.0f ? r[a[1]] / r[a[2]] : 0.0f; pc += 4; break;
-        case G_MIN: r[a[0]] = r[a[1]] < r[a[2]] ? r[a[1]] : r[a[2]]; pc += 4; break;
-        case G_MAX: r[a[0]] = r[a[1]] > r[a[2]] ? r[a[1]] : r[a[2]]; pc += 4; break;
-        case G_POW: r[a[0]] = gmath::powF(r[a[1]], r[a[2]]); pc += 4; break;
-        case G_MOD: r[a[0]] = r[a[2]] != 0.0f ? r[a[1]] - r[a[2]] * gmath::floorF(r[a[1]] / r[a[2]]) : 0.0f; pc += 4; break;
-        case G_GT: r[a[0]] = r[a[1]] > r[a[2]] ? 1.0f : 0.0f; pc += 4; break;
-        case G_LT: r[a[0]] = r[a[1]] < r[a[2]] ? 1.0f : 0.0f; pc += 4; break;
-        case G_ABS: r[a[0]] = absF(r[a[1]]); pc += 3; break;
-        case G_NEG: r[a[0]] = -r[a[1]]; pc += 3; break;
-        case G_SIN: r[a[0]] = gmath::sinF(r[a[1]]); pc += 3; break;
-        case G_COS: r[a[0]] = gmath::sinF(r[a[1]] + gmath::GPI / 2); pc += 3; break;
-        case G_FLOOR: r[a[0]] = gmath::floorF(r[a[1]]); pc += 3; break;
-        case G_ROUND: r[a[0]] = gmath::floorF(r[a[1]] + 0.5f); pc += 3; break;
-        case G_FRACT: r[a[0]] = r[a[1]] - gmath::floorF(r[a[1]]); pc += 3; break;
-        case G_SQRT: r[a[0]] = r[a[1]] > 0.0f ? sqrtF(r[a[1]]) : 0.0f; pc += 3; break;
-        case G_SIGN: r[a[0]] = r[a[1]] > 0.0f ? 1.0f : (r[a[1]] < 0.0f ? -1.0f : 0.0f); pc += 3; break;
-        case G_NOISE: r[a[0]] = gmath::noiseF(r[a[1]]); pc += 3; break;
+        case G_KNOB: r[a[0]] = (float)p.rep.knob[a[1]] / (float)KNOB_MAX; m[a[0]] = 0; pc += 3; break;
+        // Two values in, one out. (The value first, then where it comes from:
+        // the result may be one of its own operands' registers.)
+#define PFE_G2(expr) { const float v = (expr); const uint32_t w = m[a[1]] | m[a[2]]; r[a[0]] = v; m[a[0]] = w; pc += 4; break; }
+        case G_ADD: PFE_G2(r[a[1]] + r[a[2]])
+        case G_SUB: PFE_G2(r[a[1]] - r[a[2]])
+        case G_MUL: PFE_G2(r[a[1]] * r[a[2]])
+        case G_DIV: PFE_G2(r[a[2]] != 0.0f ? r[a[1]] / r[a[2]] : 0.0f)
+        case G_MIN: PFE_G2(r[a[1]] < r[a[2]] ? r[a[1]] : r[a[2]])
+        case G_MAX: PFE_G2(r[a[1]] > r[a[2]] ? r[a[1]] : r[a[2]])
+        case G_POW: PFE_G2(gmath::powF(r[a[1]], r[a[2]]))
+        case G_MOD: PFE_G2(r[a[2]] != 0.0f ? r[a[1]] - r[a[2]] * gmath::floorF(r[a[1]] / r[a[2]]) : 0.0f)
+        case G_GT: PFE_G2(r[a[1]] > r[a[2]] ? 1.0f : 0.0f)
+        case G_LT: PFE_G2(r[a[1]] < r[a[2]] ? 1.0f : 0.0f)
+#undef PFE_G2
+#define PFE_G1(expr) { const float v = (expr); const uint32_t w = m[a[1]]; r[a[0]] = v; m[a[0]] = w; pc += 3; break; }
+        case G_ABS: PFE_G1(absF(r[a[1]]))
+        case G_NEG: PFE_G1(-r[a[1]])
+        case G_SIN: PFE_G1(gmath::sinF(r[a[1]]))
+        case G_COS: PFE_G1(gmath::sinF(r[a[1]] + gmath::GPI / 2))
+        case G_FLOOR: PFE_G1(gmath::floorF(r[a[1]]))
+        case G_ROUND: PFE_G1(gmath::floorF(r[a[1]] + 0.5f))
+        case G_FRACT: PFE_G1(r[a[1]] - gmath::floorF(r[a[1]]))
+        case G_SQRT: PFE_G1(r[a[1]] > 0.0f ? sqrtF(r[a[1]]) : 0.0f)
+        case G_SIGN: PFE_G1(r[a[1]] > 0.0f ? 1.0f : (r[a[1]] < 0.0f ? -1.0f : 0.0f))
+        case G_NOISE: PFE_G1(gmath::noiseF(r[a[1]]))
+#undef PFE_G1
         case G_CLAMP: {
           const float lo = r[a[2]] < r[a[3]] ? r[a[2]] : r[a[3]], hi = r[a[2]] < r[a[3]] ? r[a[3]] : r[a[2]];
-          r[a[0]] = r[a[1]] < lo ? lo : (r[a[1]] > hi ? hi : r[a[1]]);
+          const float v = r[a[1]] < lo ? lo : (r[a[1]] > hi ? hi : r[a[1]]);
+          const uint32_t w = m[a[1]] | m[a[2]] | m[a[3]];
+          r[a[0]] = v;
+          m[a[0]] = w;
           pc += 5;
           break;
         }
-        case G_MIX: r[a[0]] = r[a[1]] + (r[a[2]] - r[a[1]]) * r[a[3]]; pc += 5; break;
-        case G_SELECT: r[a[0]] = r[a[1]] > 0.5f ? r[a[2]] : r[a[3]]; pc += 5; break;
+        case G_MIX: {
+          const float v = r[a[1]] + (r[a[2]] - r[a[1]]) * r[a[3]];
+          const uint32_t w = m[a[1]] | m[a[2]] | m[a[3]];
+          r[a[0]] = v;
+          m[a[0]] = w;
+          pc += 5;
+          break;
+        }
+        case G_SELECT: {
+          const float v = r[a[1]] > 0.5f ? r[a[2]] : r[a[3]];
+          const uint32_t w = m[a[1]] | m[a[2]] | m[a[3]];
+          r[a[0]] = v;
+          m[a[0]] = w;
+          pc += 5;
+          break;
+        }
         case G_SMOOTH: {
           float& s = state_[index][state];
           const float goal = r[a[1]], secs = r[a[2]];
+          const uint32_t w = m[a[1]] | m[a[2]];
           if (fresh_[index][state] || !(secs > 0.001f)) s = goal;            // starts where its input is
           else s += (goal - s) * (dt >= secs ? 1.0f : 1.0f - gmath::expF(-3.0f * dt / secs));
           fresh_[index][state] = false;
           r[a[0]] = s;
+          m[a[0]] = w;
           state++;
           pc += 4;
           break;
         }
         case G_PHASE: {
           float& s = state_[index][state];
+          const uint32_t w = m[a[1]];
           if (!fresh_[index][state]) s += r[a[1]] * dt;
           fresh_[index][state] = false;
           s -= gmath::floorF(s);
           r[a[0]] = s;
+          m[a[0]] = w;
           state++;
           pc += 3;
           break;
@@ -424,7 +496,7 @@ class Graph {
           break;
         }
         case G_OUT:
-          if (mine) { out[a[1]] = r[a[0]]; *wrote |= (uint8_t)(1 << a[1]); }
+          if (mine) { out[a[1]] = r[a[0]]; from[a[1]] = m[a[0]]; *wrote |= (uint8_t)(1 << a[1]); }
           pc += 3;
           break;
         default: return;                               // check() let none of these through
@@ -474,8 +546,14 @@ class Graph {
   uint8_t code_[GRAPH_MAX_BYTES];
   size_t len_ = 0, start_ = 0;
   int regs_ = 0, ccCount_ = 0;
-  float cc_[GRAPH_MAX_CC];
+  float cc_[GRAPH_MAX_CC];                         // each controller's value, as the program reads it
+  float ccSeen_[GRAPH_MAX_CC];                     // ... as the program last ran on it
+  float ccNext_[GRAPH_MAX_CC];                     // ... and one waiting for the next step (ccWaiting_)
+  uint32_t ccFresh_ = 0;                           // a bit per controller: cc_ holds a value no step has run on yet
+  uint32_t ccWaiting_ = 0;                         // ... ccNext_ holds one to come up after this step
+  uint32_t heard_ = 0;                             // ... it has spoken since the last step
   float reg_[GRAPH_MAX_REGS];
+  uint32_t via_[GRAPH_MAX_REGS];                   // beside each register: the controllers its value comes from
   float state_[MAX_PANELS][GRAPH_MAX_STATE];
   bool fresh_[MAX_PANELS][GRAPH_MAX_STATE];
   int16_t sent_[MAX_PANELS][GO_WHAT_COUNT];        // what this graph last gave each panel (-1: nothing yet)

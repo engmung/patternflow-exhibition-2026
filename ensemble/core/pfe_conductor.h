@@ -14,6 +14,14 @@
 //
 // Five channels have a link each: K1..K4 and the pattern.
 //
+// Wires. On the console's map two panels can be joined by a wire, and a
+// channel can be told to keep to the wires. Then a hand's value reaches only
+// the panels that can be reached from its own along wires: at once (sync),
+// or each after  the way along the wires / speed  (ripple) - it goes round
+// the corner the wires go round. A panel no wire touches keeps the turn to
+// itself. Channels that do not keep to the wires go on as before, by the
+// places on the map alone.
+//
 // A ripple is a list of values still travelling. Each panel takes, per
 // channel, the most recently EMITTED value that has ARRIVED at it; so two
 // people turning two panels cross over cleanly, and once everything has
@@ -62,6 +70,7 @@ struct Endpoint {
 
 struct Config {
   uint8_t link[CHANNELS] = {LINK_RIPPLE, LINK_RIPPLE, LINK_RIPPLE, LINK_RIPPLE, LINK_RIPPLE};
+  bool wired[CHANNELS] = {false, false, false, false, false};   // the channel's sync or ripple keeps to the wires
   float speed = 2.0f;        // map units per second
   uint16_t glideMs = 80;     // how a panel eases into a value that arrived
   bool k4Pattern = true;     // K4 steps the pattern; false = K4 is a fourth knob
@@ -146,6 +155,8 @@ struct Event {
   uint8_t kind = EV_VALUE;
   bool instant = false;      // arrives everywhere at once
   bool linkedOnly = false;   // a hand's wave reaches linked panels only
+  bool wired = false;        // it keeps to the wires: `reach` says which panels that is, and the way is along them
+  uint32_t reach = 0;        // a bit per panel index it can get to, its own included
   int8_t origin = -1;        // the panel it started at, for the console's drawing
 };
 
@@ -196,13 +207,16 @@ class Conductor {
     cfgDirty_ = true;
     namesDirty_ = true;
     scenesDirty_ = true;
+    wiresDirty_ = true;
   }
 
   // Back to an empty hub, in place (the object is too big to build a
   // second one on a small stack and copy it over).
   void reset() {
     cfg_ = Config();
-    for (int i = 0; i < MAX_PANELS; i++) panels_[i] = Panel();
+    for (int i = 0; i < MAX_PANELS; i++) { panels_[i] = Panel(); wires_[i] = 0; }
+    wireDistDirty_ = true;
+    wiresDirty_ = true;
     for (int s = 0; s < SCENES; s++) { scenes_[s].used = false; scenes_[s].count = 0; }
     head_ = 0;
     count_ = 0;
@@ -295,6 +309,7 @@ class Conductor {
     if (x) p.x = clampTo<float>(*x, -1000.0f, 1000.0f);
     if (y) p.y = clampTo<float>(*y, -1000.0f, 1000.0f);
     if (z) p.z = clampTo<float>(*z, -1000.0f, 1000.0f);
+    if (x || y || z) wireDistDirty_ = true;      // its wires are as long as the way between the places
     if (id && *id >= 1 && *id <= 250 && *id != p.id) {
       // Two panels never show the same number: the other one takes this one's.
       const int other = findPanelById(*id);
@@ -312,11 +327,57 @@ class Conductor {
     if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
     logPanel(i, "forgotten");
     panels_[i] = Panel();
+    if (wires_[i]) {
+      for (int j = 0; j < MAX_PANELS; j++) wires_[j] &= ~(1u << i);
+      wires_[i] = 0;
+      wiresChanged();
+    }
     Out o(line_, sizeof(line_));
     o.str("{\"t\":\"gone\",\"i\":").i32(i).ch('}');
     flush(o);
     touchPersist();
     return true;
+  }
+
+  // ── Wires: panels joined two by two ───────────────────────────────────
+  // `on`: 1 joins them, 0 parts them, anything else changes it over. No
+  // panel is wired to itself.
+  bool setWire(int a, int b, int on) {
+    if (a < 0 || b < 0 || a >= MAX_PANELS || b >= MAX_PANELS || a == b || !panels_[a].used || !panels_[b].used)
+      return false;
+    const bool is = ((wires_[a] >> b) & 1u) != 0;
+    const bool want = on == 1 ? true : (on == 0 ? false : !is);
+    if (want == is) return true;
+    if (want) { wires_[a] |= 1u << b; wires_[b] |= 1u << a; }
+    else { wires_[a] &= ~(1u << b); wires_[b] &= ~(1u << a); }
+    wiresChanged();
+    return true;
+  }
+  // Every wire, or (i >= 0) the wires of one panel.
+  void clearWires(int i = -1) {
+    for (int j = 0; j < MAX_PANELS; j++) {
+      if (i < 0 || j == i) wires_[j] = 0;
+      else if (i < MAX_PANELS) wires_[j] &= ~(1u << i);
+    }
+    wiresChanged();
+  }
+  bool wire(int a, int b) const {
+    return a >= 0 && b >= 0 && a < MAX_PANELS && b < MAX_PANELS && ((wires_[a] >> b) & 1u) != 0;
+  }
+  uint32_t wiresOf(int i) const { return i >= 0 && i < MAX_PANELS ? wires_[i] : 0; }
+  int wireCount() const {
+    int n = 0;
+    for (int a = 0; a < MAX_PANELS; a++)
+      for (int b = a + 1; b < MAX_PANELS; b++) n += (wires_[a] >> b) & 1u;
+    return n;
+  }
+  // The way from panel a to panel b along the wires, in map units (a wire is
+  // as long as the straight line between its two panels). Negative: there
+  // is no way.
+  float wireDistance(int a, int b) const {
+    if (a < 0 || b < 0 || a >= MAX_PANELS || b >= MAX_PANELS) return -1.0f;
+    if (wireDistDirty_) measureWires();
+    return wireDist_[a][b];
   }
 
   // One panel, straight from the console: its pattern (-1 = leave) and its
@@ -336,6 +397,24 @@ class Conductor {
       p.applied[k] = ++eventSeq_;
     }
     p.tGlide = (uint16_t)clampTo<int>(glideMs < 0 ? cfg_.glideMs : glideMs, 0, 60000);
+    p.uiDirty = true;
+    return true;
+  }
+
+  // From the console, as if a hand at panel `i` had done it. The value goes
+  // where a turn of that knob there would go: nowhere else (solo), to the
+  // others at once or as a wave, and only along the wires where the channel
+  // keeps to them. For playing the ensemble from the console the way it is
+  // played from a panel - setPanel() above reaches one panel and no other,
+  // whatever the links say.
+  bool actAsHand(int i, int pattern, const int knob[KNOBS]) {
+    if (i < 0 || i >= MAX_PANELS || !panels_[i].used) return false;
+    Panel& p = panels_[i];
+    p.haveTarget = true;
+    p.tGlide = cfg_.glideMs;             // the panel itself was not turned: it goes there as the others do
+    for (int k = 0; k < KNOBS; k++)
+      if (knob[k] >= 0) hand(i, k, (uint16_t)clampTo<int>(knob[k], 0, KNOB_MAX));
+    if (pattern >= 0 && pattern < NO_PATTERN) hand(i, CH_PATTERN, (uint16_t)pattern);
     p.uiDirty = true;
     return true;
   }
@@ -458,6 +537,7 @@ class Conductor {
     cfgDirty_ = true;
     namesDirty_ = true;
     scenesDirty_ = true;
+    wiresDirty_ = true;
     for (int i = 0; i < MAX_PANELS; i++) {
       if (!panels_[i].used) continue;
       panels_[i].uiDirty = true;
@@ -555,6 +635,22 @@ class Conductor {
         for (int k = 0; k < KNOBS; k++) { putU16(b + n, sc.e[j].knob[k]); n += 2; }
       }
     }
+    // Version 4: which channels keep to the wires, then the wires - for each
+    // panel in the order saved above, three bytes with a bit for every other
+    // saved panel it is joined to (by its place in that order: the slots of
+    // the table are closed up when it is loaded).
+    uint8_t keeps = 0;
+    for (int c = 0; c < CHANNELS; c++) keeps |= (uint8_t)((cfg_.wired[c] ? 1 : 0) << c);
+    b[n++] = keeps;
+    int place[MAX_PANELS], at = 0;
+    for (int i = 0; i < MAX_PANELS; i++) place[i] = panels_[i].used ? at++ : -1;
+    for (int i = 0; i < MAX_PANELS; i++) {
+      if (!panels_[i].used) continue;
+      uint32_t m = 0;
+      for (int j = 0; j < MAX_PANELS; j++)
+        if (place[j] >= 0 && ((wires_[i] >> j) & 1u)) m |= 1u << place[j];
+      b[n++] = (uint8_t)m; b[n++] = (uint8_t)(m >> 8); b[n++] = (uint8_t)(m >> 16);
+    }
     return n;
   }
 
@@ -564,6 +660,8 @@ class Conductor {
     parse(b, len, true);
     cfgDirty_ = true;
     scenesDirty_ = true;
+    wiresDirty_ = true;
+    wireDistDirty_ = true;
     persistDirty_ = false;
     return true;
   }
@@ -590,7 +688,7 @@ class Conductor {
   }
 
  private:
-  static constexpr uint8_t SAVE_VERSION = 3;       // 1: a place was x and y; 2: and z; 3: and how it is turned. All load.
+  static constexpr uint8_t SAVE_VERSION = 4;       // 1: a place was x and y; 2: and z; 3: and how it is turned; 4: and the wires. All load.
   static constexpr uint32_t WAVE_TICK_MS = 5;
   static constexpr uint32_t SEND_MIN_MS = 30;      // a changing target: 33 STATEs a second at most
   static constexpr uint32_t RESEND_MS = 200;       // not acknowledged: again, five times a second
@@ -623,7 +721,7 @@ class Conductor {
     if (count > MAX_PANELS) return false;
     if (store) {
       cfg_ = cfg;
-      for (int i = 0; i < MAX_PANELS; i++) panels_[i] = Panel();
+      for (int i = 0; i < MAX_PANELS; i++) { panels_[i] = Panel(); wires_[i] = 0; }
     }
     for (int i = 0; i < count; i++) {
       if (!need(6 + 2 + placeBytes + NAME_LEN)) return false;
@@ -659,6 +757,23 @@ class Conductor {
         }
       }
       n += (size_t)c * 15;
+    }
+    // A setup saved before there were wires has none, and no channel keeps to them.
+    if (b[4] >= 4) {
+      if (!need(1 + (size_t)count * 3)) return false;
+      if (store) {
+        for (int c = 0; c < CHANNELS; c++) cfg_.wired[c] = ((b[n] >> c) & 1) != 0;
+        const uint32_t all = count >= 32 ? 0xFFFFFFFFu : ((1u << count) - 1u);
+        for (int i = 0; i < count; i++) {
+          const uint8_t* m = b + n + 1 + (size_t)i * 3;
+          wires_[i] = ((uint32_t)m[0] | ((uint32_t)m[1] << 8) | ((uint32_t)m[2] << 16)) & all & ~(1u << i);
+        }
+        // A wire has two ends: one a damaged blob gives one end of is whole all the same.
+        for (int i = 0; i < count; i++)
+          for (int j = 0; j < count; j++)
+            if ((wires_[i] >> j) & 1u) wires_[j] |= 1u << i;
+      }
+      n += 1 + (size_t)count * 3;
     }
     return true;
   }
@@ -774,6 +889,15 @@ class Conductor {
     for (int c = 0; c < CHANNELS; c++) {
       const uint16_t own = c == CH_PATTERN ? p.rep.pattern : p.rep.knob[c];
       const bool follows = p.linked && cfg_.link[c] != LINK_SOLO;
+      if (follows && cfg_.wired[c]) {
+        // It joins the panels its wires lead to, if one of them is showing
+        // anything; with no wire, or nobody there yet, it keeps what it has.
+        const int like = wiredPeer((int)(&p - panels_));
+        const uint16_t theirs = like < 0 ? own : (c == CH_PATTERN ? panels_[like].tPattern : panels_[like].tKnob[c]);
+        setTarget(p, c, c == CH_PATTERN && theirs == NO_PATTERN ? own : theirs);
+        if (like >= 0) p.applied[c] = panels_[like].applied[c];
+        continue;
+      }
       if (follows && shared_[c].valid) {
         setTarget(p, c, shared_[c].value);
         p.applied[c] = shared_[c].seq;
@@ -824,20 +948,24 @@ class Conductor {
       p.applied[ch] = ++eventSeq_;
       return;
     }
-    emit(ch, v, i, link == LINK_SYNC, true, cfg_.glideMs, EV_VALUE);
+    emit(ch, v, i, link == LINK_SYNC, true, cfg_.glideMs, EV_VALUE, cfg_.wired[ch]);
     runWaves();
   }
 
   // A value starts travelling. From a panel (origin >= 0) it is already
   // there; from the console (origin < 0) it starts nowhere and is instant.
   void emit(int ch, uint16_t v, int origin, bool instant, bool linkedOnly, uint16_t glide,
-            uint8_t kind) {
-    Event* e = push((uint8_t)(1u << ch), v, origin, instant, linkedOnly, glide, kind);
+            uint8_t kind, bool wired = false) {
+    Event* e = push((uint8_t)(1u << ch), v, origin, instant, linkedOnly, glide, kind, wired);
     if (!e) return;
     if (hooks_.emitted) hooks_.emitted(hooks_.ctx, ch, v, origin);
-    shared_[ch].valid = true;
-    shared_[ch].value = v;
-    shared_[ch].seq = e->seq;
+    if (!e->wired) {
+      // What the whole ensemble shows on this channel now. A value that
+      // keeps to the wires is its group's and nobody else's.
+      shared_[ch].valid = true;
+      shared_[ch].value = v;
+      shared_[ch].seq = e->seq;
+    }
     if (origin >= 0 && linkedOnly) {
       // The hand's own panel is not waiting for its own wave.
       setTarget(panels_[origin], ch, v);
@@ -846,7 +974,7 @@ class Conductor {
   }
 
   Event* push(uint8_t mask, uint16_t v, int origin, bool instant, bool linkedOnly, uint16_t glide,
-              uint8_t kind) {
+              uint8_t kind, bool wired = false) {
     if (count_ == MAX_EVENTS) {
       // Full: the oldest value lands everywhere now rather than be lost.
       applyEverywhere(events_[head_]);
@@ -866,6 +994,11 @@ class Conductor {
     e.linkedOnly = linkedOnly;
     e.origin = (int8_t)origin;
     if (origin >= 0) { e.x = panels_[origin].x; e.y = panels_[origin].y; e.z = panels_[origin].z; }
+    if (wired && origin >= 0) {
+      e.wired = true;
+      for (int i = 0; i < MAX_PANELS; i++)
+        if (wireDistance(origin, i) >= 0.0f) e.reach |= 1u << i;
+    }
     e.maxDelayMs = 0;
     if (!e.instant) {
       for (int i = 0; i < MAX_PANELS; i++) {
@@ -880,15 +1013,70 @@ class Conductor {
     return &e;
   }
 
+  // An unlinked panel on the way takes nothing and lets the value through:
+  // the wires are there whether or not it follows.
   bool eligible(const Panel& p, const Event& e) const {
-    return p.used && (!e.linkedOnly || p.linked);
+    if (!p.used || (e.linkedOnly && !p.linked)) return false;
+    return !e.wired || ((e.reach >> (int)(&p - panels_)) & 1u) != 0;
   }
 
   uint32_t delayMs(const Panel& p, const Event& e) const {
     if (e.instant || cfg_.speed <= 0.0f) return 0;
-    const float dx = p.x - e.x, dy = p.y - e.y, dz = p.z - e.z;
-    const float ms = sqrtF(dx * dx + dy * dy + dz * dz) / cfg_.speed * 1000.0f;
+    // Along the wires, as they lie now; straight from where it started
+    // otherwise (and for a panel whose wire was cut while the value was on its way).
+    float way = e.wired ? wireDistance(e.origin, (int)(&p - panels_)) : -1.0f;
+    if (way < 0.0f) {
+      const float dx = p.x - e.x, dy = p.y - e.y, dz = p.z - e.z;
+      way = sqrtF(dx * dx + dy * dy + dz * dz);
+    }
+    const float ms = way / cfg_.speed * 1000.0f;
     return ms >= (float)MAX_DELAY_MS ? MAX_DELAY_MS : (uint32_t)ms;
+  }
+
+  void wiresChanged() {
+    wireDistDirty_ = true;
+    wiresDirty_ = true;
+    touchPersist();
+  }
+
+  // Every way along the wires at once (Floyd-Warshall: twenty-four panels,
+  // a few thousand additions), kept until a wire or a place changes.
+  void measureWires() const {
+    wireDistDirty_ = false;
+    for (int a = 0; a < MAX_PANELS; a++) {
+      for (int b = 0; b < MAX_PANELS; b++) {
+        float d = a == b ? 0.0f : -1.0f;
+        if (a != b && panels_[a].used && panels_[b].used && ((wires_[a] >> b) & 1u)) {
+          const float dx = panels_[a].x - panels_[b].x, dy = panels_[a].y - panels_[b].y, dz = panels_[a].z - panels_[b].z;
+          d = sqrtF(dx * dx + dy * dy + dz * dz);
+        }
+        wireDist_[a][b] = d;
+      }
+    }
+    for (int k = 0; k < MAX_PANELS; k++) {
+      if (!wires_[k]) continue;                       // nothing goes through a panel no wire touches
+      for (int a = 0; a < MAX_PANELS; a++) {
+        const float ak = wireDist_[a][k];
+        if (ak < 0.0f) continue;
+        for (int b = 0; b < MAX_PANELS; b++) {
+          const float kb = wireDist_[k][b];
+          if (kb < 0.0f) continue;
+          if (wireDist_[a][b] < 0.0f || ak + kb < wireDist_[a][b]) wireDist_[a][b] = ak + kb;
+        }
+      }
+    }
+  }
+
+  // A panel that `i`'s wires lead to and that the hub holds a target for:
+  // one that is there now if there is one. -1: none.
+  int wiredPeer(int i) const {
+    int found = -1;
+    for (int j = 0; j < MAX_PANELS; j++) {
+      if (j == i || !panels_[j].used || !panels_[j].haveTarget || wireDistance(i, j) < 0.0f) continue;
+      if (panels_[j].online) return j;
+      if (found < 0) found = j;
+    }
+    return found;
   }
 
   void applyTo(Panel& p, const Event& e) {
@@ -1022,7 +1210,9 @@ class Conductor {
     o.str("{\"t\":\"w\",\"q\":").u32(e.seq).str(",\"c\":").i32(e.kind == EV_SCENE ? 5 : ch);
     o.str(",\"o\":").i32(e.origin).str(",\"x\":").num(e.x).str(",\"y\":").num(e.y).str(",\"z\":").num(e.z);
     o.str(",\"v\":").u32(e.value).str(",\"now\":").u32(e.instant ? 1 : 0);
-    o.str(",\"d\":").u32(e.maxDelayMs).ch('}');
+    o.str(",\"d\":").u32(e.maxDelayMs);
+    if (e.wired) o.str(",\"wr\":1");          // it keeps to the wires: draw it along them
+    o.ch('}');
     flush(o);
   }
 
@@ -1072,6 +1262,9 @@ class Conductor {
       o.str("{\"t\":\"cfg\",\"link\":[");
       for (int c = 0; c < KNOBS; c++) { if (c) o.ch(','); o.json(linkName(cfg_.link[c])); }
       o.str("],\"plink\":").json(linkName(cfg_.link[CH_PATTERN]));
+      o.str(",\"wired\":[");
+      for (int c = 0; c < KNOBS; c++) { if (c) o.ch(','); o.boolean(cfg_.wired[c]); }
+      o.str("],\"pwired\":").boolean(cfg_.wired[CH_PATTERN]);
       o.str(",\"speed\":").num(cfg_.speed).str(",\"glide\":").u32(cfg_.glideMs);
       o.str(",\"k4\":").boolean(cfg_.k4Pattern).str(",\"lock\":").boolean(cfg_.lockMenus);
       o.str(",\"pmin\":").u32(cfg_.patMin).str(",\"pmax\":").u32(cfg_.patMax);
@@ -1093,6 +1286,15 @@ class Conductor {
         flush(o);
         at += NAMES_A_LINE;
       } while (at <= last);
+    }
+    if (wiresDirty_) {
+      // A number per slot of the panel table: bit j of the i-th says panels i and j are joined.
+      wiresDirty_ = false;
+      Out o(line_, sizeof(line_));
+      o.str("{\"t\":\"wires\",\"m\":[");
+      for (int i = 0; i < MAX_PANELS; i++) { if (i) o.ch(','); o.u32(panels_[i].used ? wires_[i] : 0); }
+      o.str("]}");
+      flush(o);
     }
     if (scenesDirty_) {
       scenesDirty_ = false;
@@ -1138,6 +1340,10 @@ class Conductor {
   bool identifyAllOn_ = false;
   uint32_t identifyAllAtMs_ = 0;
   Shared shared_[CHANNELS];
+  uint32_t wires_[MAX_PANELS] = {0};              // bit j of the i-th: panels i and j are joined (kept both ways)
+  mutable float wireDist_[MAX_PANELS][MAX_PANELS];   // the way along the wires between any two; negative: none
+  mutable bool wireDistDirty_ = true;
+  bool wiresDirty_ = false;
   char names_[MAX_NAMES][NAME_LEN] = {{0}};
   Stats stats_;
 

@@ -114,15 +114,19 @@ Every command has `"c"`. An optional `"r"` (integer) comes back in the reply. Pa
 | `hello` | | The hub says who it is, then sends everything |
 | `get` | | Everything again: cfg, names, scenes, every panel |
 | `ping` | | Keeps a serial port listed as a console. No reply |
-| `cfg` | `link` (four of `"solo"`, `"sync"`, `"ripple"`, or `null` to keep), `plink`, `speed` (units per second), `glide` (ms), `k4` (true: K4 steps patterns), `lock`, `pmin`, `pmax` (255: to the last), `k4s` | Any subset |
+| `cfg` | `link` (four of `"solo"`, `"sync"`, `"ripple"`, or `null` to keep), `plink`, `wired` (four of `true`, `false`, or `null` to keep: that knob keeps to the wires), `pwired` (the pattern does), `speed` (units per second), `glide` (ms), `k4` (true: K4 steps patterns), `lock`, `pmin`, `pmax` (255: to the last), `k4s` | Any subset |
 | `panel` | `uid`, and any of `x`, `y`, `z`, `rx`, `ry`, `rz`, `id` (1 to 250), `name`, `linked` | Two panels never share a number: the other one takes this panel's old one |
-| `forget` | `uid` | Drops a panel from the table |
+| `set` (one panel, `turn`) | as `set` below, with `"turn": true` | As if a hand at that panel had done it: the links and the wires decide who else takes the value (`Conductor::actAsHand`). Without `turn`, a `set` for one panel reaches that panel and no other |
+| `forget` | `uid` | Drops a panel from the table, and its wires with it |
+| `wire` | `a`, `b` (a `uid` or `"#<number>"` each), `on` (true joins, false parts, left out changes it over); or `clear`: true, with `a` for that panel's wires only | A wire between two panels. A channel whose `wired` is on spreads from a hand's panel only to the panels its wires lead to: at once (sync), or each after the way along the wires / speed (ripple), a wire being as long as the straight line between its panels. A panel with no wire keeps such a turn. An unlinked panel on the way takes nothing and lets the value through. A panel that joins takes, on such a channel, what a panel its wires lead to is showing |
+| `usb` | | Hub glue, not the core: answers with a `usb` line, the USB controller's registers as `hub/src/usb_s3.cpp` reads them (also `GET /api/usb`) |
+| `setup` | `op`: `scan`; or `join` + `ssid` (a panel's own hotspot, `patternflow-....`) and optionally `pass` (its password, Patternflow's default if left out); or `stations`; or `net` | Hub glue, hotspot mode only: bringing a new panel in. `scan` looks for panels' hotspots. `join` takes the hub onto one, gives the panel the hub's network (stored, made the one it starts from, joined now) and brings the hub back; the hub's own hotspot follows it to that hotspot's channel meanwhile, so the ensemble's panels lose the hub for those seconds. `stations` says who is on the hub's hotspot. `net` asks for the hub's own network, name and password, for a console that sends a panel there itself: answered on a serial port only, and only on the port that asked. Answers are `setup` lines |
 | `set` | `to` (a panel or `"all"`), and any of `pat`, `k` (four numbers or `null`), `kn` + `v` (one knob), `glide`, `br` (brightness, 5 to 255), `sleep` (`true`: go to sleep, `false`: wake). With `to: "all"`: `mode: "ripple"` and `from` (a panel) make it a wave | To one panel it stays on that panel. This is how each panel gets a pattern of its own. `br` alone leaves the pattern and knobs as they are; to `"all"` it is also given to panels that join later |
 | `scene` | `op` (`save`, `recall`, `clear`), `slot` (0 to 7), and for recall `mode`, `from`, `glide` | A scene is every panel's pattern and knobs |
 | `identify` | `uid` (or `"all"`), `on` | The panel shows its mark: a big shape in a colour on black, both from its number (`identifyMark` in `core/pfe_proto.h`: circle, square, triangle and red, green, blue, yellow, stepping together, twelve marks). One panel switches itself off after 30 s. `"all"` stays on until it is switched off, or for 30 minutes, and a panel that joins meanwhile shows its mark too |
 | `reboot` | `uid` (a panel, or `"hub"`) | |
 | `names` | `at` + `n` (names for the patterns from that number on), and/or `clear: true` with `from` | What the console knows after giving the panels another set of patterns. `clear` forgets the names from `from` on |
-| `graph` | `op`: `begin` + `len`, `data` + `d` (base64, up to 240 bytes), `end`; or `clear`; or `on` / `off`; or `get` | The node graph's program (`core/pfe_graph.h`), in pieces. `end` answers `err` with what is wrong, or `ack` and the program runs (and is kept in the hub's flash). `on` and `off` are the graph's switch (off, which is how a hub starts: the program is kept, drives nothing and takes no controller). `get` answers with a `graph` line |
+| `graph` | `op`: `begin` + `len`, `data` + `d` (base64, up to 240 bytes), `end`; or `clear`; or `on` / `off`; or `get` | The node graph's program (`core/pfe_graph.h`), in pieces. `end` answers `err` with what is wrong, or `ack` and the program runs (and is kept in the hub's flash). `on` and `off` are the graph's switch, and it says which of two ways a host's MIDI goes, never both. Off, which is how a hub starts: the program is kept, drives nothing and takes no controller, and MIDI is read the plain way (5½ of the README). On: the plain way is off, with a program or without one; a controller the program names feeds it and anything else a host sends moves nothing. `get` answers with a `graph` line |
 | `midi` | `ch` (1 to 16), `cc`, `v` (0 to 127) | A MIDI controller moved from the console instead of a MIDI port: for the graph |
 | `mon` | `on`, `panel` | While on: a `mi` line for each controller that comes in (25 a second of each at most) and, five times a second, an `nv` line with the graph's registers as computed for that panel |
 | `http` | `id`, `to` (a panel), `m` (`GET`, `POST`, `PUT`, `DELETE`), `path`, `h` (headers), `len` (bytes of body), `tmo` (ms, 1000 to 120000) | A request to that panel's own web server, passed on by the hub. See below. No `ack` |
@@ -134,7 +138,7 @@ A panel's `fl` in its `p` line is the flags of its last report: 1 no STATE appli
 
 ### A panel's web server, through the hub
 
-A panel has a web server (its patterns, its status), and a console on the USB cable is not on the panels' network. So the hub passes HTTP along (`core/pfe_relay.h`):
+A panel has a web server (its patterns, its status), and a console on the USB cable is not on the panels' network. So the hub passes HTTP along (`core/pfe_relay.h`). In place of `to`, `"ip":"192.168.66.7"` names a device on the hub's own hotspot by its address (hotspot mode only, and nothing outside that network): a panel that has just been brought in and does not run the ensemble's firmware yet is no panel the hub knows, and Setup sends it the firmware (`POST /update`) this way.
 
 ```
 -> {"c":"http","id":7,"to":"<uid>","m":"PUT","path":"/api/patterns","h":{"X-PF-Name":"a.pfm","X-PF-Last":"0"},"len":2500}
@@ -153,11 +157,14 @@ One piece at a time: the next `hb` after its `hk`. A request ends with `he`, wit
 | `t` | When | Fields |
 |---|---|---|
 | `hello` | answer to `hello` | `proto`, `port`, `fw`, `hub`, `mode` (`hotspot` or `router`), `ssid` |
-| `cfg` | on change | `link`, `plink`, `speed`, `glide`, `k4`, `lock`, `pmin`, `pmax`, `k4s`, `maxPanels`, `scenes` |
+| `cfg` | on change | `link`, `plink`, `wired` (four booleans), `pwired`, `speed`, `glide`, `k4`, `lock`, `pmin`, `pmax`, `k4s`, `maxPanels`, `scenes` |
+| `wires` | on change | `m`: a number per slot of the panel table (the `i` of a `p` line); bit j of the i-th says panels i and j are joined |
+| `setup` | answers to `setup` (hub glue) | `op` as asked. `scan`: `nets`, each `ssid`, `rssi`, `ch`. `join`: `ssid` and `step`, one of `connecting`, `asking`, `saving`, then `done` (with `host`, `variant`, `ver`, `fw`: what the panel said it is) or `failed` (with `m`). `stations`: `list`, each `mac` (twelve hex digits) and `ip`. `net`: `ssid` and `pass`, or `m` when it was not asked over a cable. `busy`: the hub is still at an earlier `scan` or `join` |
+| `midiout` | every two seconds (hub glue) | `on` (1: the computer has the USB-MIDI port), `wait` ms a message has been waiting for the computer to take it (0: none is), `queued` values behind it, `sent`, `refused` |
 | `names` | on change | `n`: pattern names by index, `""` where unknown. In pieces of 24: `at` is the index of this line's first name, `of` how many there are in all; `at: 0` starts the list afresh |
 | `scenes` | on change | `u`: panels stored in each slot, 0 for an empty one |
 | `p` | a panel changed (at most every 100 ms; 500 ms when the UART is the only console), and every 2 s | below |
-| `w` | a value started travelling | `q` sequence, `c` channel (0 to 3 knobs, 4 pattern, 5 scene), `o` panel index it started at (-1 for the console), `x`, `y`, `z`, `v` value, `now` (1: everywhere at once), `d` ms until it has landed everywhere |
+| `w` | a value started travelling | `q` sequence, `c` channel (0 to 3 knobs, 4 pattern, 5 scene), `o` panel index it started at (-1 for the console), `x`, `y`, `z`, `v` value, `now` (1: everywhere at once), `d` ms until it has landed everywhere, `wr`: 1 when it keeps to the wires |
 | `hub` | every second | `ms` uptime, `proto`, `panels`, `online`, `rx`, `tx`, `bad`, `ev` values emitted, `fly` values in flight, `drop`, `full`, `stale` |
 | `gone` | a panel was forgotten | `i` |
 | `log` | something happened | `ms`, `m` |
@@ -199,7 +206,7 @@ A panel says its side in its own `/api/status`, in an `ensemble` object: `uid` (
 
 ## What the hub keeps
 
-Across restarts, in flash: the config, each panel's uid, number, place, name and linked flag, and the scenes. Not the live targets: after a restart the panels report where they are and the hub takes that.
+Across restarts, in flash: the config, each panel's uid, number, place, name and linked flag, the scenes, and the wires. Not the live targets: after a restart the panels report where they are and the hub takes that.
 
 ## MIDI (the hub's USB jack)
 
